@@ -1248,6 +1248,28 @@ sample every 2 to 32 blocks): the ground for the mobs and *Only Over Terrain*. E
 file's memory as its server stops, without forgetting it; a read holds the file's lock, as its
 own reads and its closing do, and reads nothing from a closed file.
 
+### Only around the figures
+
+All of this only matters where far figures are, often a narrow band near the horizon. So
+`FarDepth.region` works out one rectangle of the picture per frame, and every copy
+(`GlCalls.copyDepth` of that rectangle) and every pass (the merge, Voxy's blit and
+Lodistance's included, the restore, the fade's mask) is held to it with the scissor
+(`optDepthRegion`, *Local Far Depth*):
+
+- it holds every far figure (`FarDepth.figure`), the nearer ones and the birds
+  (`FarDepth.around`), and each box the occlusion queries test, eight pixels wider;
+- outside it the game's depth is never written, so nothing has to be put back there, and the
+  copies hold an older frame that nothing reads (`intoVoxy`'s rectangles are held to it too);
+- it is the whole texture when the figures are not all known before the entities are drawn
+  (before 1.21.9 the birds and impostors are drawn after `FarDepth.before`;
+  `FarDepth.figuresKnown` says when they are), when something far is drawn with no place
+  given (`FarDepth.neededAnywhere`), when a sphere reaches behind the camera, past three
+  quarters of the picture, and with the depth view on.
+
+Voxy's depth blit (0.2.16 to 0.2.20) leaves the scissor alone; one that turned it off would be
+caught after the blit and the whole texture used from then on. The `depthregion` scenario
+checks the rectangle and that the occlusion queries answer the same with it as without.
+
 ### Shadows under Photon
 
 Such a pack also reads Voxy's own depth textures (`vxDepthTexOpaque`, `vxDepthTexTrans`)
@@ -1761,6 +1783,7 @@ Every one is on by default except `optFreezeHidden`. Switch one off to see what 
 | `optTinyCulling` | Skip Specks | Copies smaller than about half a pixel are not prepared (only when no minimum size is set) |
 | `depthOcclusion` | Hide Behind Far Terrain | The far terrain's depth on distant mobs and players, pixel by pixel (see [Far terrain depth](#far-terrain-depth)) |
 | `optLazyDepth` | Lazy Far Depth | The far terrain's depth is merged only on frames that draw something past the render distance |
+| `optDepthRegion` | Local Far Depth | The far terrain's depth is merged, and put back, only in the screen rectangle round the distant figures (see [Far terrain depth](#far-terrain-depth)) |
 | `optParallelRead` | Parallel Reads | The far world is read on several threads at once rather than one |
 | `optColumnCache` | Remember Far Ground | Ground already read in the far world is kept for two minutes |
 | `hideOccludedMobs` | Skip Hidden Mobs | Distant mobs the terrain hides entirely are not drawn (see [Skipping hidden mobs](#skipping-hidden-mobs)) |

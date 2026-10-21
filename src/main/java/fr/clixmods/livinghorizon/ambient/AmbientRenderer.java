@@ -95,7 +95,8 @@ public final class AmbientRenderer {
             // Behind the camera, or less than a pixel: the mobs' own tests.
             if (GhostRenderer.outOfSight(x, y, z, bird.span * bird.scale)) continue;
             double distance = Math.sqrt(x * x + y * y + z * z);
-            GhostRenderer.noteDistance(distance);
+            // A wingspan all round: the model, the silhouette and its picture all fit in it.
+            GhostRenderer.noteDistance(distance, x, y, z, bird.span * bird.scale * 1.5);
             // Past the far plane: closer and smaller in proportion, the same on screen.
             double pull = distance > reach ? reach / distance : 1.0;
             float yaw = Mth.rotLerp(partial, bird.yawO, bird.yaw);

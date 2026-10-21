@@ -142,9 +142,22 @@ public final class GhostRenderer {
     /** The farthest distant player drawn last frame, which this frame's far plane covers. */
     private static double farthest;
     private static float neededFar;
-    /** Something drawn this far away this frame: the next far plane covers it. */
+    /**
+     * Something drawn this far away this frame, somewhere on screen: the next far plane covers it,
+     * and past the render distance the far terrain's depth is merged over the whole screen.
+     */
     public static void noteDistance(double distance) {
         farthest = Math.max(farthest, distance);
+        if (distance > drawnRange) FarDepth.neededAnywhere();
+    }
+
+    /**
+     * Something drawn this far away this frame, within {@code radius} blocks of {@code (x, y, z)}
+     * from the camera: the next far plane covers it, and the far terrain's depth covers that place.
+     */
+    public static void noteDistance(double distance, double x, double y, double z, double radius) {
+        farthest = Math.max(farthest, distance);
+        FarDepth.around(x, y, z, radius);
         if (distance > drawnRange) FarDepth.needed();
     }
 
@@ -650,7 +663,8 @@ public final class GhostRenderer {
         if (!Occlusion.hidden(key, entity, dx, dy, dz, boost)) {
             return false;
         }
-        noteDistance(distance);
+        // Its box is where the far terrain's depth is needed (Occlusion.hidden): only the far plane here.
+        farthest = Math.max(farthest, distance);
         skipped++;
         if (debug) DebugMarks.mark(entity, Mark.HIDDEN);
         return true;
@@ -858,11 +872,11 @@ public final class GhostRenderer {
         transform.anchorZ = az;
         transform.pull = pull;
         transform.scale = pull * boost * size;
-        if (distance > drawnRange) {
-            // Where it shows on screen: as big as drawn, around its middle, a mount included.
-            double shown = extent * boost;
-            FarDepth.figure(ax, ay + shown * 0.5, az, shown * (mount == null ? 0.75 : 1.5));
-        }
+        // Where it shows on screen: as big as drawn, around its middle, a mount included. Nearer
+        // than the render distance too, for Distant Horizons' fade, which reaches inside it.
+        double shown = extent * boost, radius = shown * (mount == null ? 0.75 : 1.5);
+        if (distance > drawnRange) FarDepth.figure(ax, ay + shown * 0.5, az, radius);
+        else FarDepth.around(ax, ay + shown * 0.5, az, radius);
         LocalPlayer self = minecraft.player;
         ClientLevel level = minecraft.level;
         if (mount != null) place(frame, mount, transform, puppet, kind, config, self, level);
@@ -1183,11 +1197,11 @@ public final class GhostRenderer {
         if (outline != 0 && ImpostorRenderer.OUTLINES) glowing = true;
         ImpostorRenderer.add(ax * pull, ay * pull, az * pull, sheet.worldSize() * pull * boost, sheet, view, light,
                 outline, facing);
-        if (distance > drawnRange) {
-            double extent = sheet.worldSize() * boost;
-            // Round its feet, or round its middle for a picture seen from a height.
-            FarDepth.figure(ax, facing ? ay : ay + extent * 0.5, az, extent * 0.75);
-        }
+        double extent = sheet.worldSize() * boost;
+        // Round its feet, or round its middle for a picture seen from a height.
+        double centre = facing ? ay : ay + extent * 0.5;
+        if (distance > drawnRange) FarDepth.figure(ax, centre, az, extent * 0.75);
+        else FarDepth.around(ax, centre, az, extent * 0.75);
         return true;
     }
 

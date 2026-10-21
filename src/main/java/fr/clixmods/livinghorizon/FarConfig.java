@@ -420,6 +420,11 @@ public final class FarConfig {
     /** The far terrain's depth is merged only on frames that draw something past the render distance. */
     @SerializedName(value = "optLazyDepth", alternate = "optLazyVoxyDepth")
     public boolean optLazyDepth = true;
+    /**
+     * The far terrain's depth is merged, and put back, only in the screen rectangle round the
+     * distant figures, not over the whole screen (see {@code FarDepth.region}).
+     */
+    public boolean optDepthRegion = true;
     /** The far world (Voxy, Distant Horizons, Lodistance or Far View) is read on several threads at once rather than one. */
     @SerializedName(value = "optParallelRead", alternate = "optParallelVoxy")
     public boolean optParallelRead = true;

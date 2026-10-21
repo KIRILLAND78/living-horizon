@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -308,5 +309,63 @@ class DepthMathTest {
 
         // Never more than the room given.
         assertEquals(1, DepthMath.rectangles(viewProjection, spheres, 5, new int[4], width, height));
+    }
+
+    @Test
+    void boundsHoldEveryFigureOnScreen() {
+        Matrix4f viewProjection = perspective(NEAR, FAR, false, false);
+        int width = 1600, height = 900;
+        float[] spheres = {
+                0, 0, -100, 1,      // straight ahead
+                -20, -5, -100, 2,   // to the left, a little lower
+                0, 0, 10, 1,        // behind the camera: not seen
+                5000, 0, -10, 1,    // far off to the right: not on screen
+        };
+        int[] out = new int[4];
+        assertTrue(DepthMath.bounds(viewProjection, spheres, 4, out, width, height, 8));
+        int[] each = new int[8];
+        assertEquals(2, DepthMath.rectangles(viewProjection, spheres, 2, each, width, height));
+        // Both figures' rectangles inside, eight pixels more where the picture allows.
+        for (int i = 0; i < 2; i++) {
+            assertTrue(out[0] <= each[i * 4] - 6 && out[1] <= each[i * 4 + 1] - 6);
+            assertTrue(out[0] + out[2] >= each[i * 4] + each[i * 4 + 2] + 6);
+            assertTrue(out[1] + out[3] >= each[i * 4 + 1] + each[i * 4 + 3] + 6);
+        }
+        // The one off to the right stretches nothing: the rectangle stops short of the right half.
+        assertTrue(out[0] + out[2] < width / 2 + 40);
+        // A band along the horizon, not the screen.
+        assertTrue(out[2] * out[3] < width * height / 10);
+    }
+
+    @Test
+    void boundsOfNothingOnScreenAreEmpty() {
+        Matrix4f viewProjection = perspective(NEAR, FAR, false, false);
+        int[] out = {1, 2, 3, 4};
+        assertTrue(DepthMath.bounds(viewProjection, new float[]{0, 0, 10, 1, 5000, 0, -10, 1}, 2, out, 1600, 900, 8));
+        assertArrayEquals(new int[]{0, 0, 0, 0}, out);
+        assertTrue(DepthMath.bounds(viewProjection, new float[0], 0, out, 1600, 900, 8));
+        assertArrayEquals(new int[]{0, 0, 0, 0}, out);
+    }
+
+    @Test
+    void boundsAcrossTheCameraCannotBeTold() {
+        Matrix4f viewProjection = perspective(NEAR, FAR, false, false);
+        // A figure drawn huge (a minimum size on screen) whose box reaches behind the camera.
+        float[] spheres = {0, 0, -100, 1, 0, 0, -3, 5};
+        assertFalse(DepthMath.bounds(viewProjection, spheres, 2, new int[4], 1600, 900, 8));
+    }
+
+    @Test
+    void boundsHeldToThePicture() {
+        Matrix4f viewProjection = perspective(NEAR, FAR, false, false);
+        int width = 800, height = 450;
+        // Across the left edge, and over the whole height.
+        float[] spheres = {-125, 0, -100, 4, 0, 0, -60, 30};
+        int[] out = new int[4];
+        assertTrue(DepthMath.bounds(viewProjection, spheres, 2, out, width, height, 8));
+        assertEquals(0, out[0]);
+        assertEquals(0, out[1]);
+        assertTrue(out[0] + out[2] <= width && out[1] + out[3] <= height);
+        assertEquals(height, out[3]);
     }
 }
