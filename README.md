@@ -169,6 +169,7 @@ page, one file per game version and loader:
 | [Sodium](https://modrinth.com/mod/sodium) | From 0.8, the settings are also in Sodium's *Video Settings*. |
 | GeckoLib | Works. From 1.21.2 to 1.21.8 its mobs are not drawn far away yet ([#67](https://github.com/MC-Skin-Creator/living-horizon/issues/67)). |
 | [Immersive Aircraft](https://modrinth.com/mod/immersive-aircraft) | Its aircraft stay visible far away, where you left them. |
+| [Ambient Birds](https://modrinth.com/mod/ambient-birds) | Its birds keep flying far away. |
 
 Mobs from other mods should work. Mods not tested yet are listed under the
 [`mod compatibility`](https://github.com/MC-Skin-Creator/living-horizon/labels/mod%20compatibility)
