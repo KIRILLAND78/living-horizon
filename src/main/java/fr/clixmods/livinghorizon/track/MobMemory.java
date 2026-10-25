@@ -11,6 +11,7 @@ import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.ambient.Herd;
 import fr.clixmods.livinghorizon.platform.Platform;
 import fr.clixmods.livinghorizon.render.DepthFar;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.Minecraft;
@@ -253,6 +254,8 @@ public final class MobMemory {
      * be open yet, as when the world was just entered - doubled each time, up to a minute.
      */
     private static final int REPLAN_FIRST = 40, REPLAN_MAX = 1200;
+    /** Ticks between two looks for live mobs where this client holds no chunk ({@link #strand}). */
+    private static final int STRAND_EVERY = 10;
 
     private final Map<UUID, Remembered> mobs = new LinkedHashMap<>();
     /** How far the server sends entities, in blocks, as of the last tick ({@link ServerView}). */
@@ -284,6 +287,11 @@ public final class MobMemory {
     private final Map<UUID, Double> dismissed = new HashMap<>();
     /** Mounts players took away as they logged off: never remembered when the server takes them out of the world. */
     private final Set<UUID> takenAway = new HashSet<>();
+    /**
+     * Mobs still in the level, but where this client holds no chunk, so that the game no longer
+     * moves them ({@link #strand}): their copy stands in for them until their chunk is back.
+     */
+    private final Map<UUID, Entity> stranded = new HashMap<>();
     /** What the server shared, as last synced. */
     private @Nullable SharedPositions lastPack;
     private List<Remembered> shown = List.of();
@@ -541,6 +549,7 @@ public final class MobMemory {
         reach.clear();
         dismissed.clear();
         takenAway.clear();
+        stranded.clear();
         showNone();
         chooseSoon = false;
         file = null;
@@ -559,6 +568,7 @@ public final class MobMemory {
             mob.simulated = false;
         }
         joining.clear();
+        stranded.clear();
         showNone();
         serverMobs.reset();
     }
@@ -661,6 +671,8 @@ public final class MobMemory {
 
     /** No longer sent: remembered if it walked out of range, forgotten if it died. */
     public void onUnload(Entity entity, ClientLevel level) {
+        // Remembered when it was stranded, and its copy flies or walks on from there.
+        if (stranded.remove(entity.getUUID(), entity)) return;
         live.remove(entity.getUUID());
         // Gone again before its copy reached it: that copy carries on from where it got to.
         Remembered joined = joining.remove(entity);
@@ -914,6 +926,7 @@ public final class MobMemory {
             return;
         }
         String dimension = level.dimension().identifier().toString();
+        if (clock % STRAND_EVERY == 0) strand(level);
         foresight.tick(Minecraft.getInstance(), level, self, world, config, pack);
         // Through a spyglass and back: the mobs where it looks are chosen first, and then no longer.
         if (self.isScoping() != scoping) {
@@ -1432,6 +1445,51 @@ public final class MobMemory {
     }
 
     /**
+     * Live mobs where this client holds no chunk. The game moves an entity only where it holds
+     * the chunk, and the server sends nothing past the chunks it sent: only a mob this client
+     * made itself gets there, such as a bird of Ambient Birds flying off, and it would hang
+     * there, still, drawn by {@link fr.clixmods.livinghorizon.render.GhostRenderer} as long as
+     * the level lasts. It is remembered as if the server had stopped sending it, and its copy
+     * flies or walks on from there; once its chunk is back and the game moves it again, the copy
+     * hands over to it, as to a mob sent again.
+     */
+    private void strand(ClientLevel level) {
+        if (!stranded.isEmpty()) {
+            List<Entity> back = new ArrayList<>();
+            for (var it = stranded.values().iterator(); it.hasNext(); ) {
+                Entity entity = it.next();
+                if (entity.isRemoved() || entity.level() != level) {
+                    it.remove();
+                } else if (held(level, entity)) {
+                    it.remove();
+                    back.add(entity);
+                }
+            }
+            back.forEach(this::onLoad);
+        }
+        List<Entity> out = new ArrayList<>();
+        for (Entity entity : live.values()) {
+            if (!entity.isRemoved() && entity.level() == level && !entity.isPassenger() && !entity.isVehicle()
+                    && !held(level, entity)) {
+                out.add(entity);
+            }
+        }
+        for (Entity entity : out) {
+            onUnload(entity, level);
+            stranded.put(entity.getUUID(), entity);
+        }
+    }
+
+    /**
+     * Whether this client holds the chunk an entity is in: the game moves it only there. Asked of
+     * the chunk cache: the client's level says it has every chunk.
+     */
+    private static boolean held(ClientLevel level, Entity entity) {
+        return level.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(entity.getX()),
+                SectionPos.blockToSectionCoord(entity.getZ()));
+    }
+
+    /**
      * How far this server sends each kind of mob: the farthest one of them it sends now,
      * if that is farther than any before. A mob carried or carrying is left out: the
      * server sends a whole stack as far as the farthest-seen of its riders.
@@ -1477,7 +1535,8 @@ public final class MobMemory {
                 mob.missingChecks = 0;
                 continue;
             }
-            if (!mob.dimension.equals(dimension) || !isHere(mob) || live.containsKey(mob.id)) continue;
+            if (!mob.dimension.equals(dimension) || !isHere(mob) || live.containsKey(mob.id)
+                    || stranded.containsKey(mob.id)) continue;
             boolean inRange = false;
             {
                 double range = nearRange(type(mob));
@@ -1675,6 +1734,8 @@ public final class MobMemory {
                 living.yBodyRotO = living.yBodyRot;
                 living.yHeadRotO = living.yHeadRot;
             }
+            // Another mod's bird: wings out, drawn as that mod draws one flying.
+            ModdedMobs.prepare(mob.type, entity);
             MobMotion motion = mob.motion;
             if (motion != null && motion.placed()) {
                 entity.setPos(motion.x(), motion.y(), motion.z());

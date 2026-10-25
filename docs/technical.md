@@ -506,6 +506,19 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   client saved it, and was never remembered. `EntityNbt.save` first makes the client's hold
   again, empty, at its size; the client never knows what is in it anyway. A kind whose save
   or copy still fails is not drawn far away, and the log says why, once per kind.
+- **Other mods' mobs known by name** (`track/ModdedMobs`) get more: how they fly far away
+  (`MobFlight`), and what their copy needs to be drawn the way their mod draws them. Support
+  for another mod's mob is one entry there; what reaches into that mod lives in `compat/`, by
+  reflection, so that nothing needs it installed. Known now: the nine birds of
+  [Ambient Birds](https://modrinth.com/mod/ambient-birds) (`compat/AmbientBirds`), which wheel
+  in the sky, their copy told it flies past as Ambient Birds tells its flocks (wings out, and
+  past its fade-in, or it would be drawn perched and invisible).
+- **Mobs this client made itself** (Ambient Birds' birds, which no server knows) can go where
+  this client holds no chunk, which the server's never do. The game stops moving an entity
+  there, and it would hang still for as long as the level lasts. Every half second the live
+  mobs are looked at (`MobMemory.strand`): one outside the held chunks is remembered as if the
+  server had stopped sending it, and its copy flies or walks on. Once its chunk is back and
+  the game moves it again, the copy hands over to it, as to a mob sent again.
 - **Mannequins** (from 1.21.9) are shown too, standing still: Distant Friends uses them as its fake
   players. Mobs in `stillMobTypes` (happy ghast, mannequin) stand still instead of walking
   their loop. A copy wears its mannequin's skin, from a player's name or a texture of a
@@ -667,7 +680,9 @@ below), and other flyers and swimmers get a flat disc at their own height.
   baked with all of it at rest.
 - **Flying** (`track/MobFlight`): a phantom circles 5 blocks above where it was last seen, 7 to
   13 blocks out, either way round, now wider, now tighter, rising and dipping; a ghast drifts
-  in slow loops within 10 blocks of its spot, 3 up or down. Like an animation, where it is
+  in slow loops within 10 blocks of its spot, 3 up or down; a bird of another mod
+  (`ModdedMobs`) flies figures of eight 6 blocks above its spot, 6 to 11 blocks out, at a bird's
+  pace (0.22 blocks a tick, Ambient Birds' own), 2 up or down. Like an animation, where it is
   comes from its UUID and the clock alone, and no ground is read. It faces where it flies and
   tilts as it climbs or dives, and flies back to its spot as the player comes near.
 - **No teleporting**: when the server reports a drawn mob somewhere else, its copy walks to
@@ -995,9 +1010,9 @@ that a mob met in an earlier game is read back rather than baked.
     that height, and the wing beat goes on from one sheet to the next;
   - they are baked again each game, never kept on disk, and named after the species in the
     impostor screen.
-- **Phantoms and ghasts** (happy ghasts included, `MobFlight.pictured`) are mostly seen from
-  below: like a bird, one sheet per height they are seen from (well below, below, level,
-  above: `ImpostorViews.HEIGHTS`, part of the key through `ImpostorKey.seenFrom`), baked
+- **Phantoms, ghasts and other mods' birds** (happy ghasts included, `MobFlight.pictured`) are
+  mostly seen from below: like a bird, one sheet per height they are seen from (well below,
+  below, level, above: `ImpostorViews.HEIGHTS`, part of the key through `ImpostorKey.seenFrom`), baked
   turned round their middle (`ImpostorAtlas.MIDDLE`), facing the camera entirely when drawn.
   All four are asked for together; kept on disk like any mob's. Boats and vehicles are
   pictured the same way, and so are Ice and Fire's flying mobs (dragons, amphitheres,
