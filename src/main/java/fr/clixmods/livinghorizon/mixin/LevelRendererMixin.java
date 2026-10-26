@@ -179,6 +179,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import fr.clixmods.livinghorizon.ambient.AmbientRenderer;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.FarFog;
+import fr.clixmods.livinghorizon.compat.LycaniteMobs;
 import fr.clixmods.livinghorizon.render.DistancePreview;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.Sink;
@@ -252,6 +253,8 @@ abstract class LevelRendererMixin {
         AmbientRenderer.submit(pose, camera.position(), sink);
         ImpostorRenderer.submit(pose, sink);
         DistancePreview.submit(pose, camera.position(), sink);
+        // Lycanites Mobs keeps most of its models for a later stage: drawn while the far depth is in.
+        LycaniteMobs.drawQueued();
         buffers.endBatch();
         FarDepth.after();
         FarFog.end();
@@ -263,6 +266,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import fr.clixmods.livinghorizon.ambient.AmbientRenderer;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.FarFog;
+import fr.clixmods.livinghorizon.compat.LycaniteMobs;
 import fr.clixmods.livinghorizon.render.DistancePreview;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.Sink;
@@ -341,6 +345,8 @@ abstract class LevelRendererMixin {
         AmbientRenderer.submit(pose, camera.position(), sink);
         ImpostorRenderer.submit(pose, sink);
         DistancePreview.submit(pose, camera.position(), sink);
+        // Lycanites Mobs keeps most of its models for a later stage: drawn while the far depth is in.
+        LycaniteMobs.drawQueued();
         buffers.endBatch();
         FarDepth.after();
         FarFog.end();

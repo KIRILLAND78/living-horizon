@@ -13,6 +13,7 @@ import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.FarViewLink;
 import fr.clixmods.livinghorizon.compat.IceAndFire;
 import fr.clixmods.livinghorizon.compat.OcclusionQueries;
+import fr.clixmods.livinghorizon.compat.ValkyrienSkies;
 import fr.clixmods.livinghorizon.debug.DebugMarks;
 import fr.clixmods.livinghorizon.debug.DebugMarks.Mark;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorAtlas;
@@ -367,11 +368,12 @@ public final class GhostRenderer {
     /**
      * Whether this entity's renderer can give the mod a state of its own. Before 1.21.9,
      * GeckoLib 4's gives none: it only keeps the one it reuses, for the entity it was last
-     * handed, and draws that entity whatever state it is given.
+     * handed, and draws that entity whatever state it is given. Never an entity Valkyrien
+     * Skies carries on a ship: its renderer places it there itself.
      */
     public static boolean drawable(EntityRenderDispatcher dispatcher, Entity entity) {
         EntityType<?> type = entity.getType();
-        if (LEFT_OUT.contains(type)) return false;
+        if (LEFT_OUT.contains(type) || ValkyrienSkies.onShip(entity)) return false;
         //? if >=1.21.2 && <1.21.9 {
         /*if (PROBED.add(type) && dispatcher.getRenderer(entity).createRenderState() == null) {
             leaveOut(type, null);
