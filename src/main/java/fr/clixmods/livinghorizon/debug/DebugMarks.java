@@ -158,6 +158,11 @@ public final class DebugMarks {
         return LAST[mark.ordinal()];
     }
 
+    /** Counted for the panel, with nothing drawn round it. */
+    public static void tally(Mark mark) {
+        COUNTS[mark.ordinal()]++;
+    }
+
     public static void mark(Entity entity, Mark mark) {
         mark(entity.getX(), entity.getY(), entity.getZ(), entity.getBbWidth(), entity.getBbHeight(), entity.getType(), mark);
     }

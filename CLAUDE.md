@@ -472,6 +472,13 @@ come back, add it here in the same pull request: this file is what the next sess
   ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
   once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
   skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
+- **Distant mobs gone between two distances on another player's server or LAN** (the copies
+  hidden as "too close for a copy" past where the real mobs stop being sent, then forgotten): the
+  reach the mod learnt for that kind of mob (`MobMemory.reach`, the debug panel's reach line) is
+  farther than the server sends now. A LAN host's game sends as far as the host's *Entity
+  Distance* says; it comes down when several mobs stop being sent well inside it
+  (`MobMemory.unlearnReach`). The client's own *Entity Distance* only changes who draws a real
+  mob, the game or the mod. The `handover` scenario checks both.
 - **Distant mobs only turning on the spot**, never walking, after the world was opened, while
   those met since walk: their ground was read (`MobPaths.plan`) where the far world had nothing
   (Voxy or Distant Horizons not open yet, or Voxy turned off for the session by one failed

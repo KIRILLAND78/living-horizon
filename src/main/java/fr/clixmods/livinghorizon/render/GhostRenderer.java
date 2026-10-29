@@ -709,6 +709,7 @@ public final class GhostRenderer {
     private static void unseen(List<EntityRenderState> frame, Minecraft minecraft, EntityRenderDispatcher dispatcher,
                                Vec3 eye, float partialTick, FarConfig config) {
         if (!config.distantMobs && !config.distantEntities) return;
+        // Counted for the panel always; boxed and labelled only when the game's mobs are asked for.
         boolean game = debug && DebugMarks.gameMobs();
         Map<EntityType<?>, Boolean> wanted = WANTED;
         wanted.clear();
@@ -716,6 +717,7 @@ public final class GhostRenderer {
         for (Entity entity : memory.live()) {
             if (EXTRACTED.contains(entity)) {
                 if (game) DebugMarks.mark(entity, Mark.GAME);
+                else if (debug) DebugMarks.tally(Mark.GAME);
                 continue;
             }
             if (entity.isRemoved() || entity.isInvisible()) continue;
