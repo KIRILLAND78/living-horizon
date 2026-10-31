@@ -1234,6 +1234,28 @@ up. The depth steps and the occlusion test keep those few:
 - **Voxy's framebuffer** (`noteTarget`) is asked for only under a pack that keeps Voxy's depth
   apart, the one case the merge reads it.
 
+### OpenGL 4.1 and older
+
+macOS never goes past OpenGL 4.1, and LWJGL answers a call to a function the context lacks
+by aborting the JVM (`jni_FatalError`, no exception, no crash report). Every call past 4.1
+goes through `compat/GlCalls`, which asks the context once and goes another way where the
+function is missing:
+
+- **Direct state access** (4.5): objects are bound, changed, and the binding found there put
+  back. `bindTextureUnit` leaves its unit active, inside a `FarDepth.GlState` that saved it.
+  The impostors' depth read back on 26.3 (`OverrideBake.readDepth`) is `glGetTexImage` there.
+- **`glCopyImageSubData`** (4.3): the depth copies are blits between two framebuffers of its own,
+  the scissor test off for them.
+- **`glTexStorage2D`** (4.2) and the depth-stencil texture mode (4.3): `glTexImage2D`, and the
+  mode's default, which is the depth already.
+
+The one-draw occlusion path needs OpenGL 4.3 anyway (`OcclusionQueries.wordsUsable`); below it
+the per-box queries run, as before. `OpenGlVersionTest` fails on a call past 4.1 anywhere else.
+The game test checks it with Mesa held at 4.1: `MESA_GL_VERSION_OVERRIDE=4.1` and
+`MESA_EXTENSION_OVERRIDE="-GL_ARB_direct_state_access -GL_ARB_copy_image"` (the log then says
+"has no direct state access and image copies"); a call that slips through aborts the game there
+as on a Mac.
+
 ## Fog on distant figures
 
 From 1.21.6 the game fogs the world twice: a render distance fog at the edge of the loaded

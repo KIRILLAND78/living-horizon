@@ -3,7 +3,6 @@ package fr.clixmods.livinghorizon.compat;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL30C;
-import org.lwjgl.opengl.GL45C;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -48,10 +47,8 @@ final class GlCache {
         check();
         int[] known = TEXTURES.get(texture);
         if (known == null) {
-            known = new int[]{
-                    GL45C.glGetTextureLevelParameteri(texture, 0, GL11C.GL_TEXTURE_WIDTH),
-                    GL45C.glGetTextureLevelParameteri(texture, 0, GL11C.GL_TEXTURE_HEIGHT),
-                    GL45C.glGetTextureLevelParameteri(texture, 0, GL11C.GL_TEXTURE_INTERNAL_FORMAT)};
+            known = new int[3];
+            GlCalls.textureLevel(texture, known);
             TEXTURES.put(texture, known);
         }
         return known;
@@ -85,10 +82,9 @@ final class GlCache {
         long key = (long) framebuffer << 32 | (attachment & 0xFFFFFFFFL);
         int[] known = ATTACHMENTS.get(key);
         if (known == null) {
-            int type = GL45C.glGetNamedFramebufferAttachmentParameteri(framebuffer, attachment,
-                    GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
-            int name = type == GL11C.GL_NONE ? 0 : GL45C.glGetNamedFramebufferAttachmentParameteri(framebuffer,
-                    attachment, GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+            int type = GlCalls.framebufferAttachment(framebuffer, attachment, GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+            int name = type == GL11C.GL_NONE ? 0
+                    : GlCalls.framebufferAttachment(framebuffer, attachment, GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
             known = new int[]{type, name};
             ATTACHMENTS.put(key, known);
         }

@@ -2,6 +2,11 @@
 
 ## Prochaine version
 
+### Client
+
+#### Corrections
+- **Plantage sur Mac corrigé** — Le jeu ne plante plus environ une seconde après que vous avez rejoint un monde sur Mac ou avec une carte graphique ancienne. Les créatures lointaines s'y cachent toujours derrière le terrain lointain, et *Ignorer cachés* continue de fonctionner.
+
 ## 0.16.0 — 2026-11-05
 
 ### Client
