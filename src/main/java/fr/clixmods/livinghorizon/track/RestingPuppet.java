@@ -18,6 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.projectile.FishingHook;
@@ -50,16 +51,18 @@ import java.util.Set;
  * {@link FarConfig#offlineRoam} blocks of the spot where the player logged off - a village -
  * as long as the blocks there are loaded: it strolls, looks around, sits down, stands in
  * front of a chest, a crafting table or a villager's workstation; at night it walks to a bed
- * it can reach, or stays on its feet: never lying on the ground. Doors and fence gates it walks through. Monsters in sight, it
- * draws a sword and raises its shield, watches them and keeps out of their way, never
- * fights; safe indoors, behind walls and shut doors, it does not mind them. A creeper
- * blowing up in sight throws it back, shield up, and it walks back. Hit, it raises its
- * shield. At the water's edge it may fish for a while, a line cast, a bobber bobbing and fish
- * biting now and then; never two who are close by at the same time. In lava or fire it shows fire resistance, under water water breathing. Where the
- * blocks are not loaded it only stands or sits where it was, standing at night.
+ * it can reach, or stays on its feet: never lying on the ground. Doors and fence gates it
+ * walks through. Monsters in sight, it draws a sword and raises its shield, watches them and
+ * keeps out of their way, never fights; safe indoors, behind walls and shut doors, it does
+ * not mind them. A creeper blowing up in sight throws it back, shield up, and it walks back.
+ * Hit, it raises its shield. At the water's edge it may fish for a while, a line cast, a
+ * bobber bobbing and fish biting now and then; never two who are close by at the same time.
+ * In lava or fire it shows fire resistance, under water water breathing. Where the blocks
+ * are not loaded it only stands or sits where it was, standing at night.
  *
- * <p>Walk into it and it is shoved aside, as players push each other; it never pushes back,
- * being a picture on this client only.
+ * <p>Look at it and it looks back at you; facing you, it crouches when you crouch. Walk into
+ * it and it is shoved aside, as players push each other; it never pushes back, being a
+ * picture on this client only.
  *
  * <p>Off, it sits on its spot. Either way it keeps to the ground: break what it rests on and
  * it falls; bury it and it reappears on top. Sitting, its own spot wins again once it has
@@ -99,6 +102,10 @@ public final class RestingPuppet extends RemotePlayer {
     static final double FISHERS_APART = 16;
     /** Blocks of open water out from the edge, the bobber at the last one. */
     private static final int CAST = 3;
+    /** Ticks it keeps looking at you once you look away. */
+    private static final int GAZE = 30;
+    /** Degrees: how far it turns its head from its body, and how near facing you counts as facing you. */
+    private static final float NECK = 75, FACING = 30;
     /** Ticks a fish takes to come to the bobber, and the bobber stays under once it bites. */
     private static final int WAKE = 40, DIP = 12;
     /** The game lays a sleeper this high above the block of its bed. */
@@ -189,6 +196,11 @@ public final class RestingPuppet extends RemotePlayer {
     /** Its bobber while the line is out, drawn with it; ticks to the next bite, or before casting again. */
     private @Nullable FishingHook hook;
     private int bite;
+    /** Your eyes while you look at it, and for {@link #GAZE} ticks after; whether you crouch. */
+    private @Nullable Vec3 gazer;
+    private int gazed;
+    /** You looked at it since its last tick: it crouches with you only then, never from memory. */
+    private boolean gazerCrouching, watched, crouched;
     private Walkway.@Nullable Route route;
     private float headYaw, headPitch, headYawGoal, headPitchGoal;
     private int glance;
@@ -257,6 +269,7 @@ public final class RestingPuppet extends RemotePlayer {
     /** What it does and what it knows of around it, for the debug tools. */
     public String state() {
         if (riding && carried != null) return carried.state();
+        if (gazed > 0 && gazer != null) return "looking at you at " + gazer + (crouched ? ", crouched" : "");
         if (far && loop != null) return "away: " + loop.state();
         Walkway.Survey reading = survey, map = known;
         return activity.name().toLowerCase(java.util.Locale.ROOT)
@@ -331,6 +344,9 @@ public final class RestingPuppet extends RemotePlayer {
         yHeadRotO = yHeadRot;
         tickCount++;
         if (standing > 0) standing--;
+        if (gazed > 0) gazed--;
+        // Crouched with you only while it lives its life on foot.
+        if (crouched && (gazed <= 0 || riding || !lively || !near)) crouch(false);
 
         if (lively != config.offlineLife) {
             lively = config.offlineLife;
@@ -401,6 +417,7 @@ public final class RestingPuppet extends RemotePlayer {
                 settle(level, false);
             }
         }
+        if (activity != Activity.FLY && activity != Activity.GUARD) respond();
         boolean wary = activity == Activity.GUARD || activity == Activity.FLY;
         arm(wary, wary || shieldTicks > 0);
         double moved = Math.hypot(getX() - before, getZ() - beforeZ);
@@ -443,8 +460,14 @@ public final class RestingPuppet extends RemotePlayer {
         if (lively) {
             if (shieldTicks > 0) shieldTicks--;
             arm(false, shieldTicks > 0);
-            if (shieldTicks <= 0) glance(false);
-            else yHeadRot = yBodyRot + headYaw;
+            if (shieldTicks > 0) {
+                yHeadRot = yBodyRot + headYaw;
+            } else if (gazed > 0 && gazer != null) {
+                // Looked at from the saddle: it looks back, its head only.
+                lookAt(gazer, false);
+            } else {
+                glance(false);
+            }
         } else {
             arm(false, false);
             headYaw = approach(headYaw, 0, 6);
@@ -588,7 +611,7 @@ public final class RestingPuppet extends RemotePlayer {
                 return;
             }
             case FACE -> {
-                if (focus != null) faceAt(focus, 6);
+                if (focus != null && gazed <= 0) faceAt(focus, 6);
             }
             case FISH -> {
                 if (night) start(Activity.IDLE, 20);
@@ -597,7 +620,7 @@ public final class RestingPuppet extends RemotePlayer {
             default -> {
             }
         }
-        glance(activity == Activity.FACE || activity == Activity.FISH);
+        if (gazed <= 0) glance(activity == Activity.FACE || activity == Activity.FISH);
         if (--timer <= 0) decide(level, beds, fishers, night);
     }
 
@@ -852,11 +875,70 @@ public final class RestingPuppet extends RemotePlayer {
             setPos(getX() + dx / distance * speed, y, getZ() + dz / distance * speed);
         }
         if (!backing && distance > 1e-3) turnTo(yawTowards(dx, dz), 20);
-        headYaw = approach(headYaw, 0, 10);
-        headPitch = approach(headPitch, 5, 5);
+        if (gazed <= 0) {
+            // Looked at, its head is turned to you instead (respond).
+            headYaw = approach(headYaw, 0, 10);
+            headPitch = approach(headPitch, 5, 5);
+        }
         yHeadRot = yBodyRot + headYaw;
         setXRot(headPitch);
         return pathIndex >= way.size();
+    }
+
+    // --- You -------------------------------------------------------------------------------
+
+    /** You look at it, from {@code eye}, crouching or not: it looks back for a while. */
+    void lookedAt(Vec3 eye, boolean crouching) {
+        gazer = eye;
+        gazed = GAZE;
+        gazerCrouching = crouching;
+        watched = true;
+    }
+
+    /** Looking back at you while you look at it, crouched when you crouch and it faces you. */
+    public boolean crouched() {
+        return crouched;
+    }
+
+    /**
+     * Looked at: it looks back at you. Standing, it turns to you and, facing you, crouches when
+     * you crouch; walking, seated or fishing, it turns its head only. Asleep, on guard or
+     * thrown, never.
+     */
+    private void respond() {
+        Vec3 eye = gazer;
+        boolean crouch = false;
+        if (gazed > 0 && eye != null) {
+            boolean standing = activity == Activity.IDLE || activity == Activity.FACE;
+            if (standing || activity == Activity.WALK || activity == Activity.SIT || activity == Activity.FISH) {
+                lookAt(eye, standing);
+                crouch = watched && gazerCrouching && standing && facing(eye);
+            }
+        }
+        watched = false;
+        if (crouch != crouched) crouch(crouch);
+    }
+
+    private void crouch(boolean down) {
+        crouched = down;
+        setPose(down ? Pose.CROUCHING : Pose.STANDING);
+    }
+
+    /** Its head to {@code target}, as far as its neck turns; its body too when {@code body}. */
+    private void lookAt(Vec3 target, boolean body) {
+        double dx = target.x - getX(), dz = target.z - getZ();
+        double dy = target.y - getEyeY();
+        float yaw = yawTowards(dx, dz);
+        if (body) turnTo(yaw, 10);
+        headYaw = approach(headYaw, Math.max(-NECK, Math.min(NECK, wrap(yaw - yBodyRot))), 15);
+        headPitch = approach(headPitch, (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))), 10);
+        yHeadRot = yBodyRot + headYaw;
+        setXRot(headPitch);
+    }
+
+    /** Its body turned to {@code target}, near enough. */
+    private boolean facing(Vec3 target) {
+        return Math.abs(wrap(yawTowards(target.x - getX(), target.z - getZ()) - yBodyRot)) < FACING;
     }
 
     // --- Fishing ---------------------------------------------------------------------------
@@ -915,7 +997,7 @@ public final class RestingPuppet extends RemotePlayer {
             return;
         }
         Vec3 water = at.water();
-        faceAt(water, 6);
+        if (gazed <= 0) faceAt(water, 6);
         FishingHook bobber = hook;
         if (bobber == null) {
             if (--bite > 0) return;

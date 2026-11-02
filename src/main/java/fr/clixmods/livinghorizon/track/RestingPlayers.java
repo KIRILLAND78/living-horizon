@@ -17,6 +17,7 @@ import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -503,12 +504,52 @@ public final class RestingPlayers {
         int[] work = {WORK};
         Minecraft minecraft = Minecraft.getInstance();
         Entity camera = minecraft.getCameraEntity();
+        // The one you look at looks back.
+        Player you = minecraft.player;
+        RestingPuppet gazed = gazed(level, you);
+        if (gazed != null) gazed.lookedAt(you.getEyePosition(), you.isShiftKeyDown() || you.isCrouching());
         for (RestingPuppet puppet : puppets.values()) {
             // Near the camera they live their life; away from it, they play a loop.
             if (camera != null) puppet.near(camera.getEyePosition());
             // You may shove them out of your way; they never push you.
             puppet.tick(level, config, beds, fishers, night, work, minecraft.player);
         }
+    }
+
+    /** Blocks within which one notices you looking at it. */
+    private static final double GAZE = 24;
+
+    /**
+     * The nearest of them under your crosshair, within {@link #GAZE} blocks, living its life
+     * near you, unless a block is in the way; null when none.
+     */
+    private @Nullable RestingPuppet gazed(ClientLevel level, @Nullable Player you) {
+        if (you == null || you.isSpectator()) return null;
+        Vec3 eye = you.getEyePosition();
+        Vec3 end = eye.add(you.getViewVector(1.0f).scale(GAZE));
+        RestingPuppet nearest = null;
+        double best = Double.MAX_VALUE;
+        for (RestingPuppet puppet : puppets.values()) {
+            if (puppet.away() || puppet.level() != level) continue;
+            double height = switch (puppet.look()) {
+                case STAND, RIDE -> 1.9;
+                case SIT -> 1.3;
+                case BED -> 0.6;
+            };
+            // A little wider than it is: a glance its way is enough.
+            AABB box = new AABB(puppet.getX() - 0.5, puppet.getY(), puppet.getZ() - 0.5,
+                    puppet.getX() + 0.5, puppet.getY() + height, puppet.getZ() + 0.5);
+            Optional<Vec3> hit = box.clip(eye, end);
+            if (hit.isEmpty()) continue;
+            double distance = eye.distanceToSqr(hit.get());
+            if (distance >= best) continue;
+            BlockHitResult wall = level.clip(new ClipContext(eye, hit.get(), ClipContext.Block.VISUAL,
+                    ClipContext.Fluid.NONE, you));
+            if (wall.getType() != HitResult.Type.MISS) continue;
+            best = distance;
+            nearest = puppet;
+        }
+        return nearest;
     }
 
     // --- File --------------------------------------------------------------------------

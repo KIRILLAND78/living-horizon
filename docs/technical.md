@@ -186,6 +186,10 @@ under 48.
 - **A creeper** blowing up within 7 blocks, in sight, throws them, shield up, and they walk
   back.
 - **Hit by you**, they raise their shield.
+- **Looked at** by you (the nearest under your crosshair, within 24 blocks, nothing in
+  between), they look back for as long as you look and 1.5 seconds more: standing, they turn
+  to you, and facing you they crouch while you crouch; walking, seated, fishing or on a
+  mount, they turn their head only and never crouch.
 - **At the water's edge**, where open water runs 3 blocks out from a spot they can reach, they
   may fish for a minute or so: a rod in hand, the bobber on the water with the game's line,
   a fish's wake now and then, a bite that pulls the bobber under, the line reeled in and cast

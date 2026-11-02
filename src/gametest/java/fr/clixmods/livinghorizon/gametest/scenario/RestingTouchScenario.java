@@ -8,13 +8,14 @@ import fr.clixmods.livinghorizon.track.RestingPuppet;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.function.Function;
 
 /**
  * Players who logged off, near the camera, and you: walk into one and it is shoved out of your
- * way, while you are never pushed back. Three along a pond: one of them goes fishing, never two
+ * way, while you are never pushed back; look at it and it looks back, and crouches when you do. Three along a pond: one of them goes fishing, never two
  * at once, so close together.
  */
 public final class RestingTouchScenario implements Scenario {
@@ -38,6 +39,7 @@ public final class RestingTouchScenario implements Scenario {
             Scene.command(world, "tp @a 0.5 " + GROUND + " -4.5 0 0");
             context.waitTicks(40);
             push(context, world);
+            gaze(context, world);
             fishing(context, world);
             command(context, "livinghorizon debug offline test clear");
         }
@@ -56,6 +58,45 @@ public final class RestingTouchScenario implements Scenario {
         if (apart < 0.5) throw new AssertionError("restingtouch: not shoved aside, " + apart + " blocks from you");
         if (Math.hypot(you.x - yx, you.z - yz) > 0.05) throw new AssertionError("restingtouch: you were pushed to " + you);
         Scene.screenshot(context, this, "pushed");
+    }
+
+    /** You look at it from 5 blocks: it turns to you, then crouches when you crouch, and stands up with you. */
+    private void gaze(ClientGameTestContext context, TestSingleplayerContext world) {
+        Vec3[] aimed = {null};
+        boolean facing = false;
+        for (int i = 0; i < 60 && !facing; i++) {
+            aim(context, world, aimed);
+            facing = Math.abs(Mth.wrapDegrees(read(context, p -> p.yHeadRot) - 180f)) < 20;
+        }
+        Scene.log("restingtouch looked at: " + read(context, RestingPuppet::state));
+        Scene.screenshot(context, this, "looked-at");
+        if (!facing) throw new AssertionError("restingtouch: never looked back, head at " + read(context, p -> p.yHeadRot));
+
+        context.getInput().holdKey(options -> options.keyShift);
+        boolean down = false;
+        for (int i = 0; i < 60 && !down; i++) {
+            aim(context, world, aimed);
+            down = read(context, RestingPuppet::crouched);
+        }
+        Scene.log("restingtouch you crouch: " + read(context, RestingPuppet::state));
+        Scene.screenshot(context, this, "crouched");
+        context.getInput().releaseKey(options -> options.keyShift);
+        if (!down) throw new AssertionError("restingtouch: never crouched with you");
+        context.waitTicks(10);
+        if (read(context, RestingPuppet::crouched)) throw new AssertionError("restingtouch: still crouched once you stood up");
+    }
+
+    /**
+     * Wherever it goes, you keep it under your crosshair, 5 blocks north of it, facing south a
+     * little down, at its chest; then 10 ticks.
+     */
+    private void aim(ClientGameTestContext context, TestSingleplayerContext world, Vec3[] aimed) {
+        Vec3 at = read(context, RestingPuppet::position);
+        if (aimed[0] == null || aimed[0].distanceTo(at) > 0.3) {
+            Scene.command(world, "tp @a " + at.x + " " + GROUND + " " + (at.z - 5) + " 0 5");
+            aimed[0] = at;
+        }
+        context.waitTicks(10);
     }
 
     /** A pond with three of them on its edge: in time one fishes, and never two at once. */
@@ -78,9 +119,22 @@ public final class RestingTouchScenario implements Scenario {
                 }
                 return count;
             });
+            if (i % 50 == 0) {
+                Scene.log("restingtouch anglers " + i * 10 + ": " + context.computeOnClient(minecraft -> {
+                    StringBuilder line = new StringBuilder();
+                    RestingPlayers resting = FarPlayerTracker.get().resting();
+                    for (RestingPlayers.Spot spot : resting.spots()) {
+                        RestingPuppet puppet = resting.puppet(minecraft.level, spot);
+                        line.append(spot.name()).append(' ').append(puppet.blockPosition().toShortString()).append(' ')
+                                .append(puppet.state()).append("; ");
+                    }
+                    return line.toString();
+                }));
+            }
             if (fishing > 1) throw new AssertionError("restingtouch: " + fishing + " fishing side by side");
             if (fishing == 1 && most == 0) {
                 Scene.log("restingtouch fishing after " + i * 10 + " ticks");
+                beside(context, world);
                 context.waitTicks(20);
                 Scene.screenshot(context, this, "fishing");
                 // Watched a while longer: still never two.
@@ -89,6 +143,27 @@ public final class RestingTouchScenario implements Scenario {
             most = Math.max(most, fishing);
         }
         if (most == 0) throw new AssertionError("restingtouch: nobody went fishing");
+    }
+
+    /** You, a few blocks to the side of the one fishing, looking at it and its line. */
+    private static void beside(ClientGameTestContext context, TestSingleplayerContext world) {
+        Vec3[] fisher = context.computeOnClient(minecraft -> {
+            RestingPlayers resting = FarPlayerTracker.get().resting();
+            for (RestingPlayers.Spot spot : resting.spots()) {
+                RestingPuppet puppet = resting.puppet(minecraft.level, spot);
+                if (puppet.hook() != null) return new Vec3[]{puppet.position(), puppet.hook().position()};
+            }
+            return null;
+        });
+        if (fisher == null) return;
+        Vec3 from = fisher[0], to = fisher[1];
+        Vec3 along = to.subtract(from).multiply(1, 0, 1).normalize();
+        Vec3 you = from.add(-along.z * 4, 0, along.x * 4).subtract(along);
+        Vec3 middle = from.add(to).scale(0.5).add(0, 0.8, 0);
+        double dx = middle.x - you.x, dz = middle.z - you.z, dy = middle.y - (you.y + 1.62);
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz)));
+        Scene.command(world, "tp @a " + you.x + " " + from.y + " " + you.z + " " + yaw + " " + pitch);
     }
 
     private static void command(ClientGameTestContext context, String command) {
