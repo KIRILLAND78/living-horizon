@@ -2,6 +2,11 @@
 
 ## Prochaine version
 
+### Client
+
+#### Corrections
+- **Joueurs déconnectés figés au loin** — les joueurs déconnectés ne restent plus immobiles quand tu t'éloignes : là où ils n'ont pas la place de marcher, ils font un pas ou deux, se retournent et s'assoient de temps en temps.
+
 ## 0.10.0 — 2026-10-20
 
 ### Serveur

@@ -49,4 +49,25 @@ class RestingLoopTest {
         // Around its spot, as far as the animation that fits goes, and no farther.
         assertTrue(farthest > 0.5 && farthest < 3.5, "went " + farthest + " blocks from its spot");
     }
+
+    @Test
+    void noRoomToWalkTurnsAndSitsOnItsSpot() {
+        // A player with no animation that fits, or no ground read: never a statue.
+        RestingLoop loop = new RestingLoop(42, X, Y, Z, 0f, MobAnimations.WALK, true,
+                () -> CompletableFuture.completedFuture(MobPaths.stand(X, Y, Z)));
+        loop.from(X, Y, Z, 0f);
+        float least = 0, most = 0;
+        int seated = 0;
+        for (int tick = 0; tick < 3000; tick++) {
+            loop.tick(tick, false);
+            assertEquals(X, loop.x, 1e-9);
+            assertEquals(Z, loop.z, 1e-9);
+            least = Math.min(least, loop.body);
+            most = Math.max(most, loop.body);
+            if (loop.pausing) seated++;
+        }
+        assertTrue(most - least > 60, "turned only " + (most - least) + " degrees");
+        assertTrue(seated > 0 && seated < 3000, "seated " + seated + " ticks out of 3000");
+        assertEquals("turning on its spot", loop.state());
+    }
 }

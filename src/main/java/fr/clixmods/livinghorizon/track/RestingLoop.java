@@ -18,6 +18,10 @@ import java.util.function.Supplier;
  * straight line, at a stroll, stopping now and then to look around, and starts its loop
  * once there: a player has all the time in the world, unlike a mob that must be on its
  * mark before the real one is sent.
+ *
+ * <p>A player with no room for any animation, or whose ground is not read yet, is never a
+ * statue ({@code onTheSpot}): it turns on its spot now and then, as a mob does, and sits a
+ * while in some of those stances.
  */
 final class RestingLoop {
     /** Ticks before a ground read with columns missing is read again. */
@@ -25,6 +29,9 @@ final class RestingLoop {
     /** On its way back: blocks walked between two stops, and ticks a stop lasts at least. */
     private static final double STOP_EVERY = 9;
     private static final int STOP = 40;
+    /** On the spot: ticks one stance lasts, and how far it turns from the way it faced, at most. */
+    private static final int STANCE = 160;
+    private static final long TURN = 120;
 
     private final long seed;
     /** The spot it loops around, and the way it faced there. */
@@ -34,6 +41,8 @@ final class RestingLoop {
     private final Supplier<CompletableFuture<MobPaths.Choice>> planner;
     /** Blocks a tick it walks at, at most. */
     private final double pace;
+    /** With no animation to play, it turns and sits on its spot rather than stand still. */
+    private final boolean onTheSpot;
 
     private MobPaths.@Nullable Choice choice;
     private @Nullable CompletableFuture<MobPaths.Choice> pending;
@@ -50,7 +59,13 @@ final class RestingLoop {
 
     RestingLoop(long seed, double homeX, double homeY, double homeZ, float homeYaw, double pace,
                 Supplier<CompletableFuture<MobPaths.Choice>> planner) {
+        this(seed, homeX, homeY, homeZ, homeYaw, pace, false, planner);
+    }
+
+    RestingLoop(long seed, double homeX, double homeY, double homeZ, float homeYaw, double pace, boolean onTheSpot,
+                Supplier<CompletableFuture<MobPaths.Choice>> planner) {
         this.seed = seed;
+        this.onTheSpot = onTheSpot;
         this.homeX = homeX;
         this.homeY = homeY;
         this.homeZ = homeZ;
@@ -105,6 +120,11 @@ final class RestingLoop {
             facing = MobAnimations.yaw(pose.heading(), choice.angle(), choice.mirror());
             moving = pose.walking();
             grazing = pose.grazing();
+        } else if (onTheSpot) {
+            // Nowhere to walk: a new stance every so often, turned its own way, seated in one of three.
+            long stance = Math.floorDiv(clock + Math.floorMod(seed, (long) STANCE), (long) STANCE);
+            facing = homeYaw + (Math.floorMod(MobMotion.mix(seed, stance), 2 * TURN + 1) - TURN);
+            grazing = Math.floorMod(MobMotion.mix(seed, stance + 7919), 3L) == 0;
         }
 
         // On it, or catching up with it at a walk when a new animation starts elsewhere.
@@ -169,6 +189,8 @@ final class RestingLoop {
     String state() {
         MobAnimations.Animation animation = choice == null ? null : choice.animation();
         if (returning) return stopped > 0 ? "on its way back, looking around" : "on its way back";
-        return pending != null ? "reading the ground" : animation == null ? "standing" : animation.toString();
+        if (pending != null) return "reading the ground";
+        if (animation != null) return animation.toString();
+        return onTheSpot ? "turning on its spot" : "standing";
     }
 }

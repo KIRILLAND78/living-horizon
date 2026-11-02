@@ -133,11 +133,24 @@ public final class MobPaths {
      * and one of them by the seed so that a herd does not all do the same.
      */
     static Choice choose(Ground ground, double width, long seed) {
+        return choose(ground, width, seed, MobAnimations.ALL);
+    }
+
+    /**
+     * For a player who logged off: the choice made, or, where none of the animations fits, one
+     * of the {@link MobAnimations#CRAMPED} ones, a step or two on the same ground.
+     */
+    static Choice orCramped(Choice choice, double width, long seed) {
+        if (choice.animation() != null) return choice;
+        return choose(choice.ground(), width, seed, MobAnimations.CRAMPED);
+    }
+
+    private static Choice choose(Ground ground, double width, long seed, List<MobAnimations.Animation> animations) {
         int bias = (int) Math.floorMod(seed, 8L);
         boolean mirrorFirst = ((seed >> 7) & 1) == 1;
         List<Choice> fit = new ArrayList<>();
         double widest = 0;
-        for (MobAnimations.Animation animation : MobAnimations.ALL) {
+        for (MobAnimations.Animation animation : animations) {
             search:
             for (int k = 0; k < 8; k++) {
                 for (int m = 0; m < 2; m++) {

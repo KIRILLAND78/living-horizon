@@ -199,6 +199,10 @@ distant mobs play (`track/MobAnimations`) in a loop around their spot, on the gr
 around it (`track/MobPaths`, read again every 30 seconds while some of it is missing),
 sitting in some of its pauses and lying down at night, in their bed if they are in one.
 
+- Where none of the mobs' animations fits (indoors, on a roof, a balcony), they play a
+  cramped one (`MobAnimations.CRAMPED`: a step or two and back). Where not even that fits,
+  or while the ground is not read, they turn on their spot every 8 seconds, as mobs do, and
+  sit in one stance out of three: never a statue.
 - From wherever their life left them, they stroll back to the loop, stopping now and then to
   look around, and start it once there.
 - When the camera comes near again, their life goes on from where the loop left them.

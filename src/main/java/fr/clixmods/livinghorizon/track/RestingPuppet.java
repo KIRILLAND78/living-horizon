@@ -443,8 +443,10 @@ public final class RestingPuppet extends RemotePlayer {
         if (loop == null) {
             long seed = spot.name().toLowerCase(java.util.Locale.ROOT).hashCode() * 0x9E3779B97F4A7C15L;
             Vec3 at = shore != null ? shore : new Vec3(spot.x(), spot.y(), spot.z());
-            loop = new RestingLoop(seed, at.x, at.y, at.z, spot.yaw(), MobAnimations.WALK,
-                    () -> MobPaths.plan(level, at.x, at.y, at.z, 0.6, seed));
+            // Where no animation fits, a cramped one; where not even that, it turns on its spot.
+            loop = new RestingLoop(seed, at.x, at.y, at.z, spot.yaw(), MobAnimations.WALK, true,
+                    () -> MobPaths.plan(level, at.x, at.y, at.z, 0.6, seed)
+                            .thenApply(choice -> MobPaths.orCramped(choice, 0.6, seed)));
         }
         return loop;
     }

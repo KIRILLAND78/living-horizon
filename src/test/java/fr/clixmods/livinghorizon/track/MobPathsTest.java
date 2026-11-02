@@ -140,6 +140,23 @@ class MobPathsTest {
     }
 
     @Test
+    void crampedPlayerPacesWhereNothingElseFits() {
+        // A player who logged off in a 1x2 nook: no mob animation fits, a step there and back does.
+        double[][] ground = ground(Double.NaN);
+        ground[R][R] = 64;
+        ground[R][R + 1] = 64;
+        MobPaths.Choice none = choose(ground, 0.6, 9);
+        assertNull(none.animation());
+        MobPaths.Choice cramped = MobPaths.orCramped(none, 0.6, 9);
+        assertNotNull(cramped.animation());
+        assertTrue(MobAnimations.CRAMPED.contains(cramped.animation()));
+        staysOnGround(cramped, 0.6);
+        // Where a mob animation fits, it is kept.
+        MobPaths.Choice open = choose(ground(64), 0.6, 9);
+        assertEquals(open.animation(), MobPaths.orCramped(open, 0.6, 9).animation());
+    }
+
+    @Test
     void groundNotReadYetIsReadAgain() {
         // The far world not open yet: nothing read around the cow, which stands for now.
         assertFalse(MobPaths.stand(X, Y, Z).complete());
