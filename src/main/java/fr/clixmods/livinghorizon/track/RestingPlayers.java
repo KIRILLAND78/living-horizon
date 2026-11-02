@@ -45,7 +45,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Players who logged off, left where they were last, asleep or sitting.
+ * Players who logged off, left where they were last.
  *
  * <p>Remembered per server, across sessions, in
  * {@code config/livinghorizon/resting/<server>.json}: a friend who logged off yesterday
@@ -465,7 +465,7 @@ public final class RestingPlayers {
             double height = switch (puppet.look()) {
                 case STAND, RIDE -> 1.9;
                 case SIT -> 1.3;
-                case LIE, BED -> 0.5;
+                case BED -> 0.5;
             };
             // A sleeper is 1.8 blocks long, whichever way it lies.
             double half = height < 1 ? 1.0 : 0.4;

@@ -574,7 +574,7 @@ public final class GhostRenderer {
 
     /**
      * Players who logged off: standing, walking or on guard as the game would draw any
-     * player, or seated, lying on the ground or asleep in a bed.
+     * player, or seated on the ground or asleep in a bed.
      */
     private static void rest(List<EntityRenderState> frame, Minecraft minecraft, EntityRenderDispatcher dispatcher,
                              Vec3 eye, float partialTick, FarConfig config) {
@@ -607,12 +607,6 @@ public final class GhostRenderer {
                 if (look == RestingPuppet.Look.BED) {
                     // In the bed: its sleeping position, so the game lays it along the bed.
                     living.pose = Pose.SLEEPING;
-                } else if (look == RestingPuppet.Look.LIE) {
-                    // Lying on the ground: the game lays a sleeper out along its body
-                    // rotation when there is no bed, a little lower than on a mattress.
-                    living.pose = Pose.SLEEPING;
-                    living.bedOrientation = null;
-                    body.y += LIE_LIFT;
                 }
             }
             if (look == RestingPuppet.Look.SIT && body instanceof HumanoidRenderState humanoid) {
@@ -623,8 +617,7 @@ public final class GhostRenderer {
             // Their name, marked offline, where the game would show it: close by, as for anyone.
             Component name = config.offlineNames ? body.nameTag : null;
             //? if >=1.21.2 {
-            if (name != null && (look == RestingPuppet.Look.BED || look == RestingPuppet.Look.LIE)
-                    && body.nameTagAttachment != null) {
+            if (name != null && look == RestingPuppet.Look.BED && body.nameTagAttachment != null) {
                 // Lying down: just above the body, as the game puts a sleeper's name (the tag adds half a block).
                 body.nameTagAttachment = new Vec3(0, 0.3, 0);
             }
@@ -892,24 +885,22 @@ public final class GhostRenderer {
 
     /** Blocks a figure in the riding pose is lowered by to sit on the ground: the seat's height. */
     private static final double SEAT_DROP = 0.6;
-    /** Blocks a figure lying on the ground is raised by: the game lays a sleeper a little low. */
+    /** Blocks a sleeper with no bed under it is raised by: the game lays one a little low. */
     private static final double LIE_LIFT = 0.13;
 
     /**
      * A player who logged off as a picture, in its posture: standing, seated on the ground,
-     * lying on it or in a bed (laid along the bed, as the game lays a sleeper), or on its mount.
+     * in a bed (laid along the bed, as the game lays a sleeper), or on its mount.
      */
     private static boolean restingImpostor(Minecraft minecraft, Vec3 eye, RestingPuppet puppet, @Nullable Entity mount,
                                            RestingPuppet.Look look, float partialTick, FarConfig config) {
         return switch (look) {
             case STAND -> impostor(minecraft, eye, puppet, partialTick, config);
             case SIT -> impostor(minecraft, eye, puppet, partialTick, config, 0, -SEAT_DROP, 0, Float.NaN);
-            // Lying pictures are baked raised (ImpostorAtlas.LYING_LIFT): lowered back here.
-            case LIE -> impostor(minecraft, eye, puppet, partialTick, config, 0, LIE_LIFT - ImpostorAtlas.LYING_LIFT, 0,
-                    Float.NaN);
             case BED -> {
                 Direction bed = puppet.getBedOrientation();
                 if (bed == null) {
+                    // Lying pictures are baked raised (ImpostorAtlas.LYING_LIFT): lowered back here.
                     yield impostor(minecraft, eye, puppet, partialTick, config, 0, LIE_LIFT - ImpostorAtlas.LYING_LIFT, 0,
                             Float.NaN);
                 }

@@ -4,6 +4,9 @@
 
 ### Client
 
+#### Améliorations
+- **Joueurs déconnectés la nuit** — les joueurs déconnectés ne s'allongent plus par terre la nuit : ils dorment dans un lit à leur portée, ou restent debout.
+
 #### Corrections
 - **Joueurs déconnectés figés au loin** — les joueurs déconnectés ne restent plus immobiles quand tu t'éloignes : là où ils n'ont pas la place de marcher, ils font un pas ou deux, se retournent et s'assoient de temps en temps.
 

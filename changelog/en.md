@@ -4,6 +4,9 @@
 
 ### Client
 
+#### Improved
+- **Offline players at night** — players who logged off no longer lie down on the ground at night: they sleep in a bed they can reach, or stay on their feet.
+
 #### Fixed
 - **Offline players frozen far away** — players who logged off no longer stand still once you walk away: where there is no room for their walk, they take a step or two, turn round and sit down now and then.
 

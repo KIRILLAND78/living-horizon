@@ -169,8 +169,9 @@ under 48.
 
 - **By day** they stand and look around, sit down, stroll, or stand in front of a chest, a
   crafting table or a villager's workstation and look at it.
-- **At night** they walk to a free bed they can reach and sleep in it, or lie down where
-  they are. In the morning they get up. Night is whenever the sky is dark: a thunderstorm
+- **At night** they walk to a free bed they can reach and sleep in it. With none, they stay
+  on their feet, looking around, and look for one again every 10 to 20 seconds: they never
+  lie on the ground. In the morning they get up. Night is whenever the sky is dark: a thunderstorm
   too, and always in the Nether and the End.
 - **Walking** (`track/Walkway`) only where a player could: one block up, two down, no corner
   cut, nothing walked through but doors and fence gates, which they cannot open. It is worked
@@ -188,7 +189,7 @@ under 48.
 - **In lava or fire** they show the swirls of fire resistance; **under water**, those of
   water breathing.
 
-Where the blocks are not loaded, they only stand, sit or sleep where they are. With
+Where the blocks are not loaded, they only stand or sit where they are, standing at night. With
 `offlineLife` off, they sit on their spot.
 
 ### Far from the camera
@@ -197,7 +198,8 @@ Past 64 blocks they have no life of their own (`track/RestingLoop`): nothing is 
 but once a second they are still kept out of water (below). They play one of the animations
 distant mobs play (`track/MobAnimations`) in a loop around their spot, on the ground read
 around it (`track/MobPaths`, read again every 30 seconds while some of it is missing),
-sitting in some of its pauses and lying down at night, in their bed if they are in one.
+sitting in some of its pauses by day. At night they stand in those pauses, or stay in their
+bed until the morning if they are in one.
 
 - Where none of the mobs' animations fits (indoors, on a roof, a balcony), they play a
   cramped one (`MobAnimations.CRAMPED`: a step or two and back). Where not even that fits,
@@ -575,11 +577,11 @@ that a mob met in an earlier game is read back rather than baked.
   - they are baked again each game, never kept on disk, and named after the species in the
     impostor screen.
 - **Players who logged off** are impostors in every posture: standing, seated on the ground,
-  lying down or in a bed. A posture other than standing is part of the key
+  or in a bed. A posture other than standing is part of the key
   (`ImpostorKey.posture`), and the picture is baked in it:
   - seated: in the riding pose, drawn lowered to the ground as the model is;
-  - lying: along its body, baked raised (`ImpostorAtlas.LYING_LIFT`) so that none of it
-    falls below the tile, and laid along its bed when it is in one.
+  - in a bed: along its body, baked raised (`ImpostorAtlas.LYING_LIFT`) so that none of it
+    falls below the tile, and laid along the bed.
 - **Riders** (players online or not, on a horse, a camel, a happy ghast, in a boat, a raft, a
   minecart...) are baked in one picture with what carries them (`ImpostorKey.riding`,
   `ImpostorAtlas.Rider`): the rider seated where it sits, turned as it is turned. A vehicle has

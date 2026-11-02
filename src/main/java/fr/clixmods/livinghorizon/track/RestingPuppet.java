@@ -47,12 +47,12 @@ import java.util.Set;
  * {@link FarConfig#offlineRoam} blocks of the spot where the player logged off - a village -
  * as long as the blocks there are loaded: it strolls, looks around, sits down, stands in
  * front of a chest, a crafting table or a villager's workstation; at night it walks to a bed
- * it can reach, or lies down. Doors and fence gates it walks through. Monsters in sight, it
+ * it can reach, or stays on its feet: never lying on the ground. Doors and fence gates it walks through. Monsters in sight, it
  * draws a sword and raises its shield, watches them and keeps out of their way, never
  * fights; safe indoors, behind walls and shut doors, it does not mind them. A creeper
  * blowing up in sight throws it back, shield up, and it walks back. Hit, it raises its
  * shield. In lava or fire it shows fire resistance, under water water breathing. Where the
- * blocks are not loaded it only stands, sits or sleeps where it was.
+ * blocks are not loaded it only stands or sits where it was, standing at night.
  *
  * <p>Off, it sits on its spot. Either way it keeps to the ground: break what it rests on and
  * it falls; bury it and it reappears on top. Sitting, its own spot wins again once it has
@@ -61,7 +61,7 @@ import java.util.Set;
  * <p>All of this only near the camera, within {@link #NEAR_IN} blocks: farther, no life of
  * its own any more, nothing read nor decided, it plays one of the animations distant mobs
  * play, in a loop around its spot ({@link RestingLoop}): a walk with pauses, seated in some
- * of them, and lying down at night.
+ * of them by day, in the bed it already lies in at night.
  *
  * <p>A player who logged off riding something stays on it ({@link RestingMount}): with
  * {@link FarConfig#offlineLife} on, the horse walks, the boat rows and the happy ghast drifts
@@ -74,9 +74,9 @@ import java.util.Set;
  */
 public final class RestingPuppet extends RemotePlayer {
     /** How it is drawn. */
-    public enum Look { STAND, SIT, LIE, BED, RIDE }
+    public enum Look { STAND, SIT, BED, RIDE }
 
-    private enum Activity { IDLE, SIT, WALK, FACE, SLEEP, BED, GUARD, FLY }
+    private enum Activity { IDLE, SIT, WALK, FACE, BED, GUARD, FLY }
 
     /** Blocks per tick², the drag and the most it falls in one tick: the game's own. */
     private static final double GRAVITY = 0.08, DRAG = 0.98, TERMINAL = 3.92;
@@ -84,6 +84,8 @@ public final class RestingPuppet extends RemotePlayer {
     private static final double RISE = 0.3;
     /** Ticks it stays on its feet after falling, before sitting back down. */
     private static final int STAND_TICKS = 15;
+    /** Ticks it stands at night with no bed, looking around, before looking for one again. */
+    private static final int AWAKE = 200;
     /** The game lays a sleeper this high above the block of its bed. */
     private static final double BED_HEIGHT = 0.6875;
     /** Blocks per tick: a stroll, and getting out of a monster's way. */
@@ -211,7 +213,6 @@ public final class RestingPuppet extends RemotePlayer {
         return switch (activity) {
             case BED -> Look.BED;
             case SIT -> Look.SIT;
-            case SLEEP -> Look.LIE;
             default -> Look.STAND;
         };
     }
@@ -267,7 +268,7 @@ public final class RestingPuppet extends RemotePlayer {
             faceAt(from, 0);
             return;
         }
-        if (activity == Activity.BED || activity == Activity.SIT || activity == Activity.SLEEP) {
+        if (activity == Activity.BED || activity == Activity.SIT) {
             // Out of bed: the bed is free again, the next look for one finds it.
             leaveBedIfIn();
             bed = null;
@@ -410,8 +411,8 @@ public final class RestingPuppet extends RemotePlayer {
     // --- Away from the camera -----------------------------------------------------------------
 
     /**
-     * Its loop: a walk around its spot with pauses, seated in some of them; lying down where
-     * it is at night, or in the bed it already lies in.
+     * Its loop: a walk around its spot with pauses, seated in some of them by day; at night on
+     * its feet, or in the bed it already lies in until the morning.
      */
     private void away(ClientLevel level, Set<BlockPos> beds, boolean night) {
         RestingLoop playing = loop(level);
@@ -420,19 +421,18 @@ public final class RestingPuppet extends RemotePlayer {
             if (!(night && activity == Activity.BED)) calmDown(beds);
             playing.from(getX(), getY(), getZ(), yBodyRot);
         }
-        if (night) {
-            if (activity != Activity.BED && activity != Activity.SLEEP) start(Activity.SLEEP, 400);
-            Puppets.walk(this, 0f, 1f, 1f);
-            return;
-        }
         if (activity == Activity.BED) {
+            if (night) {
+                Puppets.walk(this, 0f, 1f, 1f);
+                return;
+            }
             leaveBed(beds);
             playing.from(getX(), getY(), getZ(), yBodyRot);
         }
         double moved = playing.tick((int) level.getGameTime(), false);
         setPos(playing.x, playing.y, playing.z);
         yBodyRot = playing.body;
-        activity = playing.pausing ? Activity.SIT : Activity.IDLE;
+        activity = playing.pausing && !night ? Activity.SIT : Activity.IDLE;
         glance(false);
         Puppets.walk(this, (float) Math.min(moved * 4.0, 1.0), 0.4f, 1f);
         setYRot(yBodyRot);
@@ -539,16 +539,13 @@ public final class RestingPuppet extends RemotePlayer {
                 }
                 return;
             }
-            case SLEEP -> {
-                if (!night) start(Activity.IDLE, 60);
-            }
             case FACE -> {
                 if (focus != null) faceAt(focus, 6);
             }
             default -> {
             }
         }
-        if (activity != Activity.SLEEP) glance(activity == Activity.FACE);
+        glance(activity == Activity.FACE);
         if (--timer <= 0) decide(level, beds, night);
     }
 
@@ -563,7 +560,8 @@ public final class RestingPuppet extends RemotePlayer {
                 return;
             }
             if (towardsBed(level, beds)) return;
-            start(Activity.SLEEP, 400);
+            // No bed it can reach: on its feet, looking around, until one is free.
+            start(Activity.IDLE, AWAKE + random.nextInt(AWAKE));
             return;
         }
         int roll = random.nextInt(100);
@@ -716,8 +714,8 @@ public final class RestingPuppet extends RemotePlayer {
         survey = null;
         sights = new ArrayList<>(nextSights.values());
         sleeps = new ArrayList<>(nextSleeps.values());
-        // Asleep on the ground or idle for want of knowing better: think again with what it now knows.
-        if (activity == Activity.SLEEP || activity == Activity.IDLE) timer = Math.min(timer, 20);
+        // Idle for want of knowing better (no bed known at night): think again with what it now knows.
+        if (activity == Activity.IDLE) timer = Math.min(timer, 20);
     }
 
     /**
@@ -1008,7 +1006,7 @@ public final class RestingPuppet extends RemotePlayer {
 
     // --- Afar -------------------------------------------------------------------------------
 
-    /** Where the blocks are not loaded: standing, sitting or asleep where it is. */
+    /** Where the blocks are not loaded: standing or sitting where it is, standing at night. */
     private void afar(boolean night) {
         Puppets.walk(this, 0f, 1f, 1f);
         if (activity == Activity.BED) return;
@@ -1017,10 +1015,11 @@ public final class RestingPuppet extends RemotePlayer {
             calmDownQuietly();
         }
         if (night) {
-            if (activity != Activity.SLEEP) start(Activity.SLEEP, 400);
+            if (activity != Activity.IDLE) start(Activity.IDLE, AWAKE);
+            glance(false);
             return;
         }
-        if (activity == Activity.SLEEP || --timer <= 0) {
+        if (--timer <= 0) {
             start(activity == Activity.SIT || random.nextBoolean() ? Activity.IDLE : Activity.SIT, 200 + random.nextInt(400));
         }
         glance(false);
@@ -1114,7 +1113,7 @@ public final class RestingPuppet extends RemotePlayer {
     private void settle(ClientLevel level, boolean now) {
         double height = switch (look()) {
             case SIT -> 1.2;
-            case LIE, BED -> 0.5;
+            case BED -> 0.5;
             default -> Footing.STANDING;
         };
         double x = getX(), y = getY(), z = getZ();
