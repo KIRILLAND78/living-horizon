@@ -3,6 +3,7 @@ package fr.clixmods.livinghorizon.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4fc;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL;
 
 /**
@@ -59,9 +60,16 @@ public final class DepthFar {
         return height / (2.0 * Math.tan(Math.toRadians(minecraft.options.fov().get()) / 2.0));
     }
 
+    /** The game's depth terms, read from this frame's projection: see {@link #terms(Minecraft)}. */
+    private static volatile float @Nullable [] terms;
+
     /** This frame's projection: reversed when a nearer point gets a greater depth. */
     public static void noteProjection(Matrix4fc projection) {
         if (projection.m23() != 0f && projection.m11() > 0f) focal = projection.m11();
+        if (projection.m23() != 0f) {
+            float[] read = DepthMath.fromProjection(projection);
+            if (read != null) terms = read;
+        }
         //? if >=26.2 {
         /*if (projection.m23() != 0f) reversed = projection.m32() > 0f;
         *///?}
@@ -78,11 +86,26 @@ public final class DepthFar {
         //?}
     }
 
+    /** {@link #openGl()} as worked out at the start of this frame: 1 yes, 0 no, -1 before the first frame. */
+    private static volatile int openGl = -1;
+
     /**
-     * Whether the game draws with OpenGL on this thread. From 26.2 it can draw with Vulkan
-     * instead, and then nothing that talks to OpenGL directly may run.
+     * Whether the game draws with OpenGL. From 26.2 it can draw with Vulkan instead, and then
+     * nothing that talks to OpenGL directly may run. Worked out once a frame ({@link #noteFrame}):
+     * with Vulkan, asking OpenGL throws, and an exception for every distant mob of every frame
+     * cost more than the rest of their occlusion test.
      */
     public static boolean openGl() {
+        int known = openGl;
+        return known >= 0 ? known == 1 : onThisThread();
+    }
+
+    /** A new frame starts, on the render thread: whether it draws with OpenGL is worked out again. */
+    public static void noteFrame() {
+        openGl = onThisThread() ? 1 : 0;
+    }
+
+    private static boolean onThisThread() {
         try {
             GL.getCapabilities();
             return true;
@@ -92,15 +115,19 @@ public final class DepthFar {
     }
 
     /**
-     * The two terms of the game's projection that turn a distance in front of the camera
-     * into a depth, and back: depth {@code = (a * z + b) / -z} for a view-space {@code z},
-     * then halved and moved to 0..1 when the projection is OpenGL's -1..1; and the distance
-     * {@code = b / (ndc + a)}. Swapped near and far when the depth is reversed.
+     * The two terms of the game's projection that turn a distance in front of the camera into a
+     * depth, and back: see {@link DepthMath}. Read from the projection the world is drawn with
+     * this frame, so its planes are the ones the depth was made with, the pushed far plane
+     * included; before the first frame, rebuilt from the game's near plane and {@link #of}.
      */
-    public static float[] terms(float near, float far) {
-        float n = reversed() ? far : near, f = reversed() ? near : far;
-        return zeroToOne()
-                ? new float[]{f / (n - f), n * f / (n - f)}
-                : new float[]{(f + n) / (n - f), 2.0f * f * n / (n - f)};
+    public static float[] terms(Minecraft minecraft) {
+        float[] read = terms;
+        return read != null ? read.clone() : DepthMath.terms(0.05f, of(minecraft), reversed(), zeroToOne());
+    }
+
+    /** {@code {near, far}} of the game's projection this frame, from {@link #terms(Minecraft)}. */
+    public static float[] planes(Minecraft minecraft) {
+        float[] t = terms(minecraft);
+        return DepthMath.planes(t[0], t[1], reversed(), zeroToOne());
     }
 }

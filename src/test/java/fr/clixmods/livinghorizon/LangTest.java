@@ -103,6 +103,9 @@ class LangTest {
                 }
             }
         }
+        for (Profile.Section section : Profile.Section.values()) {
+            assertTrue(keys.contains(section.langKey()), section.langKey());
+        }
         for (Ambience.Type type : Ambience.Type.values()) {
             assertTrue(keys.contains("livinghorizon.options.birdTypes." + type.id), type.id);
             assertTrue(keys.contains("livinghorizon.options.birdTypes." + type.id + ".tooltip"), type.id + ".tooltip");

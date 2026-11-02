@@ -9,7 +9,7 @@ version = "${version}"
 displayName = "${name}"
 description = "Gives life to the distance: animals, villagers and other players stay visible far past your render distance, players who logged off live on where they left, and birds fill the sky. Works with the game alone or on top of Voxy and Distant Horizons."
 authors = "clixmods"
-credits = "Testers: ISessen"
+credits = "Contributors: JonesJugHead. Testers: ISessen, largitalian"
 displayURL = "https://github.com/MC-Skin-Creator/living-horizon"
 logoFile = "assets/livinghorizon/icon.png"
 

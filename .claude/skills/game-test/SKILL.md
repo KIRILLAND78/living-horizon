@@ -18,6 +18,7 @@ into a virtual display (Xvfb).
 .claude/skills/game-test/run.sh impostors        # one, or several: a,b
 .claude/skills/game-test/run.sh all --sodium     # with Sodium loaded too
 .claude/skills/game-test/run.sh impostors --shaders <pack folder>   # Sodium, Iris and a shader pack
+.claude/skills/game-test/run.sh vehicles --with immersive-aircraft   # another mod, by its Modrinth project
 ```
 
 It takes 1 to 3 minutes per scenario. The script:
@@ -64,16 +65,21 @@ the result (before and after, model and impostor) with `SendUserFile`.
 ## Measure what the mod costs
 
 `LH_NODE=1.21.11 run.sh perf` builds a scene far from the player (about 500 remembered
-mobs, 40 test players who logged off, birds), turns the camera once round per phase and
-prints a table: the frame time (average, maximum, cost against the mod off), the mod's
-own tick and extraction times, and what the render thread allocates per frame. The
-phases are the mod off, the defaults, each `opt*` switch flipped in turn, impostors off,
-then the mod off again; the gap between the two "mod off" rows is the noise. Run it on
-the same machine before and after a change and compare. The frame time here is the whole
-game's, server tick included, and moves by a millisecond or two between runs: the mod's
-own columns are the precise ones. llvmpipe draws on the CPU: the frame times say nothing
-of a graphics card, and Voxy's and Distant Horizons' parts are not covered. It takes
-about 6 minutes.
+mobs, 40 test players who logged off, birds), turns the camera once round per measure and
+prints two parts in words:
+
+- **What the mod costs:** the frame time without the mod and with its defaults, the mod's
+  own code per frame (average and worst), and the memory it allocates per frame.
+- **What each setting does:** every `opt*` switch and *Simplified Entities*, changed alone
+  and compared with the defaults measured just before and after it, so a slow drift of the
+  game cancels out. `+` is slower once changed. The verdict reads the frame time when it
+  moved more than the noise, else the mod's own code, else says "no difference".
+
+The noise is how much the defaults, measured again before each setting, differ from one
+another. Run it on the same machine before and after a change and compare the two
+reports. llvmpipe draws on the CPU: the frame times say nothing of a graphics card, and
+the settings marked `*` (Voxy's and Distant Horizons' terrain) cannot change anything
+here. It takes about 8 minutes.
 
 ## Write a scenario
 
@@ -122,8 +128,17 @@ thread), `setScreen`, `clickScreenButton(translation key)`, `takeScreenshot`. Th
 ## Limits
 
 - No real graphics card: a bug of one driver (NVIDIA, AMD) does not show here.
-- **Voxy and Distant Horizons cannot run** (Voxy needs GLSL 4.60, llvmpipe has 4.50).
-  Say so when a check depended on them.
+- **Voxy cannot run** (it needs GLSL 4.60, llvmpipe has 4.50). Say so when a check depended on it.
+- **Distant Horizons runs on 26.3** (`LH_NODE=26.3.x ... --with distanthorizons`): it needs
+  Fabric Loader 0.19.5, so set `deps.fabric_loader` to it in `stonecutter.properties.toml` for
+  the run, and put it back; 3.3.4 needs the same. The game may hang as it closes with it: kill
+  `KnotClient` once the scenario says `done`. The `dhfog` scenario checks its fog on the mobs.
+- **Lodistance runs on 26.3** (Fabric Loader 0.19.5, as for Distant Horizons): it is on
+  CurseForge only, so put its client jar (not `lodistance-server`) at
+  `build/game-test-mods/26.3-with/lodistance/lodistance.jar` and pass `--with lodistance`. With
+  `--sodium` it draws into the game's depth, without Sodium into its own; the `lodistance`
+  scenario checks both. It takes the chunks as they load: something built afterwards reaches it
+  through `save-all flush` and its client command `lodistance reimport`.
 - **Shader packs** run through Iris on llvmpipe, slowly: `--shaders` takes an unpacked
   pack folder, downloads Iris next to Sodium for the node's game version (`LH_NODE`), and
   `Scene.shaderPack` copies the pack into Iris's folder and turns it on before the first
@@ -131,6 +146,10 @@ thread), `setScreen`, `clickScreenButton(translation key)`, `takeScreenshot`. Th
   its zip from Modrinth unpacked into the scratchpad. The run folder is emptied at start, so a pack copied there by hand is lost.
 - Sodium can be added (`--sodium`, downloaded from Modrinth into `build/game-test-mods`). The
   `sodium` scenario shows the mod's pages in Sodium's video settings; without Sodium it does nothing.
+- Any other mod can be added by its Modrinth project, `--with <project>` (repeatable): its
+  Fabric jar for the node's game version, in a folder of its own, loaded by that run only. Its
+  own dependencies are not fetched; the Fabric API is there already. The `vehicles` scenario
+  checks Immersive Aircraft's aircraft with `--with immersive-aircraft`, the minecart without.
 
 ## Never
 

@@ -37,20 +37,29 @@ import java.util.stream.Stream;
  * <p>Loaded on a dedicated server: nothing here may reach a class of the client's.
  */
 final class WorldPlayers {
-    /** Bounds the list on a big server: those who played last come first. */
-    private static final int MAX = 1000;
     private static final Logger LOGGER = LoggerFactory.getLogger("Living Horizon");
+    /** The game mode a player file saves for spectator mode. */
+    private static final int SPECTATOR = 3;
 
     private WorldPlayers() {
     }
 
-    /** Every player the world saved whose name is known, as logged off. */
-    static List<PositionsMessage.Player> read(MinecraftServer server) {
-        return read(server.getWorldPath(LevelResource.PLAYER_DATA_DIR), server.getWorldPath(LevelResource.ROOT));
+    /**
+     * Every player the world saved whose name is known, as logged off; those saved in spectator
+     * mode left out when {@code leaveOutSpectators}, since the server hides them.
+     */
+    static List<PositionsMessage.Player> read(MinecraftServer server, boolean leaveOutSpectators) {
+        return read(server.getWorldPath(LevelResource.PLAYER_DATA_DIR), server.getWorldPath(LevelResource.ROOT),
+                leaveOutSpectators);
+    }
+
+    /** The same, from a world's folder and its players' folder, spectators kept. */
+    static List<PositionsMessage.Player> read(Path folder, Path world) {
+        return read(folder, world, false);
     }
 
     /** The same, from a world's folder and its players' folder. */
-    static List<PositionsMessage.Player> read(Path folder, Path world) {
+    static List<PositionsMessage.Player> read(Path folder, Path world, boolean leaveOutSpectators) {
         if (!Files.isDirectory(folder)) return List.of();
         Map<UUID, String> names = names(world);
         if (names.isEmpty()) return List.of();
@@ -61,10 +70,10 @@ final class WorldPlayers {
             LOGGER.warn("Could not list the players of this world", e);
             return List.of();
         }
+        // Every one of them, those who played last first.
         files.sort(Comparator.comparingLong(WorldPlayers::modified).reversed());
         List<PositionsMessage.Player> players = new ArrayList<>();
         for (Path file : files) {
-            if (players.size() >= MAX) break;
             String id = file.getFileName().toString();
             String name;
             try {
@@ -74,7 +83,9 @@ final class WorldPlayers {
             }
             if (name == null) continue;
             try {
-                PositionsMessage.Player player = player(name, readTag(file), modified(file));
+                CompoundTag tag = readTag(file);
+                if (leaveOutSpectators && number(tag, "playerGameType") == SPECTATOR) continue;
+                PositionsMessage.Player player = player(name, tag, modified(file));
                 if (player != null) players.add(player);
             } catch (IOException | RuntimeException e) {
                 LOGGER.debug("Could not read the saved player {}", file, e);
@@ -127,13 +138,9 @@ final class WorldPlayers {
         return text.length() > Gear.MAX_ITEM ? "" : text;
     }
 
-    private static int dimension(String key) {
-        return switch (key) {
-            case "minecraft:overworld", "" -> 0;
-            case "minecraft:the_nether" -> 1;
-            case "minecraft:the_end" -> 2;
-            default -> 3;
-        };
+    /** The dimension's id, as the game saved it; a save without one is in the overworld. */
+    private static String dimension(String key) {
+        return key.isEmpty() ? "minecraft:overworld" : key;
     }
 
     /** Names by id, from the server's cache of the profiles it has seen. */

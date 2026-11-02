@@ -116,7 +116,7 @@ public final class ShoreScenario implements Scenario {
 
     private static void fake(ClientGameTestContext context, String name, double x, double y, double z) {
         context.runOnClient(minecraft -> FarPlayerTracker.get().resting().fake(name, minecraft.player.getGameProfile(),
-                SharedPositions.dimensionCode(minecraft.level.dimension()), x, y, z, 180f, 0, null, null));
+                SharedPositions.dimensionId(minecraft.level.dimension()), x, y, z, 180f, 0, null, null));
     }
 
     /**

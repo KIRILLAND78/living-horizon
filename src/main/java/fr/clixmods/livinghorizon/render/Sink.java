@@ -15,11 +15,25 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
  * before, it is written straight into the buffers the entities are drawn from.
  */
 public final class Sink {
-    /** Writes the vertices of one piece, at the pose it is given. */
+    /**
+     * Writes the vertices of one piece, at the pose it is given. From 1.21.9 it is the game's
+     * own kind of geometry too, handed over as it is, with nothing wrapped round it each time.
+     */
     @FunctionalInterface
-    public interface Geometry {
+    //? if >=1.21.9 {
+    public interface Geometry extends SubmitNodeCollector.CustomGeometryRenderer {
+        void draw(PoseStack.Pose at, VertexConsumer out);
+
+        @Override
+        default void render(PoseStack.Pose at, VertexConsumer out) {
+            draw(at, out);
+        }
+    }
+    //?} else {
+    /*public interface Geometry {
         void draw(PoseStack.Pose at, VertexConsumer out);
     }
+    *///?}
 
     //? if >=1.21.9 {
     private final SubmitNodeCollector collector;
@@ -29,7 +43,7 @@ public final class Sink {
     }
 
     public void draw(PoseStack pose, RenderType type, Geometry geometry) {
-        collector.submitCustomGeometry(pose, type, geometry::draw);
+        collector.submitCustomGeometry(pose, type, geometry);
     }
     //?} else {
     /*private final MultiBufferSource buffers;

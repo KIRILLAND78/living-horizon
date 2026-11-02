@@ -10,7 +10,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Brackets Distant Horizons' two fades of the game's picture into its terrain, which run
  * after the entities are drawn: {@link FarDepth} keeps the distant figures out of them.
- * Distant Horizons is optional: without it, this mixin applies to nothing.
+ * Distant Horizons is optional: without it, this mixin applies to nothing. A Distant Horizons
+ * that renames its fades leaves it with nothing to hook, silently: {@code /livinghorizon lod}
+ * says how often it ran.
  */
 @Pseudo
 @Mixin(targets = "com.seibel.distanthorizons.core.api.internal.ClientApi", remap = false)

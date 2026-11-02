@@ -1,5 +1,6 @@
 package fr.clixmods.livinghorizon.gametest.scenario;
 
+import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.gametest.Scenario;
 import fr.clixmods.livinghorizon.gametest.Scene;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
@@ -69,6 +70,30 @@ public final class RestingCrowdScenario implements Scenario {
             Scene.log("restingcrowd: " + models.size() + " of " + CROWD + " still models " + models);
             Scene.screenshot(context, this, "crowd");
             if (!models.isEmpty()) throw new AssertionError("restingcrowd: still models: " + models);
+
+            // "Max Offline": only the nearest are drawn, the others still remembered.
+            context.runOnClient(minecraft -> FarConfig.get().maxOfflinePlayers = 40);
+            context.waitTicks(5);
+            String limited = context.computeOnClient(minecraft -> {
+                RestingPlayers resting = FarPlayerTracker.get().resting();
+                List<RestingPlayers.Spot> shown = resting.shown();
+                if (shown.size() != 40) return "shown " + shown.size() + " of 40";
+                double eyeX = minecraft.player.getX(), eyeZ = minecraft.player.getZ();
+                double farthestShown = 0;
+                for (RestingPlayers.Spot spot : shown) {
+                    farthestShown = Math.max(farthestShown, Math.hypot(spot.x() - eyeX, spot.z() - eyeZ));
+                }
+                for (RestingPlayers.Spot spot : resting.spots()) {
+                    if (shown.contains(spot)) continue;
+                    double distance = Math.hypot(spot.x() - eyeX, spot.z() - eyeZ);
+                    if (distance < farthestShown - 1e-6) return spot.name() + " left out at " + distance + " blocks";
+                }
+                return resting.spots().size() >= CROWD ? null : "only " + resting.spots().size() + " remembered";
+            });
+            Scene.log("restingcrowd: limited to 40, " + (limited == null ? "the nearest" : limited));
+            Scene.screenshot(context, this, "limited");
+            context.runOnClient(minecraft -> FarConfig.get().maxOfflinePlayers = 256);
+            if (limited != null) throw new AssertionError("restingcrowd: " + limited);
             context.runOnClient(minecraft -> minecraft.player.connection.sendCommand("livinghorizon debug offline test clear"));
         }
     }

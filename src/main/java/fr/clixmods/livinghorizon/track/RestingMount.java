@@ -4,6 +4,8 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -18,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 
@@ -35,8 +38,19 @@ import java.util.concurrent.CompletableFuture;
  * a happy ghast the air at its height. Nothing is read nor decided while it plays.
  */
 final class RestingMount {
-    /** How it gets about. */
-    enum Kind { GROUND, WATER, AIR, STILL }
+    /**
+     * How it gets about. An aircraft its rider left in the air stays there: {@code HOVER} on
+     * its spot when it was still, {@code CIRCLE} round and round at its height when it was going,
+     * as a plane cannot stop in the air.
+     */
+    enum Kind { GROUND, WATER, AIR, STILL, HOVER, CIRCLE }
+
+    /** Blocks per tick an aircraft was going at least, as its rider left, to fly in circles rather than hover. */
+    static final double CRUISE = 0.15;
+    /** Blocks per tick a circling aircraft flies at, whatever it was going at. */
+    private static final double CIRCLE_SLOWEST = 0.2, CIRCLE_FASTEST = 1.2;
+    /** Blocks across half its circle, per block a tick it flies, and the narrowest and widest. */
+    private static final double CIRCLE_RADIUS = 40, CIRCLE_NARROWEST = 16, CIRCLE_WIDEST = 48;
 
     /** Blocks per tick: a horse's walk, a boat rowed gently, a happy ghast's drift. */
     private static final double WALK = 0.13, ROW = 0.1, DRIFT = 0.06;
@@ -51,8 +65,8 @@ final class RestingMount {
     private static final int AIR_REACH = 24, AIR_RISE = 4;
     /** Spots read at most each time it looks for where to go. */
     private static final int BUDGET = 6000;
-    /** Spots read per tick when it looks for where to go. */
-    private static final int GROW = 250;
+    /** Blocks below and above its spot copied when it looks for where to go. */
+    private static final int COPY_BELOW = 32, COPY_ABOVE = 48;
     /** Degrees it turns per tick. */
     private static final float TURN = 10f;
     //? if >=1.21.2 {
@@ -63,7 +77,8 @@ final class RestingMount {
     private static final double DRAFT = 0.1, SEAT = -0.41;
 
     final Entity entity;
-    final Kind kind;
+    /** How it gets about: an aircraft whose save said it stood on the ground turns out to be in the air once the blocks are known. */
+    Kind kind;
     /** The rider's feet from the mount's, in the mount's own frame. */
     private final Vec3 seat;
     private final float riderYaw;
@@ -72,7 +87,7 @@ final class RestingMount {
     private final float homeYaw;
     /** The body that must fit where it goes: its own, the rider's on top. */
     private final double half, height;
-    private final Walkway walkway;
+    private final Footing.Source blocks;
     private final Random random;
     private final long seed;
     private final ClientLevel level;
@@ -87,7 +102,11 @@ final class RestingMount {
     private boolean placed;
     private double fall;
     private double moved;
-    private Walkway.@Nullable Survey survey;
+    /** Ticks it has flown its circle, from its spot. */
+    private int circling;
+    /** Where it can go, being looked for: the blocks around copied a few sections a tick, then read off the game's thread. */
+    private BlockCopy.@Nullable Builder copying;
+    private @Nullable CompletableFuture<Optional<Walkway.Survey>> survey;
     private @Nullable List<Walkway.Step> path;
     private int pathIndex;
     private @Nullable Vec3 flight;
@@ -103,11 +122,9 @@ final class RestingMount {
         this.homeYaw = mount.yaw();
         this.home = rider.subtract(seatAt(mount.yaw()));
         double width = entity.getBbWidth() / 2;
-        this.half = kind == Kind.AIR ? width : Math.min(width, MAX_HALF);
+        this.half = aloft() ? width : Math.min(width, MAX_HALF);
         this.height = Math.max(entity.getBbHeight(), seat.y + RIDER);
-        this.walkway = new Walkway(kind == Kind.WATER
-                ? (x, y, z) -> Footing.afloat(level, x, y, z, half, height) - draft()
-                : (x, y, z) -> Footing.stand(level, x, y, z, half, height));
+        this.blocks = Footing.live(level);
         reset();
     }
 
@@ -118,6 +135,28 @@ final class RestingMount {
         if (entity == null) return null;
         long seed = spot.name().toLowerCase(java.util.Locale.ROOT).hashCode() * 0xBF58476D1CE4E5B9L;
         return new RestingMount(level, entity, mount, new Vec3(spot.x(), spot.y(), spot.z()), random, seed);
+    }
+
+    /**
+     * Writes into its save how fast it was going, where the game kept less: a vehicle this client
+     * only sees moved by the server, or a copy moved by the mod, has no motion of its own; its
+     * rider's last pace ({@code going}) stands for it. A plane left in the air flies on in circles
+     * at that pace ({@link Kind#CIRCLE}).
+     */
+    static void keepMotion(Entity vehicle, CompoundTag saved, Vec3 going) {
+        double dx = vehicle.getX() - vehicle.xo, dy = vehicle.getY() - vehicle.yo, dz = vehicle.getZ() - vehicle.zo;
+        // Its rider's pace, when that was faster: the last positions came to a stop as they left.
+        if (going.horizontalDistanceSqr() > dx * dx + dz * dz) {
+            dx = going.x;
+            dy = 0;
+            dz = going.z;
+        }
+        if (vehicle.getDeltaMovement().horizontalDistanceSqr() >= dx * dx + dz * dz) return;
+        ListTag motion = new ListTag();
+        motion.add(DoubleTag.valueOf(dx));
+        motion.add(DoubleTag.valueOf(dy));
+        motion.add(DoubleTag.valueOf(dz));
+        saved.put("Motion", motion);
     }
 
     /** A copy of a kept mount, as it was saved; null when its type is gone or it does not read. */
@@ -217,7 +256,13 @@ final class RestingMount {
     static Kind kindOf(Entity entity) {
         if (!(entity instanceof LivingEntity living)) {
             // Boats float; minecarts and the rest stay where they are.
-            return MobMemory.rememberable(entity) ? Kind.WATER : Kind.STILL;
+            if (MobMemory.boat(entity)) return Kind.WATER;
+            // An aircraft left in the air (another mod's plane, steered): round and round where it
+            // was if it was going, hovering there if it was still. A car on the ground stays put.
+            if (!entity.onGround() && Vehicles.of(entity) == Vehicles.Kind.STEERED) {
+                return entity.getDeltaMovement().horizontalDistance() >= CRUISE ? Kind.CIRCLE : Kind.HOVER;
+            }
+            return Kind.STILL;
         }
         if (living.isNoGravity() || EntityType.getKey(entity.getType()).getPath().equals("happy_ghast")) return Kind.AIR;
         MobCategory category = entity.getType().getCategory();
@@ -232,6 +277,7 @@ final class RestingMount {
     void reset() {
         stop();
         far = false;
+        circling = 0;
         yaw = homeYaw;
         placed = false;
         fall = 0;
@@ -242,6 +288,7 @@ final class RestingMount {
     }
 
     private void stop() {
+        copying = null;
         survey = null;
         path = null;
         flight = null;
@@ -277,7 +324,7 @@ final class RestingMount {
      * @param lively whether it goes anywhere; otherwise it stays on its spot
      * @param near   close enough to the camera to go where it chooses; farther, it plays its loop
      * @param roam   blocks from its spot it may go
-     * @param work   spots all puppets may still read this tick, shared
+     * @param work   sections of blocks all puppets may still copy this tick, shared
      */
     void tick(ClientLevel level, boolean lively, boolean near, int roam, int[] work) {
         entity.setOldPosAndRot();
@@ -287,6 +334,12 @@ final class RestingMount {
         }
         entity.tickCount++;
         moved = 0;
+        if (kind == Kind.CIRCLE && lively) {
+            // In the air, near or far: nothing to read, nothing in its way at its height.
+            circle();
+            animate();
+            return;
+        }
         if (lively && !near) {
             playLoop();
             animate();
@@ -299,7 +352,7 @@ final class RestingMount {
             stop();
             timer = 40 + random.nextInt(100);
         }
-        if (!level.hasChunkAt(entity.blockPosition())) {
+        if (!Footing.loaded(level, entity.blockPosition())) {
             // Nothing known of the blocks here: it waits where it is.
             placed = false;
             stop();
@@ -308,6 +361,12 @@ final class RestingMount {
         }
         boolean first = !placed;
         placed = true;
+        if (first && kind == Kind.STILL && !(entity instanceof LivingEntity)
+                && Vehicles.of(entity) == Vehicles.Kind.STEERED
+                && !Footing.supported(blocks, entity.getX(), entity.getY(), entity.getZ(), half)) {
+            // Its save was older than its flight (a copy made while it stood): nothing under it now.
+            kind = entity.getDeltaMovement().horizontalDistance() >= CRUISE ? Kind.CIRCLE : Kind.HOVER;
+        }
         if (!lively) {
             stop();
             settle(level, first);
@@ -319,11 +378,38 @@ final class RestingMount {
         switch (kind) {
             case GROUND, WATER -> roam(level, roam, work);
             case AIR -> drift(level, roam);
-            case STILL -> {
+            case STILL, HOVER, CIRCLE -> {
             }
         }
         if (!moving()) settle(level, false);
         animate();
+    }
+
+    /** In the air for good: a happy ghast, an aircraft left hovering or circling. */
+    private boolean aloft() {
+        return kind == Kind.AIR || kind == Kind.HOVER || kind == Kind.CIRCLE;
+    }
+
+    /**
+     * One tick of its circle, at the height it was left at: it flies on from its spot the way it
+     * faced, at the pace it was going, and turns left or right round a point beside it.
+     */
+    private void circle() {
+        double speed = Mth.clamp(entity.getDeltaMovement().horizontalDistance(), CIRCLE_SLOWEST, CIRCLE_FASTEST);
+        double radius = Mth.clamp(speed * CIRCLE_RADIUS, CIRCLE_NARROWEST, CIRCLE_WIDEST);
+        int turn = (seed & 1) == 0 ? 1 : -1;
+        double facing = Math.toRadians(homeYaw);
+        // Beside its spot, square to the way it faced: the circle starts on the spot, along that way.
+        double cx = home.x + Math.cos(facing) * radius * turn, cz = home.z + Math.sin(facing) * radius * turn;
+        double start = Math.atan2(home.z - cz, home.x - cx);
+        circling++;
+        double angle = start - turn * circling * speed / radius;
+        double x = cx + Math.cos(angle) * radius, z = cz + Math.sin(angle) * radius;
+        // Along the circle: the way it goes now.
+        double tx = Math.sin(angle) * turn, tz = -Math.cos(angle) * turn;
+        entity.setPos(x, home.y, z);
+        yaw = (float) Math.toDegrees(Math.atan2(-tx, tz));
+        moved = speed;
     }
 
     // --- Away from the camera -----------------------------------------------------------------
@@ -354,37 +440,52 @@ final class RestingMount {
         return switch (kind) {
             case GROUND -> MobPaths.plan(level, home.x, home.y, home.z, entity.getBbWidth(), seed);
             case AIR -> CompletableFuture.completedFuture(MobPaths.free(home.x, home.y, home.z, seed));
-            case WATER -> CompletableFuture.completedFuture(water());
-            case STILL -> CompletableFuture.completedFuture(MobPaths.stand(home.x, home.y, home.z));
+            case WATER -> water();
+            case STILL, HOVER, CIRCLE -> CompletableFuture.completedFuture(MobPaths.stand(home.x, home.y, home.z));
         };
     }
 
     /**
      * The water around its spot, read like the ground around a mob ({@link MobPaths}): every
-     * column it can float in, from the blocks this client has; the others are read again later.
+     * column it can float in, from a copy of the blocks this client has, off the game's
+     * thread; the others are read again later.
      */
-    private MobPaths.Choice water() {
-        int bx = Mth.floor(home.x), by = Mth.floor(home.y), bz = Mth.floor(home.z);
-        double[][] ground = new double[MobPaths.SIZE][MobPaths.SIZE];
+    private CompletableFuture<MobPaths.Choice> water() {
+        int bx = Mth.floor(home.x), by = Mth.floor(home.y), bz = Mth.floor(home.z), r = MobPaths.RADIUS;
         boolean complete = true;
-        for (int i = 0; i < MobPaths.SIZE; i++) {
-            for (int j = 0; j < MobPaths.SIZE; j++) {
-                int cx = bx + i - MobPaths.RADIUS, cz = bz + j - MobPaths.RADIUS;
-                ground[i][j] = Double.NaN;
-                if (!level.hasChunk(cx >> 4, cz >> 4)) {
-                    complete = false;
-                    continue;
-                }
-                for (int dy : new int[]{0, -1, 1}) {
-                    double surface = Footing.afloat(level, cx, by + dy, cz, half, height);
-                    if (!Double.isNaN(surface)) {
-                        ground[i][j] = home.y;
-                        break;
+        for (int cx = (bx - r) >> 4; cx <= (bx + r) >> 4; cx++) {
+            for (int cz = (bz - r) >> 4; cz <= (bz + r) >> 4; cz++) {
+                if (!level.getChunkSource().hasChunk(cx, cz)) complete = false;
+            }
+        }
+        BlockCopy copy = BlockCopy.of(level, bx - r, by - 2, bz - r, bx + r, by + 3 + (int) Math.ceil(height), bz + r).copy(level);
+        double width = entity.getBbWidth();
+        boolean whole = complete;
+        return GroundWork.run(() -> {
+            double[][] ground = new double[MobPaths.SIZE][MobPaths.SIZE];
+            for (int i = 0; i < MobPaths.SIZE; i++) {
+                for (int j = 0; j < MobPaths.SIZE; j++) {
+                    int cx = bx + i - r, cz = bz + j - r;
+                    ground[i][j] = Double.NaN;
+                    for (int dy : new int[]{0, -1, 1}) {
+                        double surface = Footing.afloat(copy, cx, by + dy, cz, half, height);
+                        if (!Double.isNaN(surface)) {
+                            ground[i][j] = home.y;
+                            break;
+                        }
                     }
                 }
             }
-        }
-        return MobPaths.choose(new MobPaths.Ground(ground, home.x, home.y, home.z, complete), entity.getBbWidth(), seed);
+            return MobPaths.choose(new MobPaths.Ground(ground, home.x, home.y, home.z, whole), width, seed);
+        });
+    }
+
+    /** Where it can be in these blocks: afloat for a boat, on the ground for the others. */
+    private Walkway.Ground ground(Footing.Source source) {
+        double sink = draft();
+        return kind == Kind.WATER
+                ? (x, y, z) -> Footing.afloat(source, x, y, z, half, height) - sink
+                : (x, y, z) -> Footing.stand(source, x, y, z, half, height);
     }
 
     // --- On the ground or the water ---------------------------------------------------------
@@ -398,23 +499,40 @@ final class RestingMount {
             }
             return;
         }
-        Walkway.Survey reading = survey;
+        BlockCopy.Builder builder = copying;
+        if (builder != null) {
+            work[0] -= builder.copy(level, Math.max(0, work[0]));
+            if (!builder.done()) return;
+            copying = null;
+            Walkway.Ground ground = ground(builder.build());
+            BlockPos at = feet();
+            BlockPos center = BlockPos.containing(home);
+            int budget = Math.min(BUDGET, (int) (Math.PI * roam * roam * 1.6 + 200));
+            survey = GroundWork.run(() -> Optional.ofNullable(Walkway.around(ground, at.getX(), at.getY(), at.getZ(),
+                    center.getX(), center.getZ(), roam, budget)));
+            return;
+        }
+        CompletableFuture<Optional<Walkway.Survey>> reading = survey;
         if (reading != null) {
-            int spots = Math.min(work[0], GROW);
-            work[0] -= spots;
-            if (spots <= 0 || !reading.grow(spots)) return;
+            if (!reading.isDone()) return;
             survey = null;
-            choose(reading);
+            Walkway.Survey map = reading.isCompletedExceptionally() ? null : reading.join().orElse(null);
+            if (map != null) choose(map);
+            else timer = 200 + random.nextInt(200);
             return;
         }
         if (--timer > 0) return;
-        walkway.forget();
         BlockPos at = feet();
+        Walkway.Ground here = ground(blocks);
+        if (Double.isNaN(here.stand(at.getX(), at.getY(), at.getZ())) && Double.isNaN(here.stand(at.getX(), at.getY() + 1, at.getZ()))
+                && Double.isNaN(here.stand(at.getX(), at.getY() - 1, at.getZ()))) {
+            // Nowhere it can go from here (a boat on land): it stays, and looks again later.
+            timer = 200 + random.nextInt(200);
+            return;
+        }
         BlockPos center = BlockPos.containing(home);
-        survey = walkway.survey(at.getX(), at.getY(), at.getZ(), center.getX(), center.getZ(), roam,
-                Math.min(BUDGET, (int) (Math.PI * roam * roam * 1.6 + 200)));
-        // Nowhere it can go from here (a boat on land): it stays, and looks again later.
-        if (survey == null) timer = 200 + random.nextInt(200);
+        copying = BlockCopy.of(level, center.getX() - roam - 1, center.getY() - COPY_BELOW, center.getZ() - roam - 1,
+                center.getX() + roam + 1, center.getY() + COPY_ABOVE, center.getZ() + roam + 1);
     }
 
     /** A spot a few blocks away at least, and the way there. */
@@ -444,8 +562,8 @@ final class RestingMount {
         double distance = Math.sqrt(dx * dx + dz * dz);
         if (distance <= speed) {
             double there = kind == Kind.WATER
-                    ? Footing.afloat(level, next.x(), next.y(), next.z(), half, height) - draft()
-                    : Footing.stand(level, next.x(), next.y(), next.z(), half, height);
+                    ? Footing.afloat(blocks, next.x(), next.y(), next.z(), half, height) - draft()
+                    : Footing.stand(blocks, next.x(), next.y(), next.z(), half, height);
             if (Double.isNaN(there)) return true;
             entity.setPos(tx, there, tz);
             pathIndex++;
@@ -470,7 +588,7 @@ final class RestingMount {
     private double measureDraft(ClientLevel level) {
         BlockPos at = BlockPos.containing(entity.getX(), entity.getY(), entity.getZ());
         for (BlockPos water : new BlockPos[]{at, at.above()}) {
-            double surface = Footing.afloat(level, water.getX(), water.getY(), water.getZ(), half, height);
+            double surface = Footing.afloat(blocks, water.getX(), water.getY(), water.getZ(), half, height);
             if (!Double.isNaN(surface)) return Math.clamp(surface - entity.getY(), 0, 0.6);
         }
         return 0;
@@ -532,7 +650,7 @@ final class RestingMount {
 
     /** Room there for it and its rider, in blocks this client has. */
     private boolean open(ClientLevel level, Vec3 at) {
-        return level.hasChunkAt(BlockPos.containing(at)) && Footing.fits(level, at.x, at.y, at.z, half, height);
+        return Footing.loaded(level, at.x, at.z) && Footing.fits(blocks, at.x, at.y, at.z, half, height);
     }
 
     // --- Its place --------------------------------------------------------------------------
@@ -544,8 +662,8 @@ final class RestingMount {
     private void settle(ClientLevel level, boolean now) {
         double x = entity.getX(), y = entity.getY(), z = entity.getZ();
         double target;
-        if (!Footing.fits(level, x, y, z, half, height)) target = Footing.freeAbove(level, x, y, z, half, height);
-        else if (kind != Kind.AIR && !Footing.supported(level, x, y, z, half)) target = Footing.floorBelow(level, x, y, z, half);
+        if (!Footing.fits(blocks, x, y, z, half, height)) target = Footing.freeAbove(blocks, x, y, z, half, height);
+        else if (!aloft() && !Footing.supported(blocks, x, y, z, half)) target = Footing.floorBelow(blocks, x, y, z, half);
         else target = y;
         if (target == y) {
             fall = 0;
@@ -596,7 +714,7 @@ final class RestingMount {
     /** What it does, for the debug tools. */
     String state() {
         if (far && loop != null) return kind.name().toLowerCase(java.util.Locale.ROOT) + " mount away: " + loop.state();
-        String doing = path != null || flight != null ? "on its way" : survey != null ? "looking where to go" : "resting";
+        String doing = path != null || flight != null ? "on its way" : survey != null || copying != null ? "looking where to go" : "resting";
         return kind.name().toLowerCase(java.util.Locale.ROOT) + " mount " + doing;
     }
 }

@@ -33,13 +33,19 @@ public final class EntityNbt {
         *///?}
     }
 
-    /** Gives an entity what a saved tag says of it. */
+    /**
+     * Gives an entity what a saved tag says of it, and the size that follows. Some mods' mobs
+     * work their size out from their saved data in their tick (Ice and Fire's dragons, by
+     * age), which a copy never runs: it kept the size of a newborn, and its pictures were cut
+     * out of a model ten times larger.
+     */
     public static void load(Entity entity, Level level, CompoundTag tag) {
         //? if >=1.21.6 {
         entity.load(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), tag));
         //?} else {
         /*entity.load(tag);
         *///?}
+        entity.refreshDimensions();
     }
 
     /** The entities of a saved chunk, their passengers on them, never added to the world. */

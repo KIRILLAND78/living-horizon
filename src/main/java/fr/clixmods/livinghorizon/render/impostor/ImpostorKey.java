@@ -1,7 +1,10 @@
 package fr.clixmods.livinghorizon.render.impostor;
 
+import fr.clixmods.livinghorizon.track.Puppets;
 import fr.clixmods.livinghorizon.track.RestingPuppet;
 import net.minecraft.ChatFormatting;
+//? if >=1.21.9
+import net.minecraft.client.entity.ClientAvatarEntity;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -51,8 +54,20 @@ import java.util.regex.Pattern;
  *
  * @param type       the entity type's id
  * @param appearance a hash of the rest
+ * @param posture    how the figure's picture is baked: {@link #STANDING}, {@link #SEATED} or {@link #LYING}
  */
-public record ImpostorKey(String type, long appearance) {
+public record ImpostorKey(String type, long appearance, int posture) {
+    /** The id of the players' type: their sheets, and riders', are filed apart and never kept on disk. */
+    public static final String PLAYER = "minecraft:player";
+
+    /** Postures a figure's picture is baked in: standing, as most are, seated, or lying down. */
+    public static final int STANDING = 0, SEATED = 1, LYING = 2;
+
+    /** A figure standing: every mob, the mod's own figures, the sheets kept on disk. */
+    public ImpostorKey(String type, long appearance) {
+        this(type, appearance, STANDING);
+    }
+
     /** Milliseconds a figure's key is kept before it is worked out again. */
     private static final long KEEP = 5000;
 
@@ -60,7 +75,7 @@ public record ImpostorKey(String type, long appearance) {
     private static final long RESTLESS_WITHIN = 60_000;
 
     /** When a value of a figure last changed, and which of its bits. */
-    private record Change(long when, long bits) {
+    record Change(long when, long bits) {
     }
 
     /**
@@ -103,26 +118,44 @@ public record ImpostorKey(String type, long appearance) {
     /** The shared flags that change nothing on the picture: on fire, sprinting, glowing. */
     private static final int UNSEEN_FLAGS = 1 | 1 << 3 | 1 << 6;
 
-    /** Postures a figure's picture is baked in: standing, as most are, seated, or lying down. */
-    public static final int STANDING = 0, SEATED = 1, LYING = 2;
+    /**
+     * The height each key of a flying figure ({@link #seenFrom}) is pictured from, as an index
+     * of {@link ImpostorViews#HEIGHTS}. A few per look of a phantom, a ghast, a vehicle or a
+     * rider on one; {@link #seenFrom} puts a key back each time it is asked for.
+     */
+    private static final Map<ImpostorKey, Integer> HEIGHTS = new HashMap<>();
+    /** Mixed into the key of a figure pictured from a height, so that it never meets the same figure standing. */
+    private static final long HEIGHT_SALT = 0x5EE7F20L;
 
     /**
-     * The posture of the keys of figures not standing: players who logged off, sitting on the
-     * ground, lying down or in a bed, and riders baked with their mount ({@link #riding}).
+     * The key of a flying figure's pictures seen from one of {@link ImpostorViews#HEIGHTS}
+     * (its index): the figure's own key, at that height. The same in every game, as the
+     * figure's own is.
      */
-    private static final Map<ImpostorKey, Integer> POSTURES = new HashMap<>();
-    /** Mixed into the key of a figure not standing, so that it never meets the same figure standing. */
-    private static final long POSTURE_SALT = 0x5EA7EDL;
+    public static ImpostorKey seenFrom(ImpostorKey key, int height) {
+        ImpostorKey seen = new ImpostorKey(key.type, key.appearance * 31 + HEIGHT_SALT * (height + 1));
+        HEIGHTS.putIfAbsent(seen, height);
+        return seen;
+    }
+
+    /**
+     * Degrees the camera looks down on this key's figure from, as it is baked: NaN for a
+     * figure pictured standing, the way most are, level with it and from its feet.
+     */
+    public static float elevation(ImpostorKey key) {
+        Integer height = HEIGHTS.get(key);
+        return height == null ? Float.NaN : ImpostorViews.HEIGHTS[height];
+    }
 
     /**
      * The key of a figure: its look, worked out at most every few seconds, since figures
      * hardly ever change; and its posture, which changes often, every time.
      */
     public static ImpostorKey of(Entity entity) {
+        Puppets.skin(entity);
         ImpostorKey key = look(entity);
         int posture = posture(entity);
-        if (posture == STANDING) return key;
-        return posed(new ImpostorKey(key.type, key.appearance * 31 + POSTURE_SALT * posture), posture);
+        return posture == STANDING ? key : new ImpostorKey(key.type, key.appearance, posture);
     }
 
     /**
@@ -136,13 +169,7 @@ public record ImpostorKey(String type, long appearance) {
         hash = hash * 31 + Math.round(seat.y * 16);
         hash = hash * 31 + Math.round(seat.z * 16);
         hash = hash * 31 + Math.round(Mth.wrapDegrees(yaw) / 15f);
-        return new ImpostorKey(EntityType.getKey(EntityType.PLAYER).toString(), hash * 31 + type(mount).hashCode());
-    }
-
-    private static ImpostorKey posed(ImpostorKey key, int posture) {
-        if (POSTURES.size() > 4096) POSTURES.clear();
-        POSTURES.put(key, posture);
-        return key;
+        return new ImpostorKey(PLAYER, hash * 31 + type(mount).hashCode());
     }
 
     /** A player who logged off: sitting on the ground or in a bed; standing otherwise. */
@@ -155,11 +182,6 @@ public record ImpostorKey(String type, long appearance) {
         };
     }
 
-    /** The posture this key's picture is baked in. */
-    public static int posture(ImpostorKey key) {
-        return POSTURES.getOrDefault(key, STANDING);
-    }
-
     private static ImpostorKey look(Entity entity) {
         long now = System.currentTimeMillis();
         Known known = KNOWN.get(entity);
@@ -167,15 +189,20 @@ public record ImpostorKey(String type, long appearance) {
         if (KNOWN.size() > 4096) KNOWN.clear();
         Map<Integer, Object> values = values(entity);
         Map<Integer, Change> changes = known == null ? new HashMap<>() : known.changes;
-        if (known != null) learn(type(entity), known.values, values, changes, now);
+        if (known != null && learn(RESTLESS, type(entity), known.values, values, changes, now)) learnt++;
         ImpostorKey key = compute(entity, values);
         KNOWN.put(entity, new Known(key, now, values, changes));
         return key;
     }
 
+    /** A sheet thrown away: the height its key is pictured from goes with it. */
+    public static void forget(ImpostorKey key) {
+        HEIGHTS.remove(key);
+    }
+
     public static void forgetAll() {
         KNOWN.clear();
-        POSTURES.clear();
+        HEIGHTS.clear();
     }
 
     /** What has been learnt to leave out, a copy: by kind of mob, then by synched value. */
@@ -247,11 +274,13 @@ public record ImpostorKey(String type, long appearance) {
 
     /**
      * Compares a figure's values with those of its last key: a value changing again within
-     * {@link #RESTLESS_WITHIN} is restless for its whole kind of mob, the bits that changed
-     * both times for a number or flags, all of it otherwise.
+     * {@link #RESTLESS_WITHIN} is restless for its whole kind of mob, in {@code restless}, the
+     * bits that changed both times for a number or flags, all of it otherwise. Whether
+     * anything new was learnt.
      */
-    private static void learn(String type, Map<Integer, Object> before, Map<Integer, Object> after,
-                              Map<Integer, Change> changes, long now) {
+    static boolean learn(Map<String, Map<Integer, Long>> restless, String type, Map<Integer, Object> before,
+                         Map<Integer, Object> after, Map<Integer, Change> changes, long now) {
+        boolean any = false;
         Set<Integer> ids = new HashSet<>(before.keySet());
         ids.addAll(after.keySet());
         for (int id : ids) {
@@ -261,19 +290,20 @@ public record ImpostorKey(String type, long appearance) {
             long changed = a != null && b != null ? a ^ b : -1L;
             Change last = changes.get(id);
             if (last != null && now - last.when < RESTLESS_WITHIN) {
-                Map<Integer, Long> masks = RESTLESS.computeIfAbsent(type, ignoredType -> new HashMap<>());
+                Map<Integer, Long> masks = restless.computeIfAbsent(type, ignoredType -> new HashMap<>());
                 long mask = masks.getOrDefault(id, 0L), more = mask | changed | last.bits;
                 if (more != mask) {
                     masks.put(id, more);
-                    learnt++;
+                    any = true;
                 }
             }
             changes.put(id, new Change(now, changed));
         }
+        return any;
     }
 
     /** A number or flags as bits, 0 for a value at its default; null for anything else. */
-    private static @Nullable Long bits(@Nullable Object data) {
+    static @Nullable Long bits(@Nullable Object data) {
         if (data == null) return 0L;
         if (data instanceof Boolean flag) return flag ? 1L : 0L;
         if (data instanceof Byte number) return number & 0xFFL;
@@ -285,13 +315,38 @@ public record ImpostorKey(String type, long appearance) {
         String type = type(entity);
         Map<Integer, Long> restless = RESTLESS.getOrDefault(type, Map.of());
         long hash = 17;
-        if (entity instanceof AbstractClientPlayer player) {
-            // A skin was its texture alone before 1.20.2.
-            //? if >=1.20.2 {
-            hash = hash * 31 + player.getSkin().hashCode();
-            //?} else
-            /*hash = hash * 31 + player.getSkinTextureLocation().hashCode();*/
+        // A player's skin, and from 1.21.9 a mannequin's: it comes from its profile, looked up
+        // after the figure is made, and none of its synched values change when it arrives. A
+        // mannequin's sheet is kept on disk, so its skin is hashed the same in every game. A
+        // skin was its texture alone before 1.20.2.
+        //? if >=1.21.9 {
+        if (entity instanceof ClientAvatarEntity avatar) hash = hash * 31 + stable(avatar.getSkin());
+        //?} elif >=1.20.2 {
+        /*if (entity instanceof AbstractClientPlayer player) hash = hash * 31 + player.getSkin().hashCode();
+        *///?} else
+        /*if (entity instanceof AbstractClientPlayer player) hash = hash * 31 + player.getSkinTextureLocation().hashCode();*/
+        hash = hash(hash, values, restless);
+        // Its size, to about 6%: some mods' mobs take it from a value that keeps changing and
+        // is left out (Ice and Fire's dragons grow with their age, which ticks up). Two of one
+        // look but not one size would share a sheet baked for one of them.
+        hash = hash * 31 + size(entity.getBbWidth());
+        hash = hash * 31 + size(entity.getBbHeight());
+        if (entity instanceof LivingEntity living) {
+            for (EquipmentSlot slot : EquipmentSlot.values()) hash = hash * 31 + item(living.getItemBySlot(slot));
         }
+        return new ImpostorKey(type, hash);
+    }
+
+    /** A size in blocks, in steps of about 6%: the same step for sizes a little apart. */
+    static long size(float blocks) {
+        return Math.round(Math.log(Math.max(blocks, 0.01f)) * 16);
+    }
+
+    /**
+     * {@code hash} with a figure's synched values added, those {@code restless} names left out:
+     * the restless bits of a number or flags, or the whole of any other value.
+     */
+    static long hash(long hash, Map<Integer, Object> values, Map<Integer, Long> restless) {
         // In the order of the ids: the same values always give the same key.
         for (int id : values.keySet().stream().sorted().toList()) {
             Object data = values.get(id);
@@ -309,10 +364,7 @@ public record ImpostorKey(String type, long appearance) {
             hash = hash * 31 + id;
             hash = hash * 31 + seen;
         }
-        if (entity instanceof LivingEntity living) {
-            for (EquipmentSlot slot : EquipmentSlot.values()) hash = hash * 31 + item(living.getItemBySlot(slot));
-        }
-        return new ImpostorKey(type, hash);
+        return hash;
     }
 
     /**

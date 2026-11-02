@@ -31,6 +31,7 @@ public final class LightingScenario implements Scenario {
         Scene.configure(context, config -> {
             config.impostors = false;
             config.impostorDistance = 32;
+            config.impostorPixels = 0;
             config.hideOccludedMobs = false;
         });
         try (TestSingleplayerContext world = Scene.flatWorld(context)) {

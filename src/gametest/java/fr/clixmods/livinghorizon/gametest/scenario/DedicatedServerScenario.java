@@ -16,7 +16,8 @@ import java.nio.file.Path;
 /**
  * A dedicated server with the mod: it shares the positions over the network from its own
  * tick, a client that joins reads its own back and follows it as it moves, and the server
- * keeps them in its world's file once it stops, with the horse the player logged off on.
+ * keeps them in its world's file once it stops, with the horse the player logged off on. The
+ * chat never says the server lacks the mod.
  */
 public final class DedicatedServerScenario implements Scenario {
     @Override
@@ -63,6 +64,11 @@ public final class DedicatedServerScenario implements Scenario {
                 server.runCommand("execute at @p run summon horse ~ ~ ~ {Tame:1b,NoAI:1b,Tags:[\"lh.mount\"]}");
                 server.runCommand("ride @p mount @e[type=horse,tag=lh.mount,limit=1]");
                 context.waitTicks(140);
+                // Past the ten seconds the client waits for the server's word: a server with the mod is never warned about.
+                context.runOnClient(minecraft -> {
+                    String warning = FarPlayerTracker.get().warning();
+                    if (warning != null) throw new AssertionError("the chat was told " + warning + " on a server with the mod");
+                });
             }
         }
         // Stopped: what it kept is in the world's file, for the players who join next time.

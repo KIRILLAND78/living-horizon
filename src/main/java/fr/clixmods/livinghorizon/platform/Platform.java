@@ -1,5 +1,7 @@
 package fr.clixmods.livinghorizon.platform;
 
+import org.jspecify.annotations.Nullable;
+
 import java.nio.file.Path;
 
 //? if fabric {
@@ -33,6 +35,20 @@ public final class Platform {
         return FabricLoader.getInstance().getConfigDir();
         //?} else {
         /*return FMLPaths.CONFIGDIR.get();
+        *///?}
+    }
+
+    /**
+     * The version of a mod, for the benchmark's report: "" when the loader does not say it
+     * here, null when the mod is not loaded.
+     */
+    public static @Nullable String modVersion(String id) {
+        if (!isModLoaded(id)) return null;
+        //? if fabric || quilt {
+        return FabricLoader.getInstance().getModContainer(id)
+                .map(mod -> mod.getMetadata().getVersion().getFriendlyString()).orElse("");
+        //?} else {
+        /*return "";
         *///?}
     }
 

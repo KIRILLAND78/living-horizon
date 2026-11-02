@@ -2,8 +2,10 @@ package fr.clixmods.livinghorizon.track;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -108,5 +110,57 @@ class WalkwayTest {
     @Test
     void nowhereToStand() {
         assertNull(Walkway.around(new Blocks(), 0, 1, 0, 0, 0, 3, 100));
+    }
+
+    @Test
+    void findsAWayAtOnce() {
+        Blocks ground = new Blocks().floor(0, -6, 6);
+        for (int z = -6; z <= 3; z++) ground.block(2, 1, z).block(2, 2, z);
+        List<Walkway.Step> way = Walkway.way(ground, 0, 1, 0, new Walkway.Step(4, 1, 0, 1), 0, 0, 6, 2000);
+        assertNotNull(way);
+        assertEquals(new Walkway.Step(4, 1, 0, 1), way.get(way.size() - 1));
+        for (Walkway.Step step : way) assertTrue(step.x() != 2 || step.z() > 3, "through the wall at " + step);
+    }
+
+    @Test
+    void noWayOutOfAPit() {
+        Blocks ground = new Blocks().floor(0, -6, 6);
+        // Walls three blocks high all round the start: too high to climb.
+        for (int d = -1; d <= 1; d++) {
+            for (int y = 1; y <= 3; y++) ground.block(d, y, -2).block(d, y, 2).block(-2, y, d).block(2, y, d);
+        }
+        for (int y = 1; y <= 3; y++) ground.block(-2, y, -2).block(-2, y, 2).block(2, y, -2).block(2, y, 2);
+        assertNull(Walkway.way(ground, 0, 1, 0, new Walkway.Step(5, 1, 0, 1), 0, 0, 6, 2000));
+        assertNull(Walkway.way(new Blocks(), 0, 1, 0, new Walkway.Step(5, 1, 0, 1), 0, 0, 6, 2000));
+    }
+
+    @Test
+    void readsEachSpotOnce() {
+        Blocks floor = new Blocks().floor(0, -12, 12);
+        Map<Long, Integer> reads = new HashMap<>();
+        Walkway.Ground counted = (x, y, z) -> {
+            reads.merge(Walkway.key(x, y, z), 1, Integer::sum);
+            return floor.stand(x, y, z);
+        };
+        Walkway.Survey map = Walkway.around(counted, 0, 1, 0, 0, 0, 10, 5000);
+        assertNotNull(map);
+        assertTrue(map.spots().size() > 300);
+        assertTrue(reads.values().stream().allMatch(n -> n == 1), "a spot read twice");
+    }
+
+    @Test
+    void spotsComeNearestFirst() {
+        Walkway.Survey map = Walkway.around(new Blocks().floor(0, -10, 10), 0, 1, 0, 0, 0, 8, 5000);
+        assertNotNull(map);
+        List<Walkway.Step> spots = map.spots();
+        assertEquals(new Walkway.Step(0, 1, 0, 1), spots.get(0));
+        // On flat ground the cost is the distance walked: straight steps, and diagonals.
+        double last = 0;
+        for (Walkway.Step spot : spots) {
+            int dx = Math.abs(spot.x()), dz = Math.abs(spot.z());
+            double walked = Math.abs(dx - dz) + Math.min(dx, dz) * 1.414;
+            assertTrue(walked >= last - 1e-9, spot + " after a spot farther away");
+            last = walked;
+        }
     }
 }

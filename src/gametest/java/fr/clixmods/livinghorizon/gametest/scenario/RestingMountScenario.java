@@ -107,12 +107,12 @@ public final class RestingMountScenario implements Scenario {
             clientCommand(context, "livinghorizon debug offline test clear");
 
             // Known from the server alone: it shares the horse they took away with them.
-            PositionsMessage.Player faraway = new PositionsMessage.Player("Faraway", 12.5, GROUND, -12.5, 0f, 0, false, true,
+            PositionsMessage.Player faraway = new PositionsMessage.Player("Faraway", 12.5, GROUND, -12.5, 0f, "minecraft:overworld", false, true,
                     null, new PositionsMessage.Mount("minecraft:horse", "{Tame:1b,Variant:513}", 0, 0.85, -0.2, 0f, 0f));
             for (int i = 0; i < 6; i++) {
                 context.runOnClient(minecraft -> {
                     FarPlayerTracker.get().receive(PositionsMessage.players(List.of()));
-                    FarPlayerTracker.get().receive(PositionsMessage.offline(List.of(faraway)));
+                    PositionsMessage.offline(List.of(faraway)).forEach(FarPlayerTracker.get()::receive);
                 });
                 context.waitTicks(10);
             }

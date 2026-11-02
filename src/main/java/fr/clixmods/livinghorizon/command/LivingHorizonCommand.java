@@ -9,17 +9,24 @@ import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.ambient.Ambience;
+import fr.clixmods.livinghorizon.ambient.Egg;
 import fr.clixmods.livinghorizon.ambient.EggLog;
 import fr.clixmods.livinghorizon.ambient.Ufo;
 import fr.clixmods.livinghorizon.compat.FarDepth;
+import fr.clixmods.livinghorizon.compat.Links;
 import fr.clixmods.livinghorizon.compat.LodWorld;
+import fr.clixmods.livinghorizon.debug.Benchmark;
+import fr.clixmods.livinghorizon.debug.BenchmarkWorld;
 import fr.clixmods.livinghorizon.debug.DebugHud;
+import fr.clixmods.livinghorizon.debug.ProfileLines;
 import fr.clixmods.livinghorizon.track.FarPlayer;
 import fr.clixmods.livinghorizon.track.LastSeen;
 import fr.clixmods.livinghorizon.track.Profiles;
 import fr.clixmods.livinghorizon.track.FarPlayerTracker;
+import fr.clixmods.livinghorizon.track.Foresight;
 import fr.clixmods.livinghorizon.track.Gear;
 import fr.clixmods.livinghorizon.track.MobScan;
+import fr.clixmods.livinghorizon.track.PositionsMessage;
 import fr.clixmods.livinghorizon.track.RestingPlayers;
 import fr.clixmods.livinghorizon.track.SharedPositions;
 import fr.clixmods.livinghorizon.ui.FarConfigScreen;
@@ -33,7 +40,10 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -96,13 +106,25 @@ public final class LivingHorizonCommand {
     }
 
     /** The command tree, for a dispatcher whose sources {@code source} turns into a {@link Source}. */
+    /** The easter eggs' numbers from 9 on: 14 and 20 are no more. */
+    private static final int[] MORE_EGGS = {9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 21};
+
     public static <S> LiteralArgumentBuilder<S> tree(Function<S, Source> source) {
         // One word per kind of bird, so that the chat offers them all.
         LiteralArgumentBuilder<S> birds = LiteralArgumentBuilder.literal("bird");
         for (Ambience.Type type : Ambience.Type.values()) {
             birds.then(LiteralArgumentBuilder.<S>literal(type.id).executes(c -> bird(source.apply(c.getSource()), type)));
         }
-        return LiteralArgumentBuilder.<S>literal(LivingHorizonClient.MOD_ID)
+        LiteralArgumentBuilder<S> root = LiteralArgumentBuilder.<S>literal(LivingHorizonClient.MOD_ID);
+        // The easter eggs from 9 on, by number, for whoever works on them (EGGS) as the others.
+        for (int egg : MORE_EGGS) {
+            root.then(LiteralArgumentBuilder.<S>literal("ee" + egg).requires(c -> EGGS).executes(c -> egg(source.apply(c.getSource()),
+                    "ee" + egg, (level, player) -> {
+                        Egg found = FarPlayerTracker.get().ambience().egg(egg);
+                        return found != null && found.summon(level, player, true);
+                    })));
+        }
+        return root
                         .executes(c -> status(source.apply(c.getSource())))
                         .then(LiteralArgumentBuilder.<S>literal("lod").executes(c -> lod(source.apply(c.getSource()))))
                         .then(LiteralArgumentBuilder.<S>literal("voxy").executes(c -> lod(source.apply(c.getSource()))))
@@ -119,6 +141,11 @@ public final class LivingHorizonCommand {
                             return 1;
                         })
                                 .then(offlineTests(source)))
+                        .then(LiteralArgumentBuilder.<S>literal("foresee")
+                                .executes(c -> foresee(source.apply(c.getSource()), FarConfig.get().foreseeRadius))
+                                .then(RequiredArgumentBuilder.<S, Integer>argument("radius",
+                                                IntegerArgumentType.integer(Foresight.MIN_RADIUS, Foresight.MAX_RADIUS))
+                                        .executes(c -> foresee(source.apply(c.getSource()), IntegerArgumentType.getInteger(c, "radius")))))
                         .then(LiteralArgumentBuilder.<S>literal("scan")
                                 .executes(c -> scan(source.apply(c.getSource()), FarConfig.get().scanRadius))
                                 .then(RequiredArgumentBuilder.<S, Integer>argument("radius",
@@ -145,6 +172,8 @@ public final class LivingHorizonCommand {
                                 (level, player) -> FarPlayerTracker.get().ambience().bigfoot().summon(level, player, true))))
                         .then(LiteralArgumentBuilder.<S>literal("ee7").requires(c -> EGGS).executes(c -> egg(source.apply(c.getSource()), "ee7",
                                 (level, player) -> FarPlayerTracker.get().ambience().ghostBoat().summon(level, player, true))))
+                        .then(LiteralArgumentBuilder.<S>literal("ee8").requires(c -> EGGS).executes(c -> egg(source.apply(c.getSource()), "ee8",
+                                (level, player) -> FarPlayerTracker.get().ambience().ghostVillager().summon(level, player, true))))
                         .then(birds)
                         .then(LiteralArgumentBuilder.<S>literal("config").executes(c -> {
                             // After the chat screen, which closes once the command has run.
@@ -152,6 +181,30 @@ public final class LivingHorizonCommand {
                             client.execute(() -> client.setScreen(new FarConfigScreen(null)));
                             return 1;
                         }))
+                        // Only in a game started with -Dlh.benchmark=true: not a player's command.
+                        .then(LiteralArgumentBuilder.<S>literal("benchmark").requires(c -> Benchmark.ON)
+                                .executes(c -> benchmark(source.apply(c.getSource()), Benchmark.DEFAULT_SECONDS))
+                                .then(LiteralArgumentBuilder.<S>literal("world")
+                                        // Leaving the world is not done on a typo: said first, done on "confirm".
+                                        .executes(c -> {
+                                            source.apply(c.getSource()).feedback(
+                                                    Component.translatable("livinghorizon.benchmark.world.explain"));
+                                            return 1;
+                                        })
+                                        .then(LiteralArgumentBuilder.<S>literal("confirm").executes(c -> {
+                                            Minecraft client = source.apply(c.getSource()).client();
+                                            client.execute(() -> BenchmarkWorld.start(client));
+                                            return 1;
+                                        })))
+                                .then(LiteralArgumentBuilder.<S>literal("stop").executes(c -> {
+                                    Source from = source.apply(c.getSource());
+                                    from.client().execute(() -> Benchmark.stop(from.client()));
+                                    return 1;
+                                }))
+                                .then(RequiredArgumentBuilder.<S, Integer>argument("seconds",
+                                                IntegerArgumentType.integer(Benchmark.MIN_SECONDS, Benchmark.MAX_SECONDS))
+                                        .executes(c -> benchmark(source.apply(c.getSource()),
+                                                IntegerArgumentType.getInteger(c, "seconds")))))
                         .then(LiteralArgumentBuilder.<S>literal("impostors").executes(c -> {
                             Minecraft client = source.apply(c.getSource()).client();
                             client.execute(() -> client.setScreen(new ImpostorScreen(null)));
@@ -159,10 +212,28 @@ public final class LivingHorizonCommand {
                         }));
     }
 
+    /**
+     * {@code /livinghorizon benchmark [seconds]}: the frame rate with the mod off, on, and each
+     * part of it on its own, written to a report. The player stands still meanwhile.
+     */
+    private static int benchmark(Source source, int seconds) {
+        if (Benchmark.running()) {
+            source.feedback(Component.translatable("livinghorizon.benchmark.running"));
+            return 0;
+        }
+        source.feedback(Component.translatable("livinghorizon.benchmark.started", Benchmark.duration(seconds)));
+        Minecraft client = source.client();
+        // After the chat screen, which closes once the command has run.
+        client.execute(() -> Benchmark.start(client, seconds));
+        return 1;
+    }
+
     /** Test players placed at most at once, and the farthest they are spread. */
     private static final int MAX_TEST_PLAYERS = 100, MAX_TEST_RADIUS = 256;
     /** Blocks around you a crowd of test players is spread over when no radius is given. */
     private static final int CROWD_RADIUS = 16;
+    /** Blocks above the ground gliding test players are placed at when no height is given. */
+    private static final int GLIDE_HEIGHT = 30;
 
     /**
      * {@code /livinghorizon debug offline test ...}: test players who logged off, to try the
@@ -170,46 +241,63 @@ public final class LivingHorizonCommand {
      * stand, wearing your skin, logged off that many minutes ago, on a copy of what you ride
      * if you ride something; with a count, that many ({@code name1}, {@code name2}...), each on
      * the ground somewhere within the radius around you. {@code crowd <count> [radius]
-     * [minutes]} does the same with names of their own. {@code clear} removes them;
+     * [minutes]} does the same with names of their own; {@code glide <count> [radius] [height]}
+     * too, that many blocks above the ground in an elytra, as if they logged off gliding.
+     * {@code clear} removes them;
      * {@code list} shows everyone resting on this server. Test players are never written to
      * the file.
      */
     private static <S> LiteralArgumentBuilder<S> offlineTests(Function<S, Source> source) {
         return LiteralArgumentBuilder.<S>literal("offline").then(LiteralArgumentBuilder.<S>literal("test")
                 .then(LiteralArgumentBuilder.<S>literal("spawn")
-                        .executes(c -> spawnOffline(source.apply(c.getSource()), null, 0, 1, 0))
+                        .executes(c -> spawnOffline(source.apply(c.getSource()), 0, null, 0, 1, 0))
                         .then(RequiredArgumentBuilder.<S, String>argument("name", StringArgumentType.word())
-                                .executes(c -> spawnOffline(source.apply(c.getSource()),
+                                .executes(c -> spawnOffline(source.apply(c.getSource()), 0,
                                         StringArgumentType.getString(c, "name"), 0, 1, 0))
                                 .then(RequiredArgumentBuilder.<S, Integer>argument("minutes", IntegerArgumentType.integer(0))
-                                        .executes(c -> spawnOffline(source.apply(c.getSource()),
+                                        .executes(c -> spawnOffline(source.apply(c.getSource()), 0,
                                                 StringArgumentType.getString(c, "name"),
                                                 IntegerArgumentType.getInteger(c, "minutes"), 1, 0))
                                         .then(RequiredArgumentBuilder.<S, Integer>argument("count",
                                                         IntegerArgumentType.integer(1, MAX_TEST_PLAYERS))
-                                                .executes(c -> spawnOffline(source.apply(c.getSource()),
+                                                .executes(c -> spawnOffline(source.apply(c.getSource()), 0,
                                                         StringArgumentType.getString(c, "name"),
                                                         IntegerArgumentType.getInteger(c, "minutes"),
                                                         IntegerArgumentType.getInteger(c, "count"), CROWD_RADIUS))
                                                 .then(RequiredArgumentBuilder.<S, Integer>argument("radius",
                                                                 IntegerArgumentType.integer(0, MAX_TEST_RADIUS))
-                                                        .executes(c -> spawnOffline(source.apply(c.getSource()),
+                                                        .executes(c -> spawnOffline(source.apply(c.getSource()), 0,
                                                                 StringArgumentType.getString(c, "name"),
                                                                 IntegerArgumentType.getInteger(c, "minutes"),
                                                                 IntegerArgumentType.getInteger(c, "count"),
                                                                 IntegerArgumentType.getInteger(c, "radius"))))))))
                 .then(LiteralArgumentBuilder.<S>literal("crowd")
                         .then(RequiredArgumentBuilder.<S, Integer>argument("count", IntegerArgumentType.integer(1, MAX_TEST_PLAYERS))
-                                .executes(c -> spawnOffline(source.apply(c.getSource()), null, 0,
+                                .executes(c -> spawnOffline(source.apply(c.getSource()), 0, null, 0,
                                         IntegerArgumentType.getInteger(c, "count"), CROWD_RADIUS))
                                 .then(RequiredArgumentBuilder.<S, Integer>argument("radius",
                                                 IntegerArgumentType.integer(0, MAX_TEST_RADIUS))
-                                        .executes(c -> spawnOffline(source.apply(c.getSource()), null, 0,
+                                        .executes(c -> spawnOffline(source.apply(c.getSource()), 0, null, 0,
                                                 IntegerArgumentType.getInteger(c, "count"),
                                                 IntegerArgumentType.getInteger(c, "radius")))
                                         .then(RequiredArgumentBuilder.<S, Integer>argument("minutes", IntegerArgumentType.integer(0))
-                                                .executes(c -> spawnOffline(source.apply(c.getSource()), null,
+                                                .executes(c -> spawnOffline(source.apply(c.getSource()), 0, null,
                                                         IntegerArgumentType.getInteger(c, "minutes"),
+                                                        IntegerArgumentType.getInteger(c, "count"),
+                                                        IntegerArgumentType.getInteger(c, "radius")))))))
+                .then(LiteralArgumentBuilder.<S>literal("glide")
+                        .then(RequiredArgumentBuilder.<S, Integer>argument("count", IntegerArgumentType.integer(1, MAX_TEST_PLAYERS))
+                                .executes(c -> spawnOffline(source.apply(c.getSource()), GLIDE_HEIGHT, null, 0,
+                                        IntegerArgumentType.getInteger(c, "count"), CROWD_RADIUS))
+                                .then(RequiredArgumentBuilder.<S, Integer>argument("radius",
+                                                IntegerArgumentType.integer(0, MAX_TEST_RADIUS))
+                                        .executes(c -> spawnOffline(source.apply(c.getSource()), GLIDE_HEIGHT, null, 0,
+                                                IntegerArgumentType.getInteger(c, "count"),
+                                                IntegerArgumentType.getInteger(c, "radius")))
+                                        .then(RequiredArgumentBuilder.<S, Integer>argument("height",
+                                                        IntegerArgumentType.integer(1, MAX_TEST_RADIUS))
+                                                .executes(c -> spawnOffline(source.apply(c.getSource()),
+                                                        IntegerArgumentType.getInteger(c, "height"), null, 0,
                                                         IntegerArgumentType.getInteger(c, "count"),
                                                         IntegerArgumentType.getInteger(c, "radius")))))))
                 .then(LiteralArgumentBuilder.<S>literal("clear").executes(c -> {
@@ -222,9 +310,11 @@ public final class LivingHorizonCommand {
 
     /**
      * Places {@code count} test players: one alone where you stand, several on the ground
-     * within {@code radius} blocks around you, each facing its own way.
+     * within {@code radius} blocks around you, each facing its own way; {@code aloft} blocks
+     * above it in an elytra, as if they logged off gliding, when it is not 0.
      */
-    private static int spawnOffline(Source source, @Nullable String name, int minutesAgo, int count, int radius) {
+    private static int spawnOffline(Source source, int aloft, @Nullable String name, int minutesAgo, int count,
+                                    int radius) {
         Player self = source.player();
         ClientPacketListener connection = source.client().getConnection();
         if (self == null || connection == null) return 0;
@@ -253,13 +343,13 @@ public final class LivingHorizonCommand {
             }
         }
         // On what you ride, if anything: a copy of it, which each of them keeps.
-        RestingPlayers.Mount mount = RestingPlayers.Mount.ridden(self);
+        RestingPlayers.Mount mount = aloft > 0 ? null : RestingPlayers.Mount.ridden(self);
         boolean flies = mount != null && RestingPlayers.Mount.flies(self.getRootVehicle());
-        int dimension = SharedPositions.dimensionCode(self.level().dimension());
+        String dimension = SharedPositions.dimensionId(self.level().dimension());
         Random random = new Random();
         List<String> skins = RestingPlayers.skinsFor(names.size(), random);
         for (String each : names) {
-            if (count == 1 && radius == 0) {
+            if (count == 1 && radius == 0 && aloft == 0) {
                 // A copy of you: your skin, what you wear and hold, what you ride.
                 resting.fake(each, self.getGameProfile(), dimension, self.getX(), self.getY(), self.getZ(), self.getYRot(),
                         minutesAgo, mount, Gear.of(self, self.level().registryAccess()));
@@ -269,20 +359,25 @@ public final class LivingHorizonCommand {
             double angle = random.nextDouble() * Math.PI * 2, distance = radius * Math.sqrt(random.nextDouble());
             double x = self.getX() + Math.cos(angle) * distance, z = self.getZ() + Math.sin(angle) * distance;
             BlockPos column = BlockPos.containing(x, self.getY(), z);
-            double y = self.level().hasChunkAt(column)
+            double y = self.level().getChunkSource().hasChunk(column.getX() >> 4, column.getZ() >> 4)
                     ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING, column.getX(), column.getZ())
                     : self.getY();
             if (mount != null) y += mount.seatY();
             // On a mount that flies, at your height, as you fly: above the ground still where it rises higher.
             if (flies) y = Math.max(y, self.getY());
+            y += aloft;
             // The default skin of its name until the real player's skin is fetched.
             resting.fake(each, new GameProfile(UUIDUtil.createOfflinePlayerUUID(each), each), dimension, x, y, z,
                     random.nextFloat() * 360f - 180f, minutesAgo,
-                    mount == null ? null : mount.facing(random.nextFloat() * 360f - 180f), null);
+                    mount == null ? null : mount.facing(random.nextFloat() * 360f - 180f),
+                    aloft > 0 ? Gear.only(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA), self.level().registryAccess())
+                            : null);
             // Each in the skin of a real player, a different one each: a crowd, not clones of you.
             resting.dressFake(each, skins.get(names.indexOf(each)));
         }
-        source.feedback(count == 1 && radius == 0
+        source.feedback(aloft > 0
+                ? Component.translatable("livinghorizon.offline.test.gliding", count, aloft, radius)
+                : count == 1 && radius == 0
                 ? Component.translatable("livinghorizon.offline.test.spawned", names.get(0))
                 : Component.translatable("livinghorizon.offline.test.spawnedMany", count, radius));
         if (!FarConfig.get().offlinePlayers) {
@@ -296,6 +391,13 @@ public final class LivingHorizonCommand {
             if (spot.name().equalsIgnoreCase(name)) return true;
         }
         return false;
+    }
+
+    /** The game's three dimensions by their name; one of a mod by its id, as the game has no name for it. */
+    private static Component dimensionName(String dimension) {
+        int vanilla = PositionsMessage.LEGACY_DIMENSIONS.indexOf(dimension);
+        return vanilla >= 0 ? Component.translatable("livinghorizon.offline.test.dimension." + vanilla)
+                : Component.literal(dimension);
     }
 
     /** Everyone resting on this server: where, and since when. */
@@ -312,7 +414,7 @@ public final class LivingHorizonCommand {
             String date = LastSeen.format(spot.lastSeen(), language, ZoneId.systemDefault());
             source.feedback(Component.translatable("livinghorizon.offline.test.line",
                     spot.name(),
-                    Component.translatable("livinghorizon.offline.test.dimension." + Math.clamp(spot.dimension(), 0, 3)),
+                    dimensionName(spot.dimension()),
                     Math.round(spot.x()), Math.round(spot.y()), Math.round(spot.z()),
                     date == null ? Component.translatable("livinghorizon.offline.test.unknown") : Component.literal(date),
                     resting.isFake(spot) ? Component.translatable("livinghorizon.offline.test.mark") : Component.empty()));
@@ -367,6 +469,16 @@ public final class LivingHorizonCommand {
     }
 
     /**
+     * {@code /livinghorizon foresee [radius]}: the first animals of the land nobody explored within
+     * that many chunks, foreseen from the seed (a world played here, or a server sharing it).
+     */
+    private static int foresee(Source source, int radius) {
+        Minecraft client = source.client();
+        client.execute(() -> FarPlayerTracker.get().mobs().foresight().start(client, radius));
+        return FarPlayerTracker.get().mobs().foresight().available(client) ? 1 : 0;
+    }
+
+    /**
      * {@code /livinghorizon lod} ({@code voxy} too): whether the mod can see the far terrain
      * of Voxy or Distant Horizons. Aim at a far mountain: the answer is how far the first
      * block they know along that line is.
@@ -383,6 +495,11 @@ public final class LivingHorizonCommand {
         }
         source.feedback(Component.translatable("livinghorizon.lod.source", status.name()));
         source.feedback(Component.translatable("livinghorizon.lod.depth", FarDepth.state()));
+        for (Links.Report link : Links.report()) {
+            source.feedback(Component.translatable("livinghorizon.lod.link", link.mod(), link.status()));
+        }
+        // At once, before the probe, which reads hundreds of columns and may answer late.
+        source.feedback(Component.translatable("livinghorizon.lod.details", fr.clixmods.livinghorizon.compat.DrawnGround.status()));
         Player self = source.player();
         Minecraft client = source.client();
         LodWorld.probe(self.getEyePosition(), self.getLookAngle(), 4096).whenComplete((hit, error) ->
@@ -406,6 +523,9 @@ public final class LivingHorizonCommand {
                 FarPlayerTracker.get().mobs().size(), FarPlayerTracker.get().mobs().shown().size()));
         source.feedback(Component.translatable("livinghorizon.status.cost", Stats.tickMillis(), Stats.extractMillis(),
                 Stats.drawn(), Stats.skipped()));
+        // The numbers of each section; the GPU's time is measured from now on, and shows the next time.
+        source.feedback(Component.translatable("livinghorizon.debug.hud.profile"));
+        for (ProfileLines.Line line : ProfileLines.lines()) source.feedback(Component.literal(line.content()));
         Collection<FarPlayer> players = FarPlayerTracker.get().players();
         if (players.isEmpty()) {
             source.feedback(Component.translatable("livinghorizon.status.none"));

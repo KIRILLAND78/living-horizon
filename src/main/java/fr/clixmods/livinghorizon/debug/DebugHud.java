@@ -1,6 +1,7 @@
 package fr.clixmods.livinghorizon.debug;
 
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.ModVersion;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.OcclusionQueries;
@@ -27,7 +28,7 @@ import java.util.Map;
  * this server sends mobs, and which optimisations are on. Also draws the depth view.
  */
 public final class DebugHud {
-    private static final int WHITE = 0xFFFFFFFF, GREY = 0xFFAAAAAA, ON = 0xFF55FF55, OFF = 0xFFFF5555;
+    private static final int WHITE = 0xFFFFFFFF, GREY = 0xFFAAAAAA, SLOW = 0xFFFFFF55, ON = 0xFF55FF55, OFF = 0xFFFF5555;
 
     private DebugHud() {
     }
@@ -44,17 +45,33 @@ public final class DebugHud {
         //?} else
         /*if (!config.debugHud || minecraft.player == null || minecraft.options.renderDebug) return;*/
 
-        List<Line> lines = lines(config, minecraft);
-
         Font font = minecraft.font;
+        int next = box(graphics, font, lines(config, minecraft), 4);
+        // What each section costs, in a second column: the first is already tall.
+        box(graphics, font, profileLines(), next + 8);
+    }
+
+    /** Draws lines in a box at {@code x}, top left; returns where the box ends. */
+    private static int box(GuiGraphics graphics, Font font, List<Line> lines, int x) {
         int width = 0;
         for (Line line : lines) width = Math.max(width, font.width(line.text));
-        int x = 4, y = 4, height = lines.size() * (font.lineHeight + 1);
+        int y = 4, height = lines.size() * (font.lineHeight + 1);
         graphics.fill(x - 2, y - 2, x + width + 2, y + height + 1, 0x90000000);
         for (Line line : lines) {
             graphics.drawString(font, line.text, x, y, line.color, true);
             y += font.lineHeight + 1;
         }
+        return x + width + 2;
+    }
+
+    /** What each section of the mod costs: the last time, the average and the worst of five seconds. */
+    private static List<Line> profileLines() {
+        List<Line> lines = new ArrayList<>();
+        lines.add(new Line(I18n.get("livinghorizon.debug.hud.profile"), WHITE));
+        for (ProfileLines.Line line : ProfileLines.lines()) {
+            lines.add(new Line(line.content(), line.severity() == 2 ? OFF : line.severity() == 1 ? SLOW : GREY));
+        }
+        return lines;
     }
 
     /** The panel's lines for the F3 screen, where the "Living Horizon" debug option shows them. */
@@ -63,6 +80,7 @@ public final class DebugHud {
         for (Line line : lines(FarConfig.get(), Minecraft.getInstance())) {
             out.add(nearest(line.color) + line.text);
         }
+        for (Line line : profileLines()) out.add(nearest(line.color) + line.text);
         return out;
     }
 
@@ -118,7 +136,7 @@ public final class DebugHud {
 
     private static List<Line> lines(FarConfig config, Minecraft minecraft) {
         List<Line> lines = new ArrayList<>();
-        lines.add(new Line(I18n.get("livinghorizon.debug.hud.title"), WHITE));
+        lines.add(new Line(I18n.get("livinghorizon.debug.hud.title") + " v" + ModVersion.get(), WHITE));
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.cost", Stats.tickMillis(), Stats.extractMillis(),
                 Stats.drawn(), Stats.skipped()), GREY));
         MobMemory mobs = FarPlayerTracker.get().mobs();
@@ -147,11 +165,11 @@ public final class DebugHud {
         }
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.reach", reach.isEmpty() ? "?" : reach), GREY));
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.opts"), GREY));
-        String[] names = {"view", "tiny", "depth", "lazy", "parallel", "cache", "occluded", "queries", "fade", "shadows", "background",
+        String[] names = {"view", "tiny", "depth", "lazy", "parallel", "cache", "occluded", "queries", "fade", "shadows", "fog", "dhfog", "background",
                 "animation", "freeze"};
         boolean[] values = {config.optViewCulling, config.optTinyCulling, config.depthOcclusion, config.optLazyDepth,
                 config.optParallelRead, config.optColumnCache, config.hideOccludedMobs, config.optOcclusionQueries,
-                config.optDhFade, config.optVoxyShadows, config.optBackgroundBuild, config.optStillTiny, config.optFreezeHidden};
+                config.optDhFade, config.optVoxyShadows, config.optVoxyFog, config.optDhFog, config.optBackgroundBuild, config.optStillTiny, config.optFreezeHidden};
         for (int i = 0; i < names.length; i++) {
             lines.add(new Line("  " + (values[i] ? "✔ " : "✘ ") + I18n.get("livinghorizon.debug.opt." + names[i]),
                     values[i] ? ON : OFF));

@@ -2,7 +2,9 @@ package fr.clixmods.livinghorizon.track;
 
 import com.mojang.authlib.GameProfile;
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.compat.LodWorld;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.RemotePlayer;
@@ -13,6 +15,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -30,17 +33,20 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A player who logged off, drawn where they are. Their skin comes from a remembered profile,
@@ -114,8 +120,10 @@ public final class RestingPuppet extends RemotePlayer {
     private static final double STROLL = 0.11, HURRY = 0.2;
     /** Blocks around it, and spots read at most, when it finds its way back after a blast. */
     private static final int REACH = 10, BUDGET = 700;
-    /** Spots read per tick when it looks around or for its way; spots looked beside for beds and chests. */
-    private static final int GROW = 250, SCAN = 1500;
+    /** Blocks below and above its spot copied when it looks around: a village on a hillside. */
+    private static final int COPY_BELOW = 32, COPY_ABOVE = 48;
+    /** Ticks before it looks around again when it could not. */
+    private static final int RETRY = 40;
     /** Ticks before it reads again what is around: blocks change. */
     private static final int RESURVEY = 600;
     /** Ticks the shield stays up after a hit. */
@@ -135,6 +143,8 @@ public final class RestingPuppet extends RemotePlayer {
     private static final int SHORE = 10;
     /** Ticks between two looks for a shore, and between two looks at the water under its boat. */
     private static final int SHORE_WAIT = 20;
+    /** The surface of still water open to the sky, above the bottom of its block. */
+    private static final double WATER_TOP = 8 / 9.0;
     /** Colours of the fire resistance and water breathing potions' swirls. */
     private static final int FIRE_RESISTANCE = 0xFF9900, WATER_BREATHING = 0x98DAC0;
 
@@ -149,7 +159,7 @@ public final class RestingPuppet extends RemotePlayer {
     private final RestingPlayers.Spot spot;
     private final PlayerInfo info;
     private final Random random;
-    private final Walkway walkway;
+    private final Footing.Source blocks;
     private final @Nullable RestingMount mount;
     /** The boat it was given, its spot being in water far from any shore. */
     private @Nullable RestingMount boat;
@@ -158,6 +168,14 @@ public final class RestingPuppet extends RemotePlayer {
     /** Its spot being in water: the nearest shore, where it rests instead. */
     private @Nullable Vec3 shore;
     private int shoreWait, dryWait;
+    /** Where it was found to rest, from the blocks: kept with its spot ({@link #restFound}). */
+    private RestingPlayers.@Nullable Rest rest;
+    private boolean restFound;
+    /** Its shore or boat guessed from the far world, to be found again from the blocks once loaded. */
+    private boolean guessed;
+    /** The far world was asked what is under its spot; its answer, once there. */
+    private boolean askedFar;
+    private LodWorld.@Nullable Surface farSurface;
 
     private boolean placed;
     private boolean lively;
@@ -185,11 +203,14 @@ public final class RestingPuppet extends RemotePlayer {
     private @Nullable Entity threat;
     private final List<Creeper> fuses = new ArrayList<>();
     private int roam = 50;
-    private Walkway.@Nullable Survey survey, known;
-    private int scanned, surveyAge;
-    private final Map<BlockPos, Sight> nextSights = new LinkedHashMap<>(), nextSleeps = new LinkedHashMap<>();
+    /** Where it can walk around its spot, as last read, and the copy of the blocks it was read from. */
+    private Walkway.@Nullable Survey known;
+    private @Nullable BlockCopy area;
+    /** A new look around: the blocks being copied, a few sections a tick, then read off the game's thread. */
+    private BlockCopy.@Nullable Builder copying;
+    private @Nullable CompletableFuture<Area> reading;
+    private int surveyAge, retry;
     private List<Sight> sights = List.of(), sleeps = List.of();
-    private final Map<BlockPos, Shore> nextShores = new LinkedHashMap<>();
     private List<Shore> shores = List.of();
     /** The water's edge it fishes from, or walks to for that. */
     private @Nullable Shore fishingFrom;
@@ -201,7 +222,8 @@ public final class RestingPuppet extends RemotePlayer {
     private int gazed;
     /** You looked at it since its last tick: it crouches with you only then, never from memory. */
     private boolean gazerCrouching, watched, crouched;
-    private Walkway.@Nullable Route route;
+    /** The way to a spot, searched off the game's thread in {@link #area}; empty when there is none. */
+    private @Nullable CompletableFuture<Optional<List<Walkway.Step>>> route;
     private float headYaw, headPitch, headYawGoal, headPitchGoal;
     private int glance;
     /** What it held in each hand when its player logged off, given back once the sword and shield are put away. */
@@ -212,15 +234,22 @@ public final class RestingPuppet extends RemotePlayer {
         this.spot = spot;
         this.info = new PlayerInfo(profile, false);
         this.random = new Random(spot.name().hashCode() * 31L + System.nanoTime());
-        this.walkway = new Walkway((x, y, z) -> Footing.stand(level, x, y, z));
+        this.blocks = Footing.live(level);
+        // Each looks for monsters on a tick of its own, not all of them on the same one.
+        this.scan = Math.floorMod(spot.name().hashCode(), 5);
         setSilent(true);
         getEntityData().set(Avatar.DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7F);
-        snap(spot.x(), spot.y(), spot.z());
+        this.mount = RestingMount.of(level, spot, random);
+        // Where it was found to rest before: there at once, near or far, loaded or not.
+        rest = spot.rest();
+        if (rest != null && rest.boat()) boat = RestingMount.boat(level, spot, rest.y(), random);
+        else if (rest != null) shore = rest.at();
+        Vec3 at = place();
+        snap(at.x, at.y, at.z);
         setYRot(spot.yaw());
         yBodyRot = yBodyRotO = spot.yaw();
         yHeadRot = yHeadRotO = spot.yaw();
         timer = 40 + random.nextInt(80);
-        this.mount = RestingMount.of(level, spot, random);
         // Dressed as they were when they logged off; the sword and shield it draws are its own.
         Gear.apply(this, spot.gear(), level.registryAccess());
         held = getItemBySlot(EquipmentSlot.MAINHAND).copy();
@@ -271,11 +300,11 @@ public final class RestingPuppet extends RemotePlayer {
         if (riding && carried != null) return carried.state();
         if (gazed > 0 && gazer != null) return "looking at you at " + gazer + (crouched ? ", crouched" : "");
         if (far && loop != null) return "away: " + loop.state();
-        Walkway.Survey reading = survey, map = known;
+        Walkway.Survey map = known;
         return activity.name().toLowerCase(java.util.Locale.ROOT)
                 + (route != null ? " (finding its way)" : "")
                 + ", area " + (map == null ? "unread" : map.spots().size() + " spots")
-                + (reading != null ? " (reading " + reading.spots().size() + ")" : "")
+                + (copying != null || reading != null ? " (reading)" : "")
                 + ", " + sleeps.size() + " beds, " + sights.size() + " things to look at, " + shores.size() + " places to fish";
     }
 
@@ -320,7 +349,7 @@ public final class RestingPuppet extends RemotePlayer {
      *
      * @param beds  the beds puppets lie in or walk to: one sleeper per bed
      * @param night whether it is time to sleep
-     * @param work  spots all puppets may still read this tick, shared: looking around costs
+     * @param work  sections of blocks all puppets may still copy this tick, shared: looking around costs
      */
     /**
      * Whether it lives its life here, so close to the camera at {@code eye}; past
@@ -351,7 +380,7 @@ public final class RestingPuppet extends RemotePlayer {
         if (lively != config.offlineLife) {
             lively = config.offlineLife;
             calmDown(beds);
-            if (!lively) snap(spot.x(), spot.y(), spot.z());
+            if (!lively) snap(place().x, place().y, place().z);
             placed = false;
             if (mount != null) mount.reset();
             if (boat != null) boat.reset();
@@ -366,7 +395,8 @@ public final class RestingPuppet extends RemotePlayer {
             calmDown(beds);
             placed = false;
             if (carrier != null) carrier.reset();
-            snap(spot.x(), spot.y(), spot.z());
+            Vec3 at = place();
+            snap(at.x, at.y, at.z);
         }
         if (riding && carried != null) {
             ride(level, carried, config, work);
@@ -389,8 +419,8 @@ public final class RestingPuppet extends RemotePlayer {
             start(Activity.IDLE, 20 + random.nextInt(40));
         }
 
-        if (!level.hasChunkAt(blockPosition())) {
-            // Nothing known of the blocks here: it only stands, sits or sleeps where it is.
+        if (!Footing.loaded(level, blockPosition())) {
+            // Nothing known of the blocks here: it only stands or sits where it is.
             placed = false;
             afar(night);
             return;
@@ -412,7 +442,7 @@ public final class RestingPuppet extends RemotePlayer {
             watch(level, beds);
             // Thrown just now by a blast: nothing else this tick.
             if (activity == Activity.GUARD) guard(level);
-            else if (activity != Activity.FLY) live(level, beds, fishers, night, work);
+            else if (activity != Activity.FLY) live(level, beds, fishers, night);
             if (activity != Activity.WALK && activity != Activity.BED && activity != Activity.FLY && path == null) {
                 settle(level, false);
             }
@@ -444,7 +474,7 @@ public final class RestingPuppet extends RemotePlayer {
         }
         double step = Math.min(SHOVE, Math.max(0.05, (getBbWidth() + body.getBbWidth()) / 2 - d));
         double x = getX() + dx / d * step, z = getZ() + dz / d * step;
-        if (!Footing.fits(level, x, getY(), z, Footing.STANDING)) return;
+        if (!Footing.fits(blocks, x, getY(), z, Footing.STANDING)) return;
         setPos(x, getY(), z);
         if (activity == Activity.SIT) start(Activity.IDLE, 40 + random.nextInt(40));
     }
@@ -501,7 +531,7 @@ public final class RestingPuppet extends RemotePlayer {
             playing.from(getX(), getY(), getZ(), yBodyRot);
         }
         double moved = playing.tick((int) level.getGameTime(), false);
-        setPos(playing.x, playing.y, playing.z);
+        if (getX() != playing.x || getY() != playing.y || getZ() != playing.z) setPos(playing.x, playing.y, playing.z);
         yBodyRot = playing.body;
         activity = playing.pausing && !night ? Activity.SIT : Activity.IDLE;
         glance(false);
@@ -525,10 +555,12 @@ public final class RestingPuppet extends RemotePlayer {
     // --- Out of the water -------------------------------------------------------------------
 
     /**
-     * Its spot in water, or over it (water is what it falls onto): the nearest shore within
-     * {@link #SHORE} blocks, where it rests instead, or a boat when there is none; decided
-     * once the blocks around are all there, again when the shore is gone. Out of the boat
-     * once the water at its spot is gone. Looked at once a second.
+     * Where it rests, decided from the blocks once those around its spot are all there, again
+     * when that changes; looked at once a second. Its spot in the air: the ground under it.
+     * In water, or over it (water is what it falls onto): the nearest shore within
+     * {@link #SHORE} blocks, or a boat on the surface when there is none, left once the water
+     * at its spot is gone. Before the blocks are there, a guess from the far world
+     * ({@link #guess}). What it finds is kept with its spot ({@link #restFound}).
      */
     private void keepDry(ClientLevel level) {
         if (dryWait > 0) {
@@ -536,33 +568,99 @@ public final class RestingPuppet extends RemotePlayer {
             return;
         }
         dryWait = SHORE_WAIT;
-        if (!level.hasChunkAt(home())) return;
+        if (!Footing.loaded(level, home())) {
+            if (rest == null) guess(level);
+            return;
+        }
         double x = spot.x(), y = landing(level), z = spot.z();
-        boolean wet = Footing.wet(level, x, y, z);
-        if (boat != null) {
-            if (!wet) boat = null;
+        if (!Footing.wet(blocks, x, y, z)) {
+            boat = null;
+            guessed = false;
+            // In the air: on the ground under it. On its spot: nowhere else.
+            Vec3 ground = y < spot.y() - 1e-3 ? new Vec3(x, y, z) : null;
+            if (!Objects.equals(shore, ground)) forgetShore(ground);
+            found(ground == null ? null : new RestingPlayers.Rest(x, y, z, false));
             return;
         }
-        if (!wet) {
-            if (shore != null) forgetShore(null);
-            return;
-        }
+        if (boat != null && !guessed) return;
         Vec3 known = shore;
-        if (known != null && !Double.isNaN(Footing.stand(level, (int) Math.floor(known.x),
+        if (known != null && !guessed && !Double.isNaN(Footing.stand(blocks, (int) Math.floor(known.x),
                 (int) Math.floor(known.y + 0.01), (int) Math.floor(known.z)))) {
             return;
         }
-        if (!Footing.loadedAround(level, x, z, SHORE)) return;
-        Vec3 land = Footing.shore(level, x, y, z, SHORE);
-        forgetShore(land);
-        if (land == null) boat = RestingMount.boat(level, spot, Footing.surface(level, x, y, z), random);
+        if (!Footing.loadedAround(blocks, x, z, SHORE)) return;
+        guessed = false;
+        Vec3 land = Footing.shore(blocks, x, y, z, SHORE);
+        if (land != null) {
+            boat = null;
+            forgetShore(land);
+            found(new RestingPlayers.Rest(land.x, land.y, land.z, false));
+            return;
+        }
+        double surface = Footing.surface(blocks, x, y, z);
+        forgetShore(null);
+        boat = RestingMount.boat(level, spot, surface, random);
+        found(boat == null ? null : new RestingPlayers.Rest(x, surface, z, true));
+    }
+
+    /** Where it was found to rest, to be kept with its spot. */
+    private void found(RestingPlayers.@Nullable Rest now) {
+        if (Objects.equals(rest, now)) return;
+        rest = now;
+        restFound = true;
+    }
+
+    /** Whether it found where it rests since last asked: {@link #rest()}, to keep with its spot. */
+    boolean restFound() {
+        boolean found = restFound;
+        restFound = false;
+        return found;
+    }
+
+    /** Where it rests, when it is not its spot. */
+    RestingPlayers.@Nullable Rest rest() {
+        return rest;
+    }
+
+    /**
+     * Its spot far away, its blocks not loaded and where it rests not found yet: what the far
+     * world (Voxy, Distant Horizons) holds under it, asked once. A spot high above the ground
+     * - a player who logged off flying - rests on it; a spot on water or over it rests in a
+     * boat. A guess only: found again from the blocks once they are loaded.
+     */
+    private void guess(ClientLevel level) {
+        LodWorld.Surface under = farSurface;
+        if (under != null) {
+            farSurface = null;
+            double top = under.y() + 1;
+            if (under.water() && top < spot.y() + 4) {
+                // On the water or above it, not deep under it: afloat, as it would be once the blocks are there.
+                boat = RestingMount.boat(level, spot, under.y() + WATER_TOP, random);
+                guessed = boat != null;
+            } else if (!under.water() && top < spot.y() - 1) {
+                forgetShore(new Vec3(spot.x(), top, spot.z()));
+                guessed = true;
+                if (!riding) snap(spot.x(), top, spot.z());
+            }
+            return;
+        }
+        if (askedFar || boat != null || shore != null) return;
+        askedFar = true;
+        LodWorld.surface(Mth.floor(spot.x()), Mth.floor(spot.z()))
+                .thenAcceptAsync(found -> farSurface = found.orElse(null), Minecraft.getInstance());
+    }
+
+    /** Where it rests while not riding: its spot, or the ground or shore it rests on instead. */
+    private Vec3 place() {
+        Vec3 land = shore;
+        return land != null ? land : new Vec3(spot.x(), spot.y(), spot.z());
     }
 
     /** Where its spot comes to rest: the spot, or what is under it when it is in the air, water included. */
     private double landing(ClientLevel level) {
         double x = spot.x(), y = spot.y(), z = spot.z();
-        if (Footing.wet(level, x, y, z) || Footing.supported(level, x, y, z)) return y;
-        return Footing.floorBelow(level, x, y, z);
+        if (Footing.wet(blocks, x, y, z) || Footing.supported(blocks, x, y, z)) return y;
+        return Footing.floorBelow(blocks, x, y, z);
     }
 
     /** A new place to rest: its loop is drawn again around it, from wherever it is. */
@@ -577,14 +675,14 @@ public final class RestingPuppet extends RemotePlayer {
      * nearest shore within {@link #SHORE} blocks of where it is, or its spot's.
      */
     private void ashore(ClientLevel level) {
-        if (!Footing.wet(level, getX(), getY(), getZ())) return;
+        if (!Footing.wet(blocks, getX(), getY(), getZ())) return;
         if (shoreWait > 0) {
             shoreWait--;
             return;
         }
         shoreWait = SHORE_WAIT;
-        if (!Footing.loadedAround(level, getX(), getZ(), SHORE)) return;
-        Vec3 land = Footing.shore(level, getX(), getY(), getZ(), SHORE);
+        if (!Footing.loadedAround(blocks, getX(), getZ(), SHORE)) return;
+        Vec3 land = Footing.shore(blocks, getX(), getY(), getZ(), SHORE);
         if (land == null) land = shore;
         if (land == null) return;
         bed = null;
@@ -595,8 +693,8 @@ public final class RestingPuppet extends RemotePlayer {
 
     // --- A life ---------------------------------------------------------------------------
 
-    private void live(ClientLevel level, Set<BlockPos> beds, List<Vec3> fishers, boolean night, int[] work) {
-        if (route != null) routing(level, beds, work);
+    private void live(ClientLevel level, Set<BlockPos> beds, List<Vec3> fishers, boolean night) {
+        if (route != null) routing(level, beds);
         switch (activity) {
             case WALK -> {
                 if (step(level, STROLL, false)) arrive(level, beds);
@@ -702,30 +800,28 @@ public final class RestingPuppet extends RemotePlayer {
     }
 
     /**
-     * Starts looking for the way to a spot, which takes a few ticks across a village; it
-     * stays as it is meanwhile, then walks.
+     * Starts looking for the way to a spot, off the game's thread, in the blocks it last read
+     * around; it stays as it is meanwhile, then walks.
      */
     private boolean routeTo(Walkway.Step target, Activity after) {
+        BlockCopy copy = area;
+        if (copy == null) return false;
         BlockPos at = feet();
         BlockPos home = home();
-        Walkway.Route found = walkway.route(at.getX(), at.getY(), at.getZ(), target, home.getX(), home.getZ(),
-                roam + 4, budget(roam));
-        if (found == null) return false;
+        int radius = roam + 4, budget = budget(roam);
         start(activity == Activity.SIT || activity == Activity.FISH ? Activity.IDLE : activity, 400);
-        route = found;
+        route = GroundWork.run(() -> Optional.ofNullable(Walkway.way((x, y, z) -> Footing.stand(copy, x, y, z),
+                at.getX(), at.getY(), at.getZ(), target, home.getX(), home.getZ(), radius, budget)));
         then = after;
         return true;
     }
 
-    /** One tick of looking for the way; once found, off it goes. */
-    private void routing(ClientLevel level, Set<BlockPos> beds, int[] work) {
-        Walkway.Route searching = route;
-        if (searching == null) return;
-        int spots = Math.min(work[0], GROW);
-        work[0] -= spots;
-        if (spots <= 0 || !searching.grow(spots)) return;
+    /** Once the way is found, off it goes. */
+    private void routing(ClientLevel level, Set<BlockPos> beds) {
+        CompletableFuture<Optional<List<Walkway.Step>>> searching = route;
+        if (searching == null || !searching.isDone()) return;
         route = null;
-        List<Walkway.Step> way = searching.path();
+        List<Walkway.Step> way = searching.isCompletedExceptionally() ? null : searching.join().orElse(null);
         if (way == null) {
             // No way there after all: the bed it kept is free again.
             if (then == Activity.BED) leaveBed(beds);
@@ -746,59 +842,87 @@ public final class RestingPuppet extends RemotePlayer {
     private record Sight(BlockPos block, Walkway.Step front) {
     }
 
+    /** What it read around its spot: where it can walk, from the copy of the blocks it read, and what is there to go to. */
+    private record Area(BlockCopy blocks, Walkway.@Nullable Survey map, List<Sight> sights, List<Sight> sleeps,
+                        List<Shore> shores) {
+    }
+
     /**
-     * Reads, a little every tick, where it can walk around its spot and what is there to go
-     * to: beds, chests, workstations. Read again now and then, as blocks change.
+     * Reads where it can walk around its spot and what is there to go to: beds, chests,
+     * workstations. The blocks around are copied a few sections a tick, then read off the
+     * game's thread. Read again now and then, as blocks change.
      */
     private void survey(ClientLevel level, int[] work) {
         surveyAge++;
-        if (survey == null && route == null && (known == null || surveyAge > RESURVEY || lost())) {
-            walkway.forget();
+        boolean due = known == null ? surveyAge >= retry : surveyAge > RESURVEY || lost();
+        if (copying == null && reading == null && route == null && due) {
+            BlockPos at = feet();
+            // Nowhere to stand here: nothing to read, until it stands again.
+            if (Double.isNaN(Footing.stand(blocks, at.getX(), at.getY(), at.getZ()))
+                    && Double.isNaN(Footing.stand(blocks, at.getX(), at.getY() + 1, at.getZ()))
+                    && Double.isNaN(Footing.stand(blocks, at.getX(), at.getY() - 1, at.getZ()))) {
+                return;
+            }
+            BlockPos home = home();
+            int reach = roam + 4;
+            copying = BlockCopy.of(level, home.getX() - reach, home.getY() - COPY_BELOW, home.getZ() - reach,
+                    home.getX() + reach, home.getY() + COPY_ABOVE, home.getZ() + reach);
+            surveyAge = 0;
+        }
+        BlockCopy.Builder builder = copying;
+        if (builder != null) {
+            work[0] -= builder.copy(level, Math.max(0, work[0]));
+            if (!builder.done()) return;
+            copying = null;
+            BlockCopy copy = builder.build();
             BlockPos at = feet();
             BlockPos home = home();
-            survey = walkway.survey(at.getX(), at.getY(), at.getZ(), home.getX(), home.getZ(), roam, budget(roam));
-            surveyAge = 0;
-            scanned = 0;
-            nextSights.clear();
-            nextSleeps.clear();
-            nextShores.clear();
-            if (survey == null) return;
-        }
-        Walkway.Survey reading = survey;
-        if (reading == null) return;
-        if (!reading.done()) {
-            int spots = Math.min(work[0], GROW);
-            work[0] -= spots;
-            if (spots > 0) reading.grow(spots);
+            int radius = roam, budget = budget(roam);
+            reading = GroundWork.run(() -> read(copy, at, home, radius, budget));
             return;
         }
-        List<Walkway.Step> spots = reading.spots();
-        int end = Math.min(spots.size(), scanned + SCAN);
-        for (int i = scanned; i < end; i++) {
-            Walkway.Step spot = spots.get(i);
+        CompletableFuture<Area> pending = reading;
+        if (pending == null || !pending.isDone()) return;
+        reading = null;
+        Area read = pending.isCompletedExceptionally() ? null : pending.join();
+        if (read == null || read.map() == null) {
+            // It could not stand where it was read from: again a little later.
+            retry = RETRY;
+            return;
+        }
+        known = read.map();
+        area = read.blocks();
+        sights = read.sights();
+        sleeps = read.sleeps();
+        shores = read.shores();
+        // Idle for want of knowing better (no bed known at night): think again with what it now knows.
+        if (activity == Activity.IDLE) timer = Math.min(timer, 20);
+    }
+
+    /** Off the game's thread: everywhere it can walk from {@code at}, and the beds, things and water beside. */
+    private static Area read(BlockCopy copy, BlockPos at, BlockPos home, int radius, int budget) {
+        Walkway.Survey map = Walkway.around((x, y, z) -> Footing.stand(copy, x, y, z), at.getX(), at.getY(), at.getZ(),
+                home.getX(), home.getZ(), radius, budget);
+        if (map == null) return new Area(copy, null, List.of(), List.of(), List.of());
+        Map<BlockPos, Sight> sights = new LinkedHashMap<>(), sleeps = new LinkedHashMap<>();
+        Map<BlockPos, Shore> shores = new LinkedHashMap<>();
+        for (Walkway.Step spot : map.spots()) {
             for (Direction side : Direction.Plane.HORIZONTAL) {
                 BlockPos next = new BlockPos(spot.x() + side.getStepX(), spot.y(), spot.z() + side.getStepZ());
-                BlockState state = level.getBlockState(next);
+                BlockState state = copy.state(next);
                 if (INTERESTING.contains(state.getBlock())) {
-                    nextSights.putIfAbsent(next, new Sight(next, spot));
+                    sights.putIfAbsent(next, new Sight(next, spot));
                 } else if (state.getBlock() instanceof BedBlock) {
                     BlockPos head = state.getValue(BedBlock.PART) == BedPart.HEAD ? next
                             : next.relative(state.getValue(BedBlock.FACING));
-                    nextSleeps.putIfAbsent(head, new Sight(head, spot));
+                    sleeps.putIfAbsent(head, new Sight(head, spot));
                 }
-                Vec3 water = openWater(level, spot, side);
-                if (water != null) nextShores.putIfAbsent(new BlockPos(spot.x(), spot.y(), spot.z()), new Shore(spot, water));
+                Vec3 water = openWater(copy, spot, side);
+                if (water != null) shores.putIfAbsent(new BlockPos(spot.x(), spot.y(), spot.z()), new Shore(spot, water));
             }
         }
-        scanned = end;
-        if (end < spots.size()) return;
-        known = reading;
-        survey = null;
-        sights = new ArrayList<>(nextSights.values());
-        sleeps = new ArrayList<>(nextSleeps.values());
-        shores = new ArrayList<>(nextShores.values());
-        // Idle for want of knowing better (no bed known at night): think again with what it now knows.
-        if (activity == Activity.IDLE) timer = Math.min(timer, 20);
+        return new Area(copy, map, new ArrayList<>(sights.values()), new ArrayList<>(sleeps.values()),
+                new ArrayList<>(shores.values()));
     }
 
     /**
@@ -861,8 +985,10 @@ public final class RestingPuppet extends RemotePlayer {
         double dx = tx - getX(), dz = tz - getZ();
         double distance = Math.sqrt(dx * dx + dz * dz);
         if (distance <= speed) {
-            if (Double.isNaN(Footing.stand(level, next.x(), next.y(), next.z()))) {
+            if (Double.isNaN(Footing.stand(blocks, next.x(), next.y(), next.z()))) {
+                // Built on or dug out since it was read: read again what is around.
                 path = null;
+                surveyAge = Math.max(surveyAge, RESURVEY);
                 return true;
             }
             setPos(tx, ty, tz);
@@ -963,10 +1089,10 @@ public final class RestingPuppet extends RemotePlayer {
      * water just below its feet for {@link #CAST} blocks out, nothing over it. Where the
      * bobber floats, or null.
      */
-    private static @Nullable Vec3 openWater(ClientLevel level, Walkway.Step spot, Direction side) {
+    private static @Nullable Vec3 openWater(BlockCopy copy, Walkway.Step spot, Direction side) {
         for (int k = 1; k <= CAST; k++) {
             BlockPos surface = new BlockPos(spot.x() + side.getStepX() * k, spot.y() - 1, spot.z() + side.getStepZ() * k);
-            if (!level.getFluidState(surface).is(FluidTags.WATER) || !level.getBlockState(surface.above()).isAir()) return null;
+            if (!copy.state(surface).getFluidState().is(FluidTags.WATER) || !copy.state(surface.above()).isAir()) return null;
         }
         return new Vec3(spot.x() + side.getStepX() * CAST + 0.5, spot.y() - 0.1, spot.z() + side.getStepZ() * CAST + 0.5);
     }
@@ -1065,20 +1191,20 @@ public final class RestingPuppet extends RemotePlayer {
             }
         }
         if (activity == Activity.FLY || ++scan % 5 != 0) return;
+        // Nearest first, and a look only where it matters: until it sees one, and at a creeper
+        // about to blow up beside it. A look is a ray through the blocks; the distance is free.
+        List<LivingEntity> around = level.getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(DANGER),
+                e -> e instanceof Enemy && e.isAlive() && !e.isSpectator() && e.distanceToSqr(this) < DANGER * DANGER);
+        around.sort(Comparator.comparingDouble(e -> e.distanceToSqr(this)));
         Entity nearest = null;
-        double best = DANGER * DANGER;
-        AABB around = getBoundingBox().inflate(DANGER);
-        for (Entity entity : level.getEntitiesOfClass(LivingEntity.class, around,
-                e -> e instanceof Enemy && e.isAlive() && !e.isSpectator() && seen(level, e.getEyePosition()))) {
+        for (LivingEntity entity : around) {
             double distance = entity.distanceToSqr(this);
-            if (entity instanceof Creeper creeper && creeper.getSwelling(1f) > 0 && !fuses.contains(creeper)
-                    && distance < BLAST * BLAST) {
-                fuses.add(creeper);
-            }
-            if (distance < best) {
-                best = distance;
-                nearest = entity;
-            }
+            if (nearest != null && distance >= BLAST * BLAST) break;
+            boolean fuse = entity instanceof Creeper creeper && creeper.getSwelling(1f) > 0 && !fuses.contains(creeper)
+                    && distance < BLAST * BLAST;
+            if (nearest != null && !fuse || !seen(level, entity.getEyePosition())) continue;
+            if (fuse) fuses.add((Creeper) entity);
+            if (nearest == null) nearest = entity;
         }
         threat = nearest;
         if (nearest != null) {
@@ -1127,7 +1253,7 @@ public final class RestingPuppet extends RemotePlayer {
     /** A spot within {@code within} blocks, at least {@code keep} from the monster; the farthest. */
     private void away(ClientLevel level, Entity from, int within, double keep) {
         BlockPos at = feet();
-        Walkway.Survey map = Walkway.around((x, y, z) -> Footing.stand(level, x, y, z), at.getX(), at.getY(), at.getZ(),
+        Walkway.Survey map = Walkway.around((x, y, z) -> Footing.stand(blocks, x, y, z), at.getX(), at.getY(), at.getZ(),
                 at.getX(), at.getZ(), within, 120);
         if (map == null) return;
         Walkway.Step best = null;
@@ -1168,16 +1294,16 @@ public final class RestingPuppet extends RemotePlayer {
         vx *= 0.91;
         vz *= 0.91;
         double x = getX(), y = getY(), z = getZ();
-        if (Footing.fits(level, x + vx, y, z, Footing.STANDING)) x += vx;
+        if (Footing.fits(blocks, x + vx, y, z, Footing.STANDING)) x += vx;
         else vx = 0;
-        if (Footing.fits(level, x, y, z + vz, Footing.STANDING)) z += vz;
+        if (Footing.fits(blocks, x, y, z + vz, Footing.STANDING)) z += vz;
         else vz = 0;
         boolean landed = false;
         if (vy > 0) {
-            if (Footing.fits(level, x, y + vy, z, Footing.STANDING)) y += vy;
+            if (Footing.fits(blocks, x, y + vy, z, Footing.STANDING)) y += vy;
             else vy = 0;
         } else {
-            double floor = Footing.floorBelow(level, x, y, z);
+            double floor = Footing.floorBelow(blocks, x, y, z);
             if (y + vy <= floor) {
                 y = floor;
                 landed = true;
@@ -1195,7 +1321,7 @@ public final class RestingPuppet extends RemotePlayer {
         calm = CALM_TICKS;
         if (back == null) return;
         BlockPos at = feet();
-        Walkway.Survey map = Walkway.around((bx, by, bz) -> Footing.stand(level, bx, by, bz), at.getX(), at.getY(),
+        Walkway.Survey map = Walkway.around((bx, by, bz) -> Footing.stand(blocks, bx, by, bz), at.getX(), at.getY(),
                 at.getZ(), at.getX(), at.getZ(), REACH, BUDGET);
         BlockPos target = BlockPos.containing(back.x, back.y + 0.01, back.z);
         Walkway.Step home = map == null ? null : map.reached(target.getX(), target.getY(), target.getZ());
@@ -1338,8 +1464,8 @@ public final class RestingPuppet extends RemotePlayer {
     /** The swirls of a potion keeping it safe: fire resistance in lava or fire, water breathing under water. */
     private void swirls(ClientLevel level) {
         int colour;
-        if (Footing.inFire(level, getX(), getY(), getZ(), Footing.STANDING)) colour = FIRE_RESISTANCE;
-        else if (Footing.underWater(level, getX(), getEyeY(), getZ())) colour = WATER_BREATHING;
+        if (Footing.inFire(blocks, getX(), getY(), getZ(), Footing.STANDING)) colour = FIRE_RESISTANCE;
+        else if (Footing.underWater(blocks, getX(), getEyeY(), getZ())) colour = WATER_BREATHING;
         else return;
         for (int i = 0; i < 2; i++) {
             double x = getX() + (random.nextDouble() - 0.5) * 0.6;
@@ -1371,8 +1497,8 @@ public final class RestingPuppet extends RemotePlayer {
         };
         double x = getX(), y = getY(), z = getZ();
         double target;
-        if (!Footing.fits(level, x, y, z, height)) target = Footing.freeAbove(level, x, y, z, height);
-        else if (!Footing.supported(level, x, y, z)) target = Footing.floorBelow(level, x, y, z);
+        if (!Footing.fits(blocks, x, y, z, height)) target = Footing.freeAbove(blocks, x, y, z, height);
+        else if (!Footing.supported(blocks, x, y, z)) target = Footing.floorBelow(blocks, x, y, z);
         else target = y;
         move(level, x, z, y, target, height, now);
         if (getY() == target) ashore(level);
@@ -1383,7 +1509,7 @@ public final class RestingPuppet extends RemotePlayer {
      * to once it has room and something under it again.
      */
     private void sit(ClientLevel level) {
-        if (!level.hasChunkAt(BlockPos.containing(spot.x(), spot.y(), spot.z()))) {
+        if (!Footing.loaded(level, spot.x(), spot.z())) {
             placed = false;
             return;
         }
@@ -1400,12 +1526,12 @@ public final class RestingPuppet extends RemotePlayer {
             return;
         }
         double target;
-        if (Footing.fits(level, x, home, z, height) && Footing.supported(level, x, home, z)) {
+        if (Footing.fits(blocks, x, home, z, height) && Footing.supported(blocks, x, home, z)) {
             target = home;
-        } else if (!Footing.fits(level, x, y, z, height)) {
-            target = Footing.freeAbove(level, x, y, z, height);
-        } else if (!Footing.supported(level, x, y, z)) {
-            target = Footing.floorBelow(level, x, y, z);
+        } else if (!Footing.fits(blocks, x, y, z, height)) {
+            target = Footing.freeAbove(blocks, x, y, z, height);
+        } else if (!Footing.supported(blocks, x, y, z)) {
+            target = Footing.floorBelow(blocks, x, y, z);
         } else {
             target = y;
         }
@@ -1417,7 +1543,7 @@ public final class RestingPuppet extends RemotePlayer {
             fall = 0;
             return;
         }
-        if (now || !Footing.clear(level, x, y, target, z, height)) {
+        if (now || !Footing.clear(blocks, x, y, target, z, height)) {
             // Nothing to see on the way: through blocks, it simply reappears.
             fall = 0;
             snap(x, target, z);

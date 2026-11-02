@@ -1,9 +1,12 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
+#include <livinghorizon:far_depth.glsl>
+
 // Distant Horizons' depth, turned into the game's: back to a distance in front of the camera
 // through Distant Horizons' projection, then forward through the game's. Drawn where it is
 // nearer than what is there, before the entities, so that its hills hide the distant mobs.
+// The same as FarDepth's OpenGL program (compileDh), both from far_depth.glsl.
 
 uniform sampler2D DhDepth;
 
@@ -23,17 +26,9 @@ layout(location = 0) in vec2 texCoord;
 void main() {
     float d = texture(DhDepth, texCoord).r;
     if (d == Dh.w) discard;
-    float ndc = Dh.z > 0.5 ? d * 2.0 - 1.0 : d;
-    float z;
-    if (Exact.x > 0.5) {
-        vec4 p = DhInverse * vec4(texCoord * 2.0 - 1.0, ndc, 1.0);
-        z = -1.0 / p.w;
-    } else {
-        z = -Dh.y / (ndc + Dh.x);
-    }
+    float z = lhDhViewZ(d, Dh, Exact.x > 0.5, DhInverse, texCoord);
     if (!(z < 0.0)) discard;
-    float depth = (Game.x * z + Game.y) / -z;
-    if (Game.w < 0.5) depth = depth * 0.5 + 0.5;
+    float depth = lhGameDepth(z, Game.xy, Game.w > 0.5);
     if (Game.z > 0.5 ? !(depth > 0.0) : !(depth < 1.0)) discard;
     gl_FragDepth = clamp(depth, 0.0, 1.0);
 }

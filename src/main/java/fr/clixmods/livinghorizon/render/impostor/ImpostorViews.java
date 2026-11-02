@@ -11,6 +11,12 @@ public final class ImpostorViews {
     /** Pictures per sheet: the figure seen from every 45 degrees round it. */
     public static final int VIEWS = 8;
 
+    /**
+     * Heights a flying mob (a phantom, a ghast) is pictured from, in degrees the camera looks
+     * down on it from: well below, below, level, above. One sheet for each, as for a bird.
+     */
+    public static final float[] HEIGHTS = {-60f, -30f, 0f, 30f};
+
     /** Pixels along one side of a tile. */
     public static final int TILE = 64;
 
@@ -63,13 +69,20 @@ public final class ImpostorViews {
         return Math.max(height * 1.5, width * 1.9);
     }
 
-    /** Left edge of a picture in its sheet, as a fraction of the sheet's width. */
-    public static float u0(int view) {
-        return view / (float) VIEWS;
+    /** Which of {@link #HEIGHTS} is nearest to a camera looking down on a figure from {@code elevation} degrees. */
+    public static int height(double elevation) {
+        int best = 0;
+        for (int i = 1; i < HEIGHTS.length; i++) {
+            if (Math.abs(HEIGHTS[i] - elevation) < Math.abs(HEIGHTS[best] - elevation)) best = i;
+        }
+        return best;
     }
 
-    /** Right edge of a picture in its sheet. */
-    public static float u1(int view) {
-        return (view + 1) / (float) VIEWS;
+    /**
+     * The yaw a figure's body is turned to for picture {@code view}, in the game's degrees: 180
+     * for picture 0, seen from in front by a camera looking along +z, then a step less for each.
+     */
+    public static float facing(int view) {
+        return 180f - view * (360f / VIEWS);
     }
 }

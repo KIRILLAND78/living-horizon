@@ -21,12 +21,14 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Easter egg 5: now and then, by day, a dark figure stands on the highest summit in sight,
+ * Easter egg 5: from the second or third day the player lives in a world, once a day, at any
+ * moment of it, by day or by night, a dark figure stands on the highest summit in sight,
  * anywhere around the player up to a few hundred blocks off, against the sky, turns to them and
- * waves - and is gone the moment they look at it. Only on this screen.
+ * waves - and is gone the moment they look at it. Once looked at it does not come back for one
+ * to three days; until then it comes back every day ({@link Daily}). Only on this screen.
  *
  * <p>The summit is the highest of rings of columns around the player, read in the loaded
- * chunks or the far world ({@link Columns}), in sight ({@link Sight}); by chance it must
+ * chunks or the far world ({@link Columns}), in sight ({@link Sight}); on its day it must
  * rise well above the player and the sea. The figure is drawn of boxes ({@link BoxFigure}).
  *
  * <p>Secret: nothing a player reads (settings, README, changelog) says what it is.
@@ -36,30 +38,35 @@ public final class Waver {
             0.75f, 0.25f, 0.75f, 0.5f, 0.25f, 0.72f, 0.25f, 0.5f, 0f, 0x16161A, 0x16161A);
     /**
      * Ticks it stands still before it waves, looked at or not; ticks it waves at most, until
-     * it is looked at, by chance and when called; ticks a search may take.
+     * it is looked at, on its day and when called; ticks a search may take.
      */
     private static final int STAND = 30, PATIENCE = 600, CALLED_PATIENCE = 1800, SEARCH = 400;
     /** How far off it may stand, in blocks across. */
     private static final double MIN = 60, MAX = 400;
-    /** Blocks a summit found by chance rises above the player's feet, and above the sea. */
+    /** Blocks a summit found on its day rises above the player's feet, and above the sea. */
     private static final double ABOVE_PLAYER = 12, ABOVE_SEA = 20;
     /** Blocks across: it goes if the player comes this close. */
     private static final double NEAR = 24;
 
-    private final EggCalendar calendar;
+    private final Daily daily;
     private final RandomSource random = RandomSource.create();
     /** Counts the searches: a read that comes back for one given up or replaced is dropped. */
     private final AtomicInteger generation = new AtomicInteger();
     private boolean searching, active, called;
     private double x, y, z;
     private float yaw, yawO;
-    private int age, idle, searchAge;
+    private int age, searchAge;
 
     Waver(EggCalendar calendar) {
-        this.calendar = calendar;
+        this.daily = new Daily(calendar, 5);
     }
 
-    /** On its way or under way: no other easter egg starts meanwhile. */
+    /** For the game tests: it comes in a second, if today is one of its days. */
+    public void soon() {
+        daily.soon();
+    }
+
+    /** On its way or under way. */
     public boolean busy() {
         return searching || active;
     }
@@ -70,7 +77,7 @@ public final class Waver {
     }
 
     /**
-     * Looks for the summit in sight, and stands there once it is read: by chance anywhere
+     * Looks for the summit in sight, and stands there once it is read: on its day anywhere
      * around, or because the player asked ({@code called}: the highest point in front of
      * them, however low; called again, it starts over). False if the easter eggs are off.
      */
@@ -133,7 +140,7 @@ public final class Waver {
 
     private void begin(Columns.Column top, LocalPlayer self) {
         EggLog.came(5, top.x(), top.y(), top.z(), self, called);
-        if (!called) calendar.shown(5);
+        if (!called) daily.came();
         x = top.x();
         y = top.y();
         z = top.z();
@@ -147,18 +154,14 @@ public final class Waver {
         active = searching = false;
     }
 
-    /** {@code quiet}: no other easter egg under way, so this one may start by chance. */
-    public void tick(ClientLevel level, LocalPlayer self, boolean enabled, boolean quiet) {
+    public void tick(ClientLevel level, LocalPlayer self, boolean enabled) {
         if (!enabled) {
             if (busy()) clear();
             return;
         }
         if (!active && !searching) {
-            // Rare, by day: about once in two hours of it, where there are mountains.
-            if (++idle > 6000 && quiet && level.isBrightOutside() && random.nextInt(144000) == 0) {
-                idle = 0;
-                summon(level, self, false);
-            }
+            // Where there are mountains: tried again in a while where there are none.
+            if (daily.due()) summon(level, self, false);
             return;
         }
         if (searching) {
@@ -170,6 +173,7 @@ public final class Waver {
         yaw = facing(self);
         // Looked at once it stands there a moment: gone at once.
         boolean looked = age > STAND && Herobrine.lookedAt(level, self, new Vec3(x, y + 1.2, z));
+        if (looked && !called) daily.seen();
         if (looked || age > (called ? CALLED_PATIENCE : PATIENCE) || Math.hypot(self.getX() - x, self.getZ() - z) < NEAR
                 || !Columns.drawn(level, self, x, z)) {
             clear();

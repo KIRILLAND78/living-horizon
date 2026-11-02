@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.platform;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -120,6 +121,19 @@ public final class Events {
     }
 
     /** Every client tick, after the game has done its own. */
+    /**
+     * The game's overlay drawn, over the world and under the screens, where it has no
+     * {@code Gui.render} of its own: Forge before 1.20.6 draws it with {@code ForgeGui}, whose
+     * {@code render} replaces the game's without calling it, so {@code GuiMixin} never runs there.
+     * Elsewhere {@code GuiMixin} draws it, and this does nothing.
+     */
+    public static void hud(Consumer<GuiGraphics> listener) {
+        //? if forge && <1.20.6 {
+        /*MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.client.event.RenderGuiEvent.Post event) ->
+                listener.accept(event.getGuiGraphics()));
+        *///?}
+    }
+
     public static void tick(Consumer<Minecraft> listener) {
         //? if fabric || quilt {
         ClientTickEvents.END_CLIENT_TICK.register(listener::accept);

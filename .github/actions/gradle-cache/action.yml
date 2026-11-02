@@ -1,0 +1,51 @@
+name: Restore the Gradle cache
+description: >-
+  Restores what the cache workflow saved on develop for one Stonecutter node: the shared
+  downloads, and for a Forge or NeoForge node its prepared Minecraft. Read only; keys and
+  paths come from .github/scripts/gradle-cache.py.
+
+inputs:
+  node:
+    description: The Stonecutter node, or "shared" for the shared entry alone.
+    required: true
+
+outputs:
+  shared-key:
+    description: The shared entry's exact key.
+    value: ${{ steps.keys.outputs.shared-key }}
+  shared-paths:
+    description: What the shared entry holds.
+    value: ${{ steps.keys.outputs.shared-paths }}
+  node-key:
+    description: The node's exact key, empty when the node has no entry of its own.
+    value: ${{ steps.keys.outputs.node-key }}
+  node-paths:
+    description: What the node's entry holds.
+    value: ${{ steps.keys.outputs.node-paths }}
+
+runs:
+  using: composite
+  steps:
+    - name: Work out the cache keys
+      id: keys
+      shell: bash
+      env:
+        NODE: ${{ inputs.node }}
+      run: python3 .github/scripts/gradle-cache.py "$NODE" >> "$GITHUB_OUTPUT"
+
+    # An older entry is taken when the exact one is missing: what still matches is used,
+    # the rest is downloaded or built again.
+    - name: Restore the shared downloads
+      uses: actions/cache/restore@v4
+      with:
+        key: ${{ steps.keys.outputs.shared-key }}
+        restore-keys: ${{ steps.keys.outputs.shared-restore }}
+        path: ${{ steps.keys.outputs.shared-paths }}
+
+    - name: Restore the prepared Minecraft
+      if: steps.keys.outputs.node-key != ''
+      uses: actions/cache/restore@v4
+      with:
+        key: ${{ steps.keys.outputs.node-key }}
+        restore-keys: ${{ steps.keys.outputs.node-restore }}
+        path: ${{ steps.keys.outputs.node-paths }}

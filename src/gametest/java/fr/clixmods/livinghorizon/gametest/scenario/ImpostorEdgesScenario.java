@@ -29,6 +29,7 @@ public final class ImpostorEdgesScenario implements Scenario {
         context.runOnClient(minecraft -> minecraft.options.entityDistanceScaling().set(0.5));
         Scene.configure(context, config -> {
             config.impostorDistance = 32;
+            config.impostorPixels = 0;
             config.hideOccludedMobs = false;
         });
         try (TestSingleplayerContext world = Scene.flatWorld(context)) {

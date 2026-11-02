@@ -103,6 +103,8 @@ extra["lhMixins"] = buildList {
     add("DhClientApiMixin")
     add("EntityMixin")
     add("EntityRenderDispatcherMixin")
+    // The light of the figures the mod extracts, where the client has none.
+    add("EntityRendererLightMixin")
     // The far plane: the game renderer's before 26.1, the camera's from there.
     add(if (atLeast("26.1")) "CameraMixin" else "GameRendererMixin")
     // From 26.1 the projection with view bobbing in it only goes to the GPU: read on its way.
@@ -116,12 +118,16 @@ extra["lhMixins"] = buildList {
     // The GUI pass the impostors are baked in came in 1.21.6. Before, they are baked into a
     // target of our own that stands in for the game's main one and its item target.
     if (atLeast("1.21.6")) {
+        // Voxy's fog on the entities: the overworld's own fog past the render distance came in 1.21.6.
+        add("FogRendererMixin")
         add("GuiRendererMixin")
     } else {
         add("LevelRendererTargetMixin")
         add("MinecraftMixin")
     }
     add("LevelRendererMixin")
+    // The top of the game's loop, once a frame: the benchmark's frame times.
+    add("MinecraftFrameMixin")
     // Before 1.21.2 a figure sits only when it rides: the render states carry the pose after.
     if (!atLeast("1.21.2")) add("LivingEntityRendererMixin")
     // The world's extraction left the level renderer for a class of its own in 26.2.
@@ -129,6 +135,8 @@ extra["lhMixins"] = buildList {
     add("ModelPartMixin")
     // Before 1.20.5 the mod's screens have a list of their own, which places its rows itself.
     if (atLeast("1.20.5")) add("OptionsListEntryMixin")
+    // "Create" on the world creation screen, for the benchmark's world.
+    add("CreateWorldScreenAccessor")
     add("TextureManagerMixin")
     add("VoxyRenderSystemMixin")
 }.sorted().joinToString(",\n    ") { "\"$it\"" }

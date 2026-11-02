@@ -140,7 +140,7 @@ tasks {
         inputs.property("java", requiredJava.majorVersion)
         inputs.property("mixins", project.extra["lhMixins"] as String)
         inputs.property("intermediate_mappings", props.getValue("intermediate_mappings"))
-        filesMatching(listOf("quilt.mod.json", "livinghorizon.mixins.json")) { expand(props) }
+        filesMatching(listOf("quilt.mod.json", "livinghorizon.mixins.json", "assets/livinghorizon/version.txt")) { expand(props) }
         // The other loaders' metadata has nothing to say to Quilt.
         exclude("fabric.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml")
         // The access widener is the generated copy, not the source file.
@@ -152,6 +152,8 @@ tasks {
         val id = project.property("mod.id")
         inputs.property("mod_id", id)
         from(rootProject.file("LICENSE")) { rename { "${it}_$id" } }
+        // The changelog the game shows in its own screen.
+        from(rootProject.file("changelog")) { include("en.md", "fr.md"); into("assets/livinghorizon/changelog") }
     }
 
     register<Copy>("buildAndCollect") {

@@ -3,7 +3,7 @@
 mod.id = "livinghorizon"
 mod.name = "Living Horizon"
 mod.group = "fr.clixmods.livinghorizon"
-mod.version = "0.10.0"
+mod.version = "0.15.0"
 
 deps.fabric_loader = "0.19.3"
 # What fabric.mod.json asks of players. Fabric API sets the real floor on each game
@@ -66,8 +66,6 @@ deps.modmenu = "10.0.0"
 ["1.21.1"]
 mod.mc_compat = ">=1.21 <=1.21.1"
 mod.mc_releases = ["1.21", "1.21.1"]
-# Starts in the game, but not yet seen drawing in a world.
-mod.release_type = "alpha"
 
 deps.fabric_api = "0.116.17+1.21.1"
 # Compile only: the "Configure" button in Mod Menu. The mod runs without it.
@@ -176,8 +174,6 @@ deps.neoforge_compat = "[20.6.141,)"
 ["1.21.1-neoforge"]
 mod.mc_compat = "[1.21.1]"
 mod.mc_releases = ["1.21.1"]
-# Starts in the game, but not yet seen drawing in a world.
-mod.release_type = "alpha"
 
 deps.neoforge = "21.1.203"
 deps.neoforge_compat = "[21.1.203,)"
@@ -338,8 +334,6 @@ loomx.loom_unobf_plugin = "org.quiltmc.loom"
 ["1.21.1-quilt"]
 mod.mc_compat = '["=1.21", "=1.21.1"]'
 mod.mc_releases = ["1.21", "1.21.1"]
-# Starts in the game, but not yet seen drawing in a world.
-mod.release_type = "alpha"
 
 deps.fabric_api = "0.116.17+1.21.1"
 deps.modmenu = "11.0.5"
@@ -502,8 +496,6 @@ deps.forge_compat = "[50.2.0,)"
 ["1.21.1-forge"]
 mod.mc_compat = "[1.21.1]"
 mod.mc_releases = ["1.21.1"]
-# Starts in the game, but not yet seen drawing in a world.
-mod.release_type = "alpha"
 
 deps.forge = "52.1.0"
 deps.forge_compat = "[52.1.0,)"

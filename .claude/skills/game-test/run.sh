@@ -3,9 +3,10 @@
 # src/gametest/java, under a virtual display. Prints the scenario log lines and the
 # screenshots taken. See SKILL.md next to this file.
 #
-#   .claude/skills/game-test/run.sh [scenario[,scenario...]|all] [--sodium] [--shaders <pack folder>]
+#   .claude/skills/game-test/run.sh [scenario[,scenario...]|all] [--sodium] [--shaders <pack folder>] [--with <project>]...
 #
 # --shaders loads Sodium and Iris and turns the shader pack on (an unpacked folder).
+# --with loads another mod, by its Modrinth project (immersive-aircraft), for this run only.
 #
 # Runs the active version, 1.21.11. LH_NODE=26.1.x runs another Fabric target (its name in
 # stonecutter.properties.toml); the scenarios are the same on every one.
@@ -18,10 +19,12 @@ SCENARIO="${1:-all}"
 shift || true
 WITH_SODIUM=0
 SHADERS=""
+WITH=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --sodium) WITH_SODIUM=1 ;;
         --shaders) WITH_SODIUM=1; SHADERS="$(cd "$2" && pwd)" || { echo "game-test: no shader pack folder $2"; exit 2; }; shift ;;
+        --with) WITH+=("$2"); shift ;;
     esac
     shift
 done
@@ -68,6 +71,7 @@ print([f["url"] for f in chosen["files"] if f["primary"]][0] if chosen else "")'
 }
 
 MOD_ARGS=()
+MOD_DIRS=()
 if [ "$WITH_SODIUM" = 1 ]; then
     MODS="$ROOT/build/game-test-mods/$GAME_VERSION"
     mkdir -p "$MODS"
@@ -78,8 +82,17 @@ if [ "$WITH_SODIUM" = 1 ]; then
     else
         rm -f "$MODS/iris.jar"
     fi
-    MOD_ARGS+=("-Plh.mods=$MODS")
+    MOD_DIRS+=("$MODS")
 fi
+# Each other mod in a folder of its own, so that it is loaded only by the runs that ask for it.
+for project in "${WITH[@]}"; do
+    MODS="$ROOT/build/game-test-mods/$GAME_VERSION-with/$project"
+    mkdir -p "$MODS"
+    download "$project"
+    MOD_DIRS+=("$MODS")
+done
+# Fabric Loader reads several folders, separated as in a class path.
+[ ${#MOD_DIRS[@]} -gt 0 ] && MOD_ARGS+=("-Plh.mods=$(IFS=:; echo "${MOD_DIRS[*]}")")
 
 command -v xvfb-run >/dev/null || { echo "game-test: xvfb-run is missing (apt-get install xvfb)"; exit 2; }
 

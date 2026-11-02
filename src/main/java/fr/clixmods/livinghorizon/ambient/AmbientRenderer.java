@@ -1,5 +1,6 @@
 package fr.clixmods.livinghorizon.ambient;
 
+import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.render.DepthFar;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -9,6 +10,7 @@ import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorAtlas;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorRenderer;
+import fr.clixmods.livinghorizon.render.impostor.ImpostorThreshold;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorViews;
 import fr.clixmods.livinghorizon.track.FarPlayerTracker;
 import net.minecraft.client.Minecraft;
@@ -20,6 +22,8 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Arrays;
 
 /**
  * Draws the pixel birds, from {@code textures/misc/birds.png}: a 64 by 32 sheet.
@@ -54,10 +58,20 @@ public final class AmbientRenderer {
     }
 
     public static void submit(PoseStack pose, Vec3 camera, Sink collector) {
+        long started = Profile.begin(Profile.Section.SUBMIT_BIRDS);
+        try {
+            submitBirds(pose, camera, collector);
+        } finally {
+            Profile.end(Profile.Section.SUBMIT_BIRDS, started);
+        }
+    }
+
+    private static void submitBirds(PoseStack pose, Vec3 camera, Sink collector) {
         FarConfig config = FarConfig.get();
         Minecraft minecraft = Minecraft.getInstance();
         float partial = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true);
         double reach = DepthFar.of(minecraft) * 0.95;
+        double pixelsPerRadian = DepthFar.pixelsPerRadian(minecraft);
 
         if (config.easterEggs) {
             Ambience ambience = FarPlayerTracker.get().ambience();
@@ -68,13 +82,18 @@ public final class AmbientRenderer {
             ambience.bigfoot().submit(pose, camera, collector, partial);
             ambience.ghosts().submit(pose, camera, collector, partial);
             ambience.ghostBoat().submit(pose, camera, collector, partial);
+            ambience.ghostVillager().submit(pose, camera, collector, partial);
+            for (Egg egg : ambience.more()) egg.submit(pose, camera, collector, partial);
         }
         boolean models = config.birdModels();
+        Arrays.fill(ASKED, false);
         for (Ambience.Flyer bird : FarPlayerTracker.get().ambience().flyers()) {
             if (!config.skyBirds || bird.kind != Ambience.Kind.SILHOUETTE) continue;
             double x = Mth.lerp(partial, bird.xo, bird.x) - camera.x;
             double y = Mth.lerp(partial, bird.yo, bird.y) - camera.y;
             double z = Mth.lerp(partial, bird.zo, bird.z) - camera.z;
+            // Behind the camera, or less than a pixel: the mobs' own tests.
+            if (GhostRenderer.outOfSight(x, y, z, bird.span * bird.scale)) continue;
             double distance = Math.sqrt(x * x + y * y + z * z);
             GhostRenderer.noteDistance(distance);
             // Past the far plane: closer and smaller in proportion, the same on screen.
@@ -83,7 +102,7 @@ public final class AmbientRenderer {
             float wingDegrees = Mth.lerp(partial, bird.wingO, bird.wing);
             int tint = bird.shade;
             int species = bird.species.ordinal();
-            if (models && impostor(bird, x, y, z, distance, pull, yaw, wingDegrees, config)) continue;
+            if (models && impostor(bird, x, y, z, distance, pull, yaw, wingDegrees, config, pixelsPerRadian)) continue;
             if (models) bird.view = -1;
 
             pose.pushPose();
@@ -114,32 +133,38 @@ public final class AmbientRenderer {
         }
     }
 
-    /** A bird must come this much inside the impostor distance to get its model back. */
-    private static final double IMPOSTOR_RETURN = 0.95;
+    /** The species and poses whose pictures were asked for this frame: two per species, flying then perched. */
+    private static final boolean[] ASKED = new boolean[Ambience.Species.values().length * 2];
 
     /**
      * Draws a 3D bird as a picture of itself ({@link BirdFigure}) when it is past the impostor
-     * distance and its pictures are baked; they are asked for otherwise, every height and
-     * beat of its pose at once, and the model is drawn meanwhile. Like a mob, a bird keeps its
-     * picture until it is a little inside the distance, and until it has clearly turned to the
-     * next view.
+     * distance or smaller on screen than the impostor size ({@link ImpostorThreshold}), and its
+     * pictures are baked; they are asked for otherwise, every height and beat of its pose at
+     * once, and the model is drawn meanwhile. Like a mob, a bird keeps its picture until it is
+     * a little inside both, and until it has clearly turned to the next view.
      */
     private static boolean impostor(Ambience.Flyer bird, double x, double y, double z, double distance, double pull,
-                                    float yaw, float wingDegrees, FarConfig config) {
-        if (!ImpostorAtlas.usable()) return false;
-        double from = bird.view < 0 ? config.impostorDistance : config.impostorDistance * IMPOSTOR_RETURN;
-        if (distance <= from) return false;
+                                    float yaw, float wingDegrees, FarConfig config, double pixelsPerRadian) {
+        // Birds are creatures: pictured under Simplified Mobs.
+        if (!ImpostorAtlas.usable() || !config.impostors) return false;
+        double apparent = distance < 1e-3 ? Double.MAX_VALUE : bird.span * bird.scale / distance * pixelsPerRadian;
+        if (!ImpostorThreshold.pictured(distance, apparent, bird.view >= 0, config.impostorDistance, config.impostorPixels)) {
+            return false;
+        }
         // Degrees the camera looks down on the bird from.
         double elevation = Math.toDegrees(Math.atan2(-y, Math.sqrt(x * x + z * z)));
-        BirdFigure figure = BirdFigure.of(bird.species, bird.perched, wingDegrees, elevation);
-        ImpostorAtlas.Sheet sheet = ImpostorAtlas.sheet(figure.key());
+        ImpostorAtlas.Sheet sheet = ImpostorAtlas.sheet(BirdFigure.keyOf(bird.species, bird.perched, wingDegrees, elevation));
         if (sheet == null) {
-            for (BirdFigure each : BirdFigure.all(bird.species, bird.perched)) ImpostorAtlas.request(each.key(), each);
+            int pose = bird.species.ordinal() * 2 + (bird.perched ? 1 : 0);
+            if (!ASKED[pose]) {
+                ASKED[pose] = true;
+                for (BirdFigure each : BirdFigure.all(bird.species, bird.perched)) ImpostorAtlas.request(each.key(), each);
+            }
             return false;
         }
         bird.view = ImpostorViews.view(yaw, -x, -z, bird.view);
-        ImpostorRenderer.add(new ImpostorRenderer.Billboard(x * pull, y * pull, z * pull,
-                sheet.worldSize() * bird.span * bird.scale * pull, sheet, bird.view, LIGHT, 0, true));
+        ImpostorRenderer.add(x * pull, y * pull, z * pull,
+                sheet.worldSize() * bird.span * bird.scale * pull, sheet, bird.view, LIGHT, 0, true);
         return true;
     }
 

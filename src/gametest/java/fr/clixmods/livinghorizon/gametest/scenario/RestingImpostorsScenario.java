@@ -4,6 +4,7 @@ import fr.clixmods.livinghorizon.gametest.Scenario;
 import fr.clixmods.livinghorizon.gametest.Scene;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorAtlas;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorKey;
+import fr.clixmods.livinghorizon.render.impostor.ImpostorViews;
 import fr.clixmods.livinghorizon.track.FarPlayerTracker;
 import fr.clixmods.livinghorizon.track.RestingPlayers;
 import fr.clixmods.livinghorizon.track.RestingPuppet;
@@ -19,7 +20,8 @@ import net.minecraft.world.phys.Vec3;
  * Players who logged off, far away, are pictures like players online: test players 150
  * blocks off, past the impostor distance. One on foot gets a picture of its own seated
  * ({@code offlineLife} off) and standing (on its loop, by day and still at night); one on a horse,
- * one in a boat and one in a minecart a picture each of both together. The impostor page is shown last, to see every posture.
+ * one in a boat and one in a minecart a picture each of both together, the last two from the
+ * heights their vehicle is pictured from. The impostor page is shown last, to see every posture.
  */
 public final class RestingImpostorsScenario implements Scenario {
     /** The flat world's grass is the block below this one. */
@@ -113,7 +115,15 @@ public final class RestingImpostorsScenario implements Scenario {
                 float facing = mount instanceof LivingEntity horse ? horse.yBodyRot : mount.getYRot();
                 Vec3 seat = rider.position().subtract(mount.position()).yRot((float) Math.toRadians(facing));
                 ImpostorKey key = ImpostorKey.riding(rider, mount, seat, Mth.wrapDegrees(rider.yBodyRot - facing));
-                return ImpostorAtlas.sheet(key) != null ? null : "no picture yet (waiting " + ImpostorAtlas.waiting() + ")";
+                // On a boat or a minecart, pictured from the heights the vehicle is; on a horse, level with it.
+                if (mount instanceof LivingEntity) {
+                    return ImpostorAtlas.sheet(key) != null ? null : "no picture yet (waiting " + ImpostorAtlas.waiting() + ")";
+                }
+                if (ImpostorAtlas.sheet(key) != null) return "pictured level with it, not from the vehicle's heights";
+                for (int height = 0; height < ImpostorViews.HEIGHTS.length; height++) {
+                    if (ImpostorAtlas.sheet(ImpostorKey.seenFrom(key, height)) != null) return null;
+                }
+                return "no picture from a height yet (waiting " + ImpostorAtlas.waiting() + ")";
             });
             if (why == null) break;
             context.waitTicks(10);
@@ -134,7 +144,7 @@ public final class RestingImpostorsScenario implements Scenario {
                 RestingPuppet puppet = puppet(minecraft, name);
                 if (puppet.look() != look) return "look " + puppet.look();
                 ImpostorKey key = ImpostorKey.of(puppet);
-                if (ImpostorKey.posture(key) != posture) return "posture " + ImpostorKey.posture(key);
+                if (key.posture() != posture) return "posture " + key.posture();
                 return ImpostorAtlas.sheet(key) != null ? null : "no picture yet (waiting " + ImpostorAtlas.waiting() + ")";
             });
             if (why == null) break;

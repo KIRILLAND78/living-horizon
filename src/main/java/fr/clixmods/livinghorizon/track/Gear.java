@@ -37,6 +37,13 @@ public final class Gear {
         return gear;
     }
 
+    /** Wearing {@code stack} in {@code slot} and nothing else: for test players. */
+    public static List<String> only(EquipmentSlot slot, ItemStack stack, RegistryAccess registries) {
+        List<String> gear = new ArrayList<>(SLOTS.size());
+        for (EquipmentSlot each : SLOTS) gear.add(each == slot ? save(stack, registries) : "");
+        return gear;
+    }
+
     /** Whether nothing is worn nor held. */
     public static boolean empty(@Nullable List<String> gear) {
         if (gear == null) return true;

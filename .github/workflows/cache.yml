@@ -1,0 +1,140 @@
+name: cache
+
+# Fills the Gradle cache that the pull request builds and the release read: the shared
+# downloads, and the prepared Minecraft of each Forge and NeoForge node
+# (.github/scripts/gradle-cache.py says what and why). Nothing else writes it.
+#
+# It runs on develop because GitHub lets a pull request read the caches of its base
+# branch; what a pull request saved itself only served that pull request again, and
+# fifty-odd entries of 4 GB evicted each other from the 10 GB a repository gets. It runs
+# when what decides the entries changes, and by hand (from develop) when they were
+# evicted: GitHub drops an entry nobody read for seven days. An entry already saved
+# under its exact key is left as it is, so a run where nothing changed ends in seconds.
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - stonecutter.properties.toml
+      - '*.gradle.kts'
+      - gradle/**
+      - src/main/resources/livinghorizon.accesswidener
+      - .github/actions/gradle-cache/**
+      - .github/scripts/gradle-cache.py
+      - .github/workflows/cache.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push supersedes the run in progress: its keys are the ones builds will ask for.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  entries:
+    runs-on: ubuntu-latest
+    outputs:
+      entries: ${{ steps.entries.outputs.entries }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List the entries
+        # The shared one, then every Forge and NeoForge node of stonecutter.properties.toml.
+        id: entries
+        run: |
+          set -euo pipefail
+          entries=$(python3 .github/scripts/release-targets.py | python3 -c '
+          import json, sys
+          nodes = [t["node"] for t in json.load(sys.stdin) if t["loader"] in ("forge", "neoforge")]
+          print(json.dumps(["shared"] + nodes))')
+          echo "entries=${entries}" >> "$GITHUB_OUTPUT"
+
+  fill:
+    needs: entries
+    strategy:
+      fail-fast: false
+      matrix:
+        entry: ${{ fromJSON(needs.entries.outputs.entries) }}
+    name: fill ${{ matrix.entry }}
+    runs-on: ubuntu-latest
+    # As in build.yml: three attempts of 25 minutes at most, then the job is stopped.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Work out the cache keys
+        id: keys
+        env:
+          ENTRY: ${{ matrix.entry }}
+        run: python3 .github/scripts/gradle-cache.py "$ENTRY" >> "$GITHUB_OUTPUT"
+
+      - name: Look for the entry
+        id: lookup
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ matrix.entry == 'shared' && steps.keys.outputs.shared-key || steps.keys.outputs.node-key }}
+          path: ${{ matrix.entry == 'shared' && steps.keys.outputs.shared-paths || steps.keys.outputs.node-paths }}
+          lookup-only: true
+
+      - name: Restore the shared downloads
+        # Saves a node's job from downloading everything; the shared entry itself starts
+        # empty, so that it holds what today's build needs and nothing older.
+        if: steps.lookup.outputs.cache-hit != 'true' && matrix.entry != 'shared'
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ steps.keys.outputs.shared-key }}
+          restore-keys: ${{ steps.keys.outputs.shared-restore }}
+          path: ${{ steps.keys.outputs.shared-paths }}
+
+      - name: Set up JDKs
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # As in build.yml: the last entry runs Gradle itself.
+          java-version: |
+            25
+            17
+            21
+
+      - name: Set up Gradle
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
+
+      - name: Build
+        # The shared entry builds the active version on every loader, tests included, so
+        # that it holds every plugin and the libraries most targets share. A Forge or
+        # NeoForge node only compiles: Minecraft is prepared before its first class.
+        if: steps.lookup.outputs.cache-hit != 'true'
+        env:
+          ENTRY: ${{ matrix.entry }}
+        run: |
+          set -euo pipefail
+          tasks=()
+          if [ "$ENTRY" = shared ]; then
+            active=$(sed -n 's/^ *vcsVersion = "\(.*\)".*/\1/p' settings.gradle.kts)
+            for node in "$active" "$active-quilt" "$active-neoforge" "$active-forge"; do
+              if grep -qxF "[\"$node\"]" stonecutter.properties.toml; then tasks+=(":$node:build"); fi
+            done
+          else
+            tasks=(":$ENTRY:compileJava")
+          fi
+          # A download that fails or hangs is tried again.
+          .github/scripts/gradle.sh "${tasks[@]}"
+          # Nothing may still be writing into the cache while it is saved.
+          ./gradlew --stop
+
+      - name: Save the entry
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ matrix.entry == 'shared' && steps.keys.outputs.shared-key || steps.keys.outputs.node-key }}
+          path: ${{ matrix.entry == 'shared' && steps.keys.outputs.shared-paths || steps.keys.outputs.node-paths }}

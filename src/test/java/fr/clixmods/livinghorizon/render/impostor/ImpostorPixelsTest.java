@@ -2,7 +2,14 @@ package fr.clixmods.livinghorizon.render.impostor;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Arrays;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ImpostorPixelsTest {
@@ -89,5 +96,61 @@ class ImpostorPixelsTest {
         int[] picture = new int[16 * 16];
         picture[4 * 16 + 15] = RED;
         assertEquals(1.6, ImpostorPixels.growth(picture, 16, 2, 4, 1.6), 1e-9);
+    }
+
+    @Test
+    void aSheetHasItsViewsSideBySideTheRightWayUp() {
+        // Two views of 4 pixels, read back bottom row first: a red bottom row in the first,
+        // a red top row in the second.
+        int[] first = new int[4 * 4], second = new int[4 * 4];
+        for (int x = 0; x < 4; x++) {
+            first[x] = RED;
+            second[3 * 4 + x] = RED;
+        }
+        int[][] levels = ImpostorPixels.sheet(new int[][]{first, second}, 4, 4, 2);
+        assertEquals(2, levels.length);
+        assertEquals(8 * 4, levels[0].length);
+        assertEquals(4 * 2, levels[1].length);
+        // Top row first: the first view's red row is now at the bottom, the second's at the top.
+        assertEquals(255, alpha(levels[0][3 * 8]));
+        assertEquals(0, alpha(levels[0][0]));
+        assertEquals(255, alpha(levels[0][4]));
+        assertEquals(0, alpha(levels[0][3 * 8 + 4]));
+    }
+
+    @Test
+    void onlyLevelsOfASheetsSizeFit() {
+        int[][] levels = new int[4][];
+        for (int level = 0; level < 4; level++) {
+            int tile = ImpostorViews.TILE >> level;
+            levels[level] = new int[tile * ImpostorViews.VIEWS * tile];
+        }
+        assertTrue(ImpostorPixels.fits(levels, 4));
+        assertFalse(ImpostorPixels.fits(levels, 3));
+        levels[2] = new int[1];
+        assertFalse(ImpostorPixels.fits(levels, 4));
+        levels[2] = null;
+        assertFalse(ImpostorPixels.fits(levels, 4));
+    }
+
+    @Test
+    void picturesDrawnTheSameHashTheSame() {
+        int[] picture = new int[64];
+        Arrays.fill(picture, RED);
+        assertEquals(ImpostorPixels.hash(picture), ImpostorPixels.hash(picture.clone()));
+        int[] other = picture.clone();
+        other[10] = CLEAR;
+        assertNotEquals(ImpostorPixels.hash(picture), ImpostorPixels.hash(other));
+    }
+
+    @Test
+    void viewsReadBackOneAfterTheOther() {
+        ByteBuffer data = ByteBuffer.allocate(2 * 2 * 2 * 4).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < 8; i++) data.putInt(i * 4, i == 5 ? RED : i);
+        // Read in the order the game packs pixels, whatever order the buffer came in.
+        data.order(ByteOrder.BIG_ENDIAN);
+        int[][] views = ImpostorPixels.views(data, 2, 2);
+        assertArrayEquals(new int[]{0, 1, 2, 3}, views[0]);
+        assertArrayEquals(new int[]{4, RED, 6, 7}, views[1]);
     }
 }

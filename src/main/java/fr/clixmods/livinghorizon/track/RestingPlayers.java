@@ -2,12 +2,18 @@ package fr.clixmods.livinghorizon.track;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.JsonStore;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
+import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.platform.Platform;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -30,20 +36,24 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 
 /**
  * Players who logged off, left where they were last.
@@ -59,35 +69,51 @@ public final class RestingPlayers {
     /**
      * Where one player rests. Keyed by name: the server shares names only.
      *
+     * @param dimension the id of the dimension they rest in, {@code minecraft:overworld}
      * @param lastSeen when they logged off, in milliseconds since 1970; 0 when unknown (seen
      *                 by the server alone, or saved by a version that did not keep it)
      * @param mount    what they rode when they logged off, or null
      * @param gear     what they wore and held ({@link Gear}), or null when not known
+     * @param rest     where they really rest when it is not their spot (in the air, in water), or
+     *                 null when it is, or not known yet
      */
     public record Spot(String name, @Nullable UUID id, @Nullable String textures, @Nullable String signature,
-                       int dimension, double x, double y, double z, float yaw, long lastSeen,
-                       @Nullable Mount mount, @Nullable List<String> gear) {
+                       String dimension, double x, double y, double z, float yaw, long lastSeen,
+                       @Nullable Mount mount, @Nullable List<String> gear, @Nullable Rest rest) {
 
-        Spot moved(int dimension, double x, double y, double z, float yaw, @Nullable Mount mount) {
-            return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear);
+        public Spot(String name, @Nullable UUID id, @Nullable String textures, @Nullable String signature,
+                    String dimension, double x, double y, double z, float yaw, long lastSeen,
+                    @Nullable Mount mount, @Nullable List<String> gear) {
+            this(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, null);
+        }
+
+        /** Somewhere else: where they rest there is found again. */
+        Spot moved(String dimension, double x, double y, double z, float yaw, @Nullable Mount mount) {
+            return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, null);
         }
 
         /** The same player, wearing this skin. */
         Spot skinned(Property skin) {
             return new Spot(name, id, Profiles.value(skin), Profiles.signature(skin), dimension, x, y, z, yaw, lastSeen,
-                    mount, gear);
+                    mount, gear, rest);
         }
 
         /** The same player, in this skin and this gear, logged off at {@code lastSeen} when it is known. */
         Spot looking(@Nullable String textures, @Nullable String signature, @Nullable List<String> gear, long lastSeen) {
             return new Spot(name, id, textures, signature, dimension, x, y, z, yaw,
-                    lastSeen != 0 ? lastSeen : this.lastSeen, mount, gear);
+                    lastSeen != 0 ? lastSeen : this.lastSeen, mount, gear, rest);
         }
 
         Spot dressed(GameProfile profile) {
             Property skin = skinOf(profile);
             return new Spot(name, Profiles.id(profile), skin == null ? textures : Profiles.value(skin),
-                    skin == null ? signature : Profiles.signature(skin), dimension, x, y, z, yaw, lastSeen, mount, gear);
+                    skin == null ? signature : Profiles.signature(skin), dimension, x, y, z, yaw, lastSeen, mount, gear,
+                    rest);
+        }
+
+        /** The same player, resting there. */
+        Spot resting(@Nullable Rest rest) {
+            return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, rest);
         }
 
         GameProfile profile() {
@@ -118,10 +144,22 @@ public final class RestingPlayers {
          * (in its frame); null when the game cannot save it on the client.
          */
         static @Nullable Mount of(Entity vehicle, Vec3 seat, float yaw, float riderYaw) {
+            return of(vehicle, seat, yaw, riderYaw, Vec3.ZERO, null);
+        }
+
+        /**
+         * The same, knowing how fast its rider last went ({@code going}, blocks a tick) and
+         * whether it was off the ground ({@code aloft}; null to take the entity's word): what
+         * the client sees of a vehicle the server moves says little of either.
+         */
+        static @Nullable Mount of(Entity vehicle, Vec3 seat, float yaw, float riderYaw, Vec3 going,
+                                  @Nullable Boolean aloft) {
             try {
-                return new Mount(EntityType.getKey(vehicle.getType()).toString(),
-                        EntityNbt.save(vehicle, vehicle.level()).toString(), RestingMount.dataOf(vehicle),
-                        seat.x, seat.y, seat.z, yaw, riderYaw);
+                CompoundTag saved = EntityNbt.save(vehicle, vehicle.level());
+                RestingMount.keepMotion(vehicle, saved, going);
+                if (aloft != null) saved.putBoolean("OnGround", !aloft);
+                return new Mount(EntityType.getKey(vehicle.getType()).toString(), saved.toString(),
+                        RestingMount.dataOf(vehicle), seat.x, seat.y, seat.z, yaw, riderYaw);
             } catch (RuntimeException e) {
                 // A modded mount the game cannot save from the client: they rest on foot.
                 return null;
@@ -141,7 +179,8 @@ public final class RestingPlayers {
 
         /** Whether a mount flies, as a happy ghast does: it stays in the air, at its height. */
         public static boolean flies(Entity vehicle) {
-            return RestingMount.kindOf(vehicle) == RestingMount.Kind.AIR;
+            RestingMount.Kind kind = RestingMount.kindOf(vehicle);
+            return kind == RestingMount.Kind.AIR || kind == RestingMount.Kind.HOVER || kind == RestingMount.Kind.CIRCLE;
         }
 
         /** The same mount, turned to {@code facing}, its rider turned with it. */
@@ -159,26 +198,115 @@ public final class RestingPlayers {
         }
     }
 
+    /**
+     * Where a player who logged off in the air or in water really rests: the ground under them
+     * (they logged off flying, with an elytra or not), the nearest shore, or a boat on the water
+     * when there is none. Found once the blocks around are loaded, or guessed from the far world
+     * before; kept with the spot, so that it holds far away, when the figure is made again,
+     * and in the next game.
+     *
+     * @param boat in a boat, {@code y} being the water's surface
+     */
+    public record Rest(double x, double y, double z, boolean boat) {
+        Vec3 at() {
+            return new Vec3(x, y, z);
+        }
+    }
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    /**
+     * Layout of the file: 2 names each spot's dimension by its id; 1 numbered it (0 overworld, 1
+     * nether, 2 end, 3 any other); 0 is the bare list, before the list came with its version.
+     */
+    static final int VERSION = 2;
+    /** Ticks between two saves of the file, when something changed: five seconds. */
+    private static final int SAVE_EVERY = 100;
+    /** Milliseconds between two skins asked of Mojang, which turns away a client asking too often. */
+    private static final long LOOKUP_GAP = 1500;
 
     private final Map<String, Spot> spots = new LinkedHashMap<>();
-    private final Map<String, RestingPuppet> puppets = new HashMap<>();
+    /**
+     * Each spot's puppet, found by the spot itself, so that drawing a frame works out no key.
+     * A spot replaced or removed takes its puppet with it.
+     */
+    private final Map<Spot, RestingPuppet> puppets = new IdentityHashMap<>();
+    /** Names whose skin was asked for, or will be: each once. */
     private final Set<String> lookups = new HashSet<>();
+    /** Names waiting for their skin to be asked, one at a time ({@link #LOOKUP_GAP}). */
+    private final ArrayDeque<String> queued = new ArrayDeque<>();
+    private boolean lookingUp;
+    private long nextLookup;
+    /** Something changed since the file was written: written at the next {@link #SAVE_EVERY}. */
+    private boolean dirty;
+    private int clock;
     /** Test players placed with {@code /livinghorizon debug offline test}: never written to the file. */
     private final Set<String> fakes = new HashSet<>();
     /** Test players the host of this world placed, which its server shares: among {@link #fakes}. */
     private final Set<String> fromHost = new HashSet<>();
     private @Nullable Path file;
     private @Nullable Spot lookedAt;
+    /** Who is drawn now ({@link #shown}). */
+    private List<Spot> shown = List.of();
+    /** A spot changed or went since {@link #shown} was chosen: brought up to date when next asked. */
+    private boolean shownStale;
     private boolean wasAttacking;
 
     /** Blocks from the eye to the point aimed at on a sleeper: about the reach of a hand. */
     private static final double MAX_AIM = 3;
-    /** Spots of the world the puppets may read per tick, all of them together. */
-    private static final int WORK = 600;
+    /**
+     * Sections of blocks the puppets may copy per tick, all of them together, to look around
+     * off the game's thread: a village of 50 blocks around in a few ticks.
+     */
+    private static final int WORK = 96;
+    /** Which puppet is first served the shared {@link #WORK} this tick. */
+    private int turn;
 
+    /** Every player resting on this server, drawn or not. */
     public Collection<Spot> spots() {
         return Collections.unmodifiableCollection(spots.values());
+    }
+
+    /**
+     * Those drawn: in the camera's dimension, the {@link FarConfig#maxOfflinePlayers} nearest
+     * it, chosen again every tick ({@link #choose}). One woken or cleared since is left out at
+     * once, one moved is there as it is now; drawing a frame otherwise works out nothing.
+     */
+    public List<Spot> shown() {
+        if (shownStale) {
+            shownStale = false;
+            List<Spot> now = new ArrayList<>(shown.size());
+            for (Spot spot : shown) {
+                Spot current = spots.get(key(spot.name()));
+                if (current != null && current.dimension().equals(spot.dimension())) now.add(current);
+            }
+            shown = now;
+        }
+        return shown;
+    }
+
+    /**
+     * The spots of {@code dimension} nearest {@code x, z}, at most {@code most}
+     * ({@link FarConfig#UNLIMITED_OFFLINE} and above: all of them), the nearest first.
+     */
+    static List<Spot> nearest(Collection<Spot> spots, String dimension, double x, double z, int most) {
+        List<Spot> here = new ArrayList<>();
+        for (Spot spot : spots) {
+            if (spot.dimension().equals(dimension)) here.add(spot);
+        }
+        int count = most >= FarConfig.UNLIMITED_OFFLINE ? here.size() : Math.max(0, most);
+        return PlayerLists.nearest(here, count, spot -> Math.hypot(spot.x() - x, spot.z() - z));
+    }
+
+    /** Chooses who is drawn ({@link #shown}); the puppets of the others are let go. */
+    private void choose(ClientLevel level, FarConfig config) {
+        Entity camera = Minecraft.getInstance().getCameraEntity();
+        shown = camera == null ? List.of() : nearest(spots.values(), SharedPositions.dimensionId(level.dimension()),
+                camera.getX(), camera.getZ(), config.maxOfflinePlayers);
+        shownStale = false;
+        Set<Spot> kept = Collections.newSetFromMap(new IdentityHashMap<>());
+        kept.addAll(shown);
+        puppets.keySet().retainAll(kept);
+        if (lookedAt != null && !kept.contains(lookedAt)) lookedAt = null;
     }
 
     // --- Lifecycle ---------------------------------------------------------------------
@@ -187,20 +315,19 @@ public final class RestingPlayers {
         close();
         file = Platform.configDir()
                 .resolve("livinghorizon").resolve("resting").resolve(safe(server) + ".json");
-        if (!Files.exists(file)) return;
-        try (Reader reader = Files.newBufferedReader(file)) {
-            for (Spot spot : read(reader)) spots.put(key(spot.name()), spot);
-        } catch (IOException | RuntimeException e) {
-            LivingHorizonClient.LOGGER.warn("Could not read {}", file, e);
-        }
+        for (Spot spot : read(file)) spots.put(key(spot.name()), spot);
     }
 
     void close() {
-        save();
+        if (dirty) save();
+        // Asked again on the next server, if they rest there too.
+        for (String name : queued) lookups.remove(key(name));
+        queued.clear();
         spots.clear();
         fakes.clear();
         fromHost.clear();
         puppets.clear();
+        shown = List.of();
         lookedAt = null;
         file = null;
     }
@@ -208,13 +335,14 @@ public final class RestingPlayers {
     /** Puppets belong to one level; a new dimension needs new ones. */
     void forgetPuppets() {
         puppets.clear();
+        shown = List.of();
         lookedAt = null;
     }
 
     // --- Who rests where ---------------------------------------------------------------
 
     /** A player who just logged off, at the last place this client knew, on what they rode, in what they wore. */
-    void rest(GameProfile profile, int dimension, double x, double y, double z, float yaw, @Nullable Mount mount,
+    void rest(GameProfile profile, String dimension, double x, double y, double z, float yaw, @Nullable Mount mount,
               @Nullable List<String> gear) {
         Spot spot = new Spot(Profiles.name(profile), Profiles.id(profile), null, null, dimension, x, y, z, yaw,
                 System.currentTimeMillis(), mount, gear).dressed(profile);
@@ -238,13 +366,13 @@ public final class RestingPlayers {
             Mount seen = known != null ? known.mount() : null;
             mount = seen != null && (shared == null || seen.type().equals(shared.type())) ? seen : Mount.of(shared);
         }
-        if (known != null && known.dimension() == report.dimension()
+        boolean there = known != null && known.dimension().equals(report.dimension())
                 && Math.abs(known.x() - report.x()) < 0.05 && Math.abs(known.y() - report.y()) < 0.05
-                && Math.abs(known.z() - report.z()) < 0.05 && (known.mount() == null) == (mount == null)
-                && (look == null || looksLike(known, look))) {
-            return;
-        }
-        Spot spot = known != null
+                && Math.abs(known.z() - report.z()) < 0.05 && (known.mount() == null) == (mount == null);
+        if (there && (look == null || looksLike(known, look))) return;
+        // Where they rest is kept while they stay put: only how they look changed.
+        Spot spot = there ? known
+                : known != null
                 ? known.moved(report.dimension(), report.x(), report.y(), report.z(), report.yaw(), mount)
                 : new Spot(name, null, null, null, report.dimension(), report.x(), report.y(), report.z(), report.yaw(),
                         report.lastSeen(), mount, null);
@@ -270,8 +398,9 @@ public final class RestingPlayers {
             if (kept.contains(name)) continue;
             fromHost.remove(name);
             fakes.remove(name);
-            spots.remove(name);
-            puppets.remove(name);
+            Spot gone = spots.remove(name);
+            shownStale = true;
+            if (gone != null) puppets.remove(gone);
             if (lookedAt != null && key(lookedAt.name()).equals(name)) lookedAt = null;
         }
     }
@@ -296,34 +425,66 @@ public final class RestingPlayers {
     void wake(String name) {
         fromHost.remove(key(name));
         fakes.remove(key(name));
-        if (spots.remove(key(name)) != null) {
-            puppets.remove(key(name));
+        Spot gone = spots.remove(key(name));
+        shownStale = true;
+        if (gone != null) {
+            puppets.remove(gone);
             if (lookedAt != null && key(lookedAt.name()).equals(key(name))) lookedAt = null;
-            save();
+            dirty = true;
         }
     }
 
-    private void put(Spot spot) {
-        spots.put(key(spot.name()), spot);
-        puppets.remove(key(spot.name()));
-        save();
+    /**
+     * Writes the file now and then, when something changed, rather than at each change: a
+     * server full of players who logged off sends them all as one joins. Asks for the next skin.
+     * Every tick, whatever the settings.
+     */
+    void maintain() {
+        if (++clock % SAVE_EVERY == 0 && dirty) save();
+        nextLookUp();
     }
 
-    /** Fetches the skin of a player this client never saw, from Mojang, off the game thread. */
+    private void put(Spot spot) {
+        Spot old = spots.put(key(spot.name()), spot);
+        shownStale = true;
+        if (old != null) puppets.remove(old);
+        if (!fakes.contains(key(spot.name()))) dirty = true;
+    }
+
+    /** Asks for the skin of a player this client never saw, in its turn ({@link #nextLookUp}). */
     private void lookUp(String name) {
-        if (!lookups.add(key(name))) return;
-        Minecraft minecraft = Minecraft.getInstance();
+        if (lookups.add(key(name))) queued.add(name);
+    }
+
+    /**
+     * Fetches the next skin waiting, from Mojang, off the game thread: one at a time, at most
+     * one every {@link #LOOKUP_GAP}, so that a server with hundreds of players who logged off
+     * is not asked for all at once.
+     */
+    private void nextLookUp() {
+        if (lookingUp || queued.isEmpty() || System.currentTimeMillis() < nextLookup) return;
+        String name = queued.poll();
         // The game asks Mojang for a profile by name from 1.21.9; before, skins of players
         // never seen stay the default ones.
         //? if >=1.21.9 {
+        Spot waiting = spots.get(key(name));
+        if (waiting == null || waiting.textures() != null) return;
+        Minecraft minecraft = Minecraft.getInstance();
+        lookingUp = true;
+        nextLookup = System.currentTimeMillis() + LOOKUP_GAP;
         CompletableFuture
                 .supplyAsync(() -> minecraft.services().profileResolver().fetchByName(name), Util.ioPool())
                 .exceptionally(e -> Optional.empty())
-                .thenAcceptAsync(found -> found.ifPresent(profile -> {
-                    Spot spot = spots.get(key(name));
-                    if (spot != null && spot.textures() == null) put(spot.dressed(profile));
-                }), minecraft);
-        //?}
+                .thenAcceptAsync(found -> {
+                    lookingUp = false;
+                    found.ifPresent(profile -> {
+                        Spot spot = spots.get(key(name));
+                        if (spot != null && spot.textures() == null) put(spot.dressed(profile));
+                    });
+                }, minecraft);
+        //?} else {
+        /*queued.clear();
+        *///?}
     }
 
     // --- Test players --------------------------------------------------------------------
@@ -333,7 +494,7 @@ public final class RestingPlayers {
      * {@code skin} and riding {@code mount} if not null: shown like any other until
      * {@link #clearFakes}, but never written to the file, so gone at the next start.
      */
-    public void fake(String name, GameProfile skin, int dimension, double x, double y, double z, float yaw,
+    public void fake(String name, GameProfile skin, String dimension, double x, double y, double z, float yaw,
                      long minutesAgo, @Nullable Mount mount, @Nullable List<String> gear) {
         Property textures = skinOf(skin);
         fakes.add(key(name));
@@ -404,11 +565,20 @@ public final class RestingPlayers {
 
     /** Removes every test player placed here; how many there were. Those the host placed stay theirs. */
     public int clearFakes() {
+        return clearFakes(name -> true);
+    }
+
+    /** Removes the test players placed here whose lower-case name {@code which} accepts; how many there were. */
+    public int clearFakes(Predicate<String> which) {
         int count = 0;
         for (String name : List.copyOf(fakes)) {
-            if (fromHost.contains(name)) continue;
-            if (spots.remove(name) != null) count++;
-            puppets.remove(name);
+            if (fromHost.contains(name) || !which.test(name)) continue;
+            Spot gone = spots.remove(name);
+            shownStale = true;
+            if (gone != null) {
+                count++;
+                puppets.remove(gone);
+            }
             if (lookedAt != null && key(lookedAt.name()).equals(name)) lookedAt = null;
             fakes.remove(name);
         }
@@ -418,18 +588,25 @@ public final class RestingPlayers {
     /** Wakes everyone up: nobody rests anywhere any more, here and in the file. */
     public void forgetAll() {
         spots.clear();
+        shown = List.of();
         fakes.clear();
         fromHost.clear();
         puppets.clear();
         lookedAt = null;
+        dirty = true;
         save();
     }
 
     // --- Puppets -----------------------------------------------------------------------
 
+    /** The puppet of one of {@link #spots()}, made the first time it is asked for. */
     public RestingPuppet puppet(ClientLevel level, Spot spot) {
-        return puppets.computeIfAbsent(key(spot.name()),
-                k -> Puppets.numbered(new RestingPuppet(level, spot, spot.profile())));
+        RestingPuppet puppet = puppets.get(spot);
+        if (puppet != null) return puppet;
+        puppet = Puppets.numbered(new RestingPuppet(level, spot, spot.profile()));
+        // A spot no longer listed (moved, back online) gets one that is not kept: nothing would take it away.
+        if (spots.get(key(spot.name())) == spot) puppets.put(spot, puppet);
+        return puppet;
     }
 
     /** The sleeper under the crosshair, or null. */
@@ -454,12 +631,11 @@ public final class RestingPlayers {
         if (!config.offlineNames && !(struck && config.offlineLife)) return;
         Vec3 eye = camera.getEyePosition();
         Vec3 look = camera.getViewVector(1.0f);
-        int dimension = SharedPositions.dimensionCode(level.dimension());
         double nearest = Double.MAX_VALUE;
         Spot aimed = null;
-        for (Spot spot : spots.values()) {
-            RestingPuppet puppet = puppets.get(key(spot.name()));
-            if (spot.dimension() != dimension || puppet == null) continue;
+        for (Spot spot : shown()) {
+            RestingPuppet puppet = puppets.get(spot);
+            if (puppet == null) continue;
             double distance = eye.distanceTo(puppet.position());
             // The box reaches 1 block round its feet, its top 2 blocks over them.
             if (distance > MAX_AIM + 2.5) continue;
@@ -486,11 +662,12 @@ public final class RestingPlayers {
         if (aimed == null) return;
         if (config.offlineNames) lookedAt = aimed;
         // Hit: it raises its shield. Nothing reaches the server: the hit lands on whatever is behind.
-        if (struck && config.offlineLife) puppets.get(key(aimed.name())).strike(eye);
+        if (struck && config.offlineLife) puppets.get(aimed).strike(eye);
     }
 
     /** Every one of them lives a tick: idle animations, their life around their spot, the ground under them. */
     void tick(ClientLevel level, FarConfig config) {
+        choose(level, config);
         Set<BlockPos> beds = new HashSet<>();
         // Where they fish, or walk to fish: one on a stretch of shore.
         List<Vec3> fishers = new ArrayList<>();
@@ -500,7 +677,8 @@ public final class RestingPlayers {
             if (fishing != null) fishers.add(fishing);
         }
         boolean night = !level.isBrightOutside();
-        // Spots read per tick by all of them together, looking around and for their way.
+        // Sections copied per tick by all of them together, to look around. Each tick another
+        // goes first, so that the same few never take it all.
         int[] work = {WORK};
         Minecraft minecraft = Minecraft.getInstance();
         Entity camera = minecraft.getCameraEntity();
@@ -508,12 +686,36 @@ public final class RestingPlayers {
         Player you = minecraft.player;
         RestingPuppet gazed = gazed(level, you);
         if (gazed != null) gazed.lookedAt(you.getEyePosition(), you.isShiftKeyDown() || you.isCrouching());
-        for (RestingPuppet puppet : puppets.values()) {
+        List<Spot> order = new ArrayList<>(puppets.keySet());
+        List<Spot> rested = new ArrayList<>();
+        int count = order.size();
+        int first = count == 0 ? 0 : Math.floorMod(turn++, count);
+        for (int i = 0; i < count; i++) {
+            Spot spot = order.get((first + i) % count);
+            RestingPuppet puppet = puppets.get(spot);
             // Near the camera they live their life; away from it, they play a loop.
             if (camera != null) puppet.near(camera.getEyePosition());
             // You may shove them out of your way; they never push you.
             puppet.tick(level, config, beds, fishers, night, work, minecraft.player);
+            if (puppet.restFound()) rested.add(spot);
         }
+        for (Spot spot : rested) keepRest(spot, puppets.get(spot).rest());
+    }
+
+    /**
+     * Keeps where a player really rests with their spot, found by its puppet: the puppet made
+     * again, far away or in the next game, starts there. The puppet stays the same.
+     */
+    private void keepRest(Spot spot, @Nullable Rest rest) {
+        String key = key(spot.name());
+        if (spots.get(key) != spot || Objects.equals(spot.rest(), rest)) return;
+        Spot kept = spot.resting(rest);
+        spots.put(key, kept);
+        RestingPuppet puppet = puppets.remove(spot);
+        if (puppet != null) puppets.put(kept, puppet);
+        if (lookedAt == spot) lookedAt = kept;
+        shownStale = true;
+        if (!fakes.contains(key)) dirty = true;
     }
 
     /** Blocks within which one notices you looking at it. */
@@ -556,24 +758,74 @@ public final class RestingPlayers {
 
     private void save() {
         if (file == null) return;
+        dirty = false;
+        long started = Profile.begin(Profile.Section.SAVE_RESTING);
+        long bytes = -1;
         try {
-            Files.createDirectories(file.getParent());
-            try (Writer writer = Files.newBufferedWriter(file)) {
-                write(spots.values().stream().filter(spot -> !fakes.contains(key(spot.name()))).toList(), writer);
-            }
+            List<Spot> kept = spots.values().stream().filter(spot -> !fakes.contains(key(spot.name()))).toList();
+            JsonStore.write(file, writer -> write(kept, writer));
+            bytes = Files.size(file);
         } catch (IOException e) {
             LivingHorizonClient.LOGGER.warn("Could not write {}", file, e);
+        } finally {
+            Profile.end(Profile.Section.SAVE_RESTING, started, bytes);
         }
     }
 
-    static List<Spot> read(Reader reader) {
-        List<Spot> read = GSON.fromJson(reader, new TypeToken<List<Spot>>() { }.getType());
-        if (read == null) return List.of();
-        return read.stream().filter(spot -> spot != null && spot.name() != null).toList();
+    /**
+     * The spots saved in a file: none when it does not read, then kept aside ({@link JsonStore}),
+     * so that saving again does not write over what it held.
+     */
+    static List<Spot> read(Path file) {
+        JsonElement root = JsonStore.read(file);
+        if (root == null) return List.of();
+        try {
+            return read(file, root);
+        } catch (RuntimeException e) {
+            JsonStore.keepBad(file, e);
+            return List.of();
+        }
     }
 
-    static void write(Collection<Spot> spots, Writer writer) {
-        GSON.toJson(new ArrayList<>(spots), writer);
+    /** The spots of a file's text, in either layout; throws when it is not one. */
+    static List<Spot> read(Reader reader) {
+        return read(null, JsonStore.parse(reader));
+    }
+
+    private static List<Spot> read(@Nullable Path file, JsonElement root) {
+        JsonStore.Versioned saved = JsonStore.unwrap(root, "players");
+        if (saved == null) throw new IllegalStateException("not a list of players");
+        if (file != null && saved.version() > VERSION) JsonStore.keepNewer(file, saved.version());
+        JsonElement data = saved.version() < 2 ? namedDimensions(saved.data()) : saved.data();
+        List<Spot> read = GSON.fromJson(data, new TypeToken<List<Spot>>() { }.getType());
+        if (read == null) return List.of();
+        return read.stream().filter(spot -> spot != null && spot.name() != null && spot.dimension() != null).toList();
+    }
+
+    /**
+     * The spots of a file of layout 0 or 1, their dimensions numbered, with the ids in place of
+     * the numbers. A spot in 3, a dimension of a mod, is left out: which one cannot be told.
+     */
+    private static JsonElement namedDimensions(JsonElement data) {
+        if (!data.isJsonArray()) return data;
+        JsonArray named = new JsonArray();
+        for (JsonElement element : data.getAsJsonArray()) {
+            if (!element.isJsonObject()) continue;
+            JsonObject spot = element.getAsJsonObject().deepCopy();
+            JsonElement code = spot.get("dimension");
+            // Missing, it read as 0 then.
+            String id = code == null ? PositionsMessage.legacyDimension(0)
+                    : code.isJsonPrimitive() && code.getAsJsonPrimitive().isNumber()
+                    ? PositionsMessage.legacyDimension(code.getAsInt()) : null;
+            if (id == null) continue;
+            spot.addProperty("dimension", id);
+            named.add(spot);
+        }
+        return named;
+    }
+
+    static void write(Collection<Spot> spots, Writer writer) throws IOException {
+        JsonStore.writeVersioned(writer, GSON, VERSION, "players", new ArrayList<>(spots));
     }
 
     private static @Nullable Property skinOf(GameProfile profile) {

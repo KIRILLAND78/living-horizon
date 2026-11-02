@@ -3,6 +3,10 @@ package fr.clixmods.livinghorizon;
 import com.mojang.blaze3d.platform.InputConstants;
 import fr.clixmods.livinghorizon.command.LivingHorizonCommand;
 import fr.clixmods.livinghorizon.compat.LodWorld;
+import fr.clixmods.livinghorizon.debug.BenchmarkWorld;
+import fr.clixmods.livinghorizon.debug.Allocation;
+import fr.clixmods.livinghorizon.debug.DebugHud;
+import fr.clixmods.livinghorizon.debug.ProfileHook;
 import fr.clixmods.livinghorizon.platform.ClientNetwork;
 import fr.clixmods.livinghorizon.platform.Events;
 import fr.clixmods.livinghorizon.platform.Network;
@@ -10,9 +14,11 @@ import fr.clixmods.livinghorizon.render.Occlusion;
 import fr.clixmods.livinghorizon.track.FarPlayerTracker;
 import fr.clixmods.livinghorizon.ui.FarConfigScreen;
 import fr.clixmods.livinghorizon.ui.MobList;
+import fr.clixmods.livinghorizon.ui.OfflineHud;
 import fr.clixmods.livinghorizon.ui.OptionsButton;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
@@ -102,6 +108,7 @@ public final class LivingHorizonClient {
 
     private static void start() {
         FarConfig.load();
+        ProfileHook.register();
         // What a server with the mod shares, handled on the game's thread.
         Network.receiver(data -> Minecraft.getInstance().execute(() -> FarPlayerTracker.get().receive(data)));
         ClientNetwork.register();
@@ -117,9 +124,10 @@ public final class LivingHorizonClient {
                 "key.livinghorizon.settings", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), category));
 
         Events.tick(LivingHorizonClient::tick);
+        Events.hud(LivingHorizonClient::drawHud);
         OptionsButton.register();
-        // Every mod has registered its mobs by now: new kinds are shown far away from the start.
-        Events.started(() -> FarConfig.adoptModdedMobs(MobList.all()));
+        // Every mod has registered its mobs by now: kinds met for the first time are shown far away.
+        Events.started(() -> FarConfig.adoptNewMobs(MobList.all()));
         // Voxy's world cannot close while the readers still hold its sections.
         Events.disconnect(LodWorld::suspend);
         Events.stopping(LodWorld::suspend);
@@ -153,6 +161,16 @@ public final class LivingHorizonClient {
         LOGGER.info("Living Horizon loaded");
     }
 
+    /**
+     * The debug panel (and, before 1.21.9, the depth view it draws) and who a player who logged
+     * off is, under the crosshair: over the world, under the screens. From {@code GuiMixin}, or
+     * Forge's own overlay event where the game's {@code Gui.render} never runs ({@link Events#hud}).
+     */
+    public static void drawHud(GuiGraphics graphics) {
+        OfflineHud.draw(graphics);
+        DebugHud.draw(graphics);
+    }
+
     private static void tick(Minecraft minecraft) {
         while (toggle.consumeClick()) {
             FarConfig config = FarConfig.get();
@@ -171,9 +189,20 @@ public final class LivingHorizonClient {
         while (settings.consumeClick()) {
             minecraft.setScreen(new FarConfigScreen(minecraft.screen));
         }
+        BenchmarkWorld.tick(minecraft);
         long started = System.nanoTime();
+        long allocated = Allocation.begin();
         FarPlayerTracker.get().tick(minecraft);
-        if (minecraft.level != null) Occlusion.tick(minecraft.gameRenderer.getMainCamera().position());
+        if (minecraft.level != null) {
+            LodWorld.tick();
+            long occluding = Profile.begin(Profile.Section.TICK_OCCLUSION);
+            try {
+                Occlusion.tick(minecraft.gameRenderer.getMainCamera().position());
+            } finally {
+                Profile.end(Profile.Section.TICK_OCCLUSION, occluding);
+            }
+        }
+        Allocation.end(allocated);
         Stats.tick(System.nanoTime() - started);
     }
 }

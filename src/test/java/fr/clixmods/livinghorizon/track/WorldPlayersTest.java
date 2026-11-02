@@ -51,7 +51,7 @@ class WorldPlayersTest {
         assertEquals(64.0, steve.y(), 1e-9);
         assertEquals(-20.25, steve.z(), 1e-9);
         assertEquals(90f, steve.yaw());
-        assertEquals(1, steve.dimension());
+        assertEquals("minecraft:the_nether", steve.dimension());
         assertFalse(steve.online());
         assertTrue(steve.lastSeen() > 0);
         assertNotNull(steve.look());
@@ -59,6 +59,18 @@ class WorldPlayersTest {
         assertTrue(gear.get(0).contains("iron_sword"), gear.toString());
         assertTrue(gear.get(5).contains("diamond_helmet"), gear.toString());
         assertFalse(gear.get(5).contains("Slot"), gear.toString());
+    }
+
+    @Test
+    void leavesOutSpectatorsWhenTheServerHidesThem(@TempDir Path server) throws Exception {
+        Path world = server.resolve("world");
+        Path folder = world.resolve("playerdata");
+        Files.createDirectories(folder);
+        Files.writeString(server.resolve("usercache.json"),
+                "[{\"name\":\"Steve\",\"uuid\":\"" + STEVE + "\",\"expiresOn\":\"2030-01-01 00:00:00 +0000\"}]");
+        write(folder.resolve(STEVE + ".dat"), "{Pos:[10.5d,64.0d,-20.25d],playerGameType:3}");
+        assertEquals(List.of(), WorldPlayers.read(folder, world, true));
+        assertEquals(1, WorldPlayers.read(folder, world, false).size());
     }
 
     @Test

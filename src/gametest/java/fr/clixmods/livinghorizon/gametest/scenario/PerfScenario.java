@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.gametest.scenario;
 
 import com.mojang.authlib.GameProfile;
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.gametest.Scenario;
 import fr.clixmods.livinghorizon.gametest.Scene;
@@ -12,6 +13,7 @@ import fr.clixmods.livinghorizon.track.SharedPositions;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.UUIDUtil;
 
 import java.lang.management.ManagementFactory;
@@ -39,7 +41,17 @@ public final class PerfScenario implements Scenario {
     private static final int SIDE = -300;
     private static final int CROWD = 40;
     /** Ticks each phase is left to settle, then measured: one frame per tick in a game test. */
-    private static final int SETTLE = 40, FRAMES = 200;
+    private static final int SETTLE = 60, FRAMES = 200;
+    /** The mod's steps inside a frame, reported one by one: where a change in the frame time comes from. */
+    private static final Profile.Section[] STEPS = {Profile.Section.EXTRACT, Profile.Section.DEPTH_BEFORE,
+            Profile.Section.DEPTH_AFTER, Profile.Section.OCCLUSION_RUN, Profile.Section.OCCLUSION_COLLECT,
+            Profile.Section.SUBMIT_IMPOSTORS, Profile.Section.SUBMIT_BIRDS, Profile.Section.BAKE};
+    private static final String[] STEP_NAMES = {"preparing the figures", "far depth before the entities",
+            "far depth after them", "drawing the hidden-mob boxes", "reading their answers", "submitting the impostors",
+            "submitting the birds", "baking pictures"};
+    /** Settings that only act on Voxy's or Distant Horizons' terrain, neither of which runs here. */
+    private static final java.util.Set<String> FAR_WORLD =
+            java.util.Set.of("optLazyDepth", "optParallelRead", "optColumnCache", "optDhFade", "optVoxyShadows", "optVoxyFog", "optDhFog");
 
     @Override
     public String name() {
@@ -72,39 +84,50 @@ public final class PerfScenario implements Scenario {
             int shown = context.computeOnClient(minecraft -> FarPlayerTracker.get().mobs().shown().size());
             int live = context.computeOnClient(minecraft -> FarPlayerTracker.get().mobs().live().size());
             int resting = context.computeOnClient(minecraft -> FarPlayerTracker.get().resting().spots().size());
-            Scene.log(String.format(Locale.ROOT, "perf scene: %d copies shown, %d mobs still sent, %d players logged off",
-                    shown, live, resting));
             if (shown < 200) throw new AssertionError("perf: only " + shown + " remembered copies, the scene is wrong");
             if (resting < CROWD) throw new AssertionError("perf: only " + resting + " of " + CROWD + " players logged off");
 
             // Once round unmeasured, with the defaults: impostors baked from every side, the JIT warm.
-            measure(context, base, config -> {
-            });
+            measure(context, base, PerfScenario::defaults, SETTLE);
 
-            List<Row> rows = new ArrayList<>();
-            rows.add(phase(context, base, "mod off", PerfScenario::off));
-            rows.add(phase(context, base, "defaults", config -> {
-            }));
+            // The defaults are measured again before each setting and once after the last: each
+            // setting is compared with the two around it, so that a slow drift of the whole
+            // game cancels out, and how much they differ is the noise.
+            Row off = measure(context, base, PerfScenario::off, SETTLE);
+            List<Row> defaults = new ArrayList<>();
+            List<Row> settings = new ArrayList<>();
             for (Field field : FarConfig.class.getFields()) {
                 if (Modifier.isStatic(field.getModifiers()) || field.getType() != boolean.class
-                        || !field.getName().startsWith("opt")) {
+                        || !field.getName().startsWith("opt") && !field.getName().equals("impostors")) {
                     continue;
                 }
+                // Turning the mod back on rebuilds its figures: longer to settle.
+                defaults.add(measure(context, base, PerfScenario::defaults, defaults.isEmpty() ? 200 : SETTLE));
                 boolean value = get(field, base);
-                rows.add(phase(context, base, field.getName() + (value ? " off" : " on"), config -> set(field, config, !value)));
+                Row row = measure(context, base, config -> set(field, config, !value), SETTLE);
+                row.setting = field.getName();
+                row.name = context.computeOnClient(minecraft -> I18n.get("livinghorizon.options." + field.getName()));
+                row.defaultOn = value;
+                settings.add(row);
             }
-            rows.add(phase(context, base, "impostors off", config -> config.impostors = false));
-            rows.add(phase(context, base, "mod off again", PerfScenario::off));
-            table(rows);
+            defaults.add(measure(context, base, PerfScenario::defaults, SETTLE));
+            Row offAgain = measure(context, base, PerfScenario::off, SETTLE);
+            report(off, offAgain, defaults, settings, String.format(Locale.ROOT,
+                    "%d remembered mobs, %d mobs still sent by the server, %d players who logged off, birds",
+                    shown, live, resting));
 
             context.runOnClient(minecraft -> FarPlayerTracker.get().resting().clearFakes());
         }
+    }
+
+    private static void defaults(FarConfig config) {
     }
 
     /** The mod off, as its toggle key leaves it, with what it draws on its own off as well. */
     private static void off(FarConfig config) {
         config.enabled = false;
         config.distantMobs = false;
+        config.distantEntities = false;
         config.offlinePlayers = false;
         config.skyBirds = false;
     }
@@ -116,7 +139,7 @@ public final class PerfScenario implements Scenario {
      */
     private static void crowd(Minecraft minecraft) {
         RestingPlayers resting = FarPlayerTracker.get().resting();
-        int dimension = SharedPositions.dimensionCode(minecraft.level.dimension());
+        String dimension = SharedPositions.dimensionId(minecraft.level.dimension());
         double golden = Math.PI * (3 - Math.sqrt(5));
         for (int n = 0; n < CROWD; n++) {
             String name = "Perf" + n;
@@ -127,24 +150,17 @@ public final class PerfScenario implements Scenario {
         }
     }
 
-    private static Row phase(ClientGameTestContext context, FarConfig base, String name, Consumer<FarConfig> change) {
-        Row row = measure(context, base, change);
-        row.name = name;
-        Scene.log(String.format(Locale.ROOT, "perf phase %-24s %7.2f ms per frame", name, row.frame.average()));
-        return row;
-    }
-
     /**
      * Settles with the settings changed, then turns the camera once round, one step a frame,
      * timing each frame and reading the mod's own times for it.
      */
-    private static Row measure(ClientGameTestContext context, FarConfig base, Consumer<FarConfig> change) {
+    private static Row measure(ClientGameTestContext context, FarConfig base, Consumer<FarConfig> change, int settle) {
         context.runOnClient(minecraft -> {
             change.accept(copy(base, FarConfig.get()));
             look(minecraft, 0);
         });
         System.gc();
-        context.waitTicks(SETTLE);
+        context.waitTicks(settle);
         long thread = context.computeOnClient(minecraft -> Thread.currentThread().threadId());
         Row row = new Row();
         long allocatedBefore = allocated(thread);
@@ -160,9 +176,18 @@ public final class PerfScenario implements Scenario {
             });
             row.tick.add(mod[0]);
             row.extract.add(mod[1]);
+            row.own.add(mod[0] + mod[1]);
         }
         row.allocated = (allocated(thread) - allocatedBefore) / FRAMES;
         row.drawn = context.computeOnClient(minecraft -> Stats.drawn());
+        // Each step's smoothed average, as the debug panel shows it, at the end of the lap.
+        row.steps = context.computeOnClient(minecraft -> {
+            double[] steps = new double[STEPS.length];
+            for (int i = 0; i < STEPS.length; i++) {
+                steps[i] = STEPS[i].cpu().seen() ? STEPS[i].cpu().average() / 1_000_000.0 : 0;
+            }
+            return steps;
+        });
         return row;
     }
 
@@ -185,22 +210,104 @@ public final class PerfScenario implements Scenario {
         return -1;
     }
 
-    /** One row per phase, its cost against the mean of the two "mod off" phases. */
-    private static void table(List<Row> rows) {
-        double first = rows.get(0).frame.average(), last = rows.get(rows.size() - 1).frame.average();
-        double baseline = (first + last) / 2;
-        Scene.log("perf table: ms per frame (whole game), the mod's tick and extraction in ms, KB allocated per frame on the render thread");
-        Scene.log(String.format(Locale.ROOT, "perf | %-24s | %7s %7s | %6s | %6s %6s | %6s %6s | %8s | %5s |",
-                "phase", "frame", "max", "cost", "tick", "max", "extr.", "max", "alloc KB", "drawn"));
-        for (Row row : rows) {
-            Scene.log(String.format(Locale.ROOT, "perf | %-24s | %7.2f %7.2f | %+6.2f | %6.3f %6.2f | %6.3f %6.2f | %8.1f | %5d |",
-                    row.name, row.frame.average(), row.frame.max(), row.frame.average() - baseline,
-                    row.tick.average(), row.tick.max(), row.extract.average(), row.extract.max(),
-                    row.allocated / 1024.0, row.drawn));
+    /**
+     * Two parts, in words: what the mod costs against the game without it, then what each
+     * setting does, changed alone against the defaults measured around it. A difference
+     * smaller than the defaults' own spread is reported as none.
+     */
+    private static void report(Row off, Row offAgain, List<Row> defaults, List<Row> settings, String scene) {
+        double without = (off.frame.average() + offAgain.frame.average()) / 2;
+        Row with = new Row();
+        double frameNoise = without / 100, codeNoise = 0.02;
+        for (int i = 0; i < defaults.size(); i++) {
+            Row row = defaults.get(i);
+            with.frame.addAll(row.frame);
+            with.tick.addAll(row.tick);
+            with.extract.addAll(row.extract);
+            with.own.addAll(row.own);
+            with.allocated += row.allocated / defaults.size();
+            with.drawn = row.drawn;
+            for (int step = 0; step < STEPS.length; step++) with.steps[step] += row.steps[step] / defaults.size();
+            if (i == 0) continue;
+            Row before = defaults.get(i - 1);
+            frameNoise = Math.max(frameNoise, Math.abs(row.frame.average() - before.frame.average()));
+            codeNoise = Math.max(codeNoise, Math.abs(row.own.average() - before.own.average()));
         }
-        // Two runs of the same build differ by about this much: a smaller cost is noise.
-        Scene.log(String.format(Locale.ROOT, "perf drift between the two \"mod off\" phases: %.2f ms per frame",
-                Math.abs(first - last)));
+        double cost = with.frame.average() - without;
+
+        line("");
+        line("======== What the mod costs ========");
+        line("Scene: " + scene + ".");
+        line("Each measure: " + FRAMES + " frames, the camera turning once round. llvmpipe draws on the CPU:");
+        line("compare two runs on this machine, never with a graphics card.");
+        line("");
+        line(String.format(Locale.ROOT, "Without the mod .......... %6.1f ms per frame (%.1f FPS)", without, 1000 / without));
+        line(String.format(Locale.ROOT, "With the mod (defaults) .. %6.1f ms per frame (%.1f FPS): %+.1f ms (%+.0f%%)",
+                with.frame.average(), 1000 / with.frame.average(), cost, cost / without * 100));
+        line(String.format(Locale.ROOT, "  the mod's own code ..... %6.2f ms per frame on average, %.1f ms at worst",
+                with.own.average(), with.own.max()));
+        line(String.format(Locale.ROOT, "     (its tick %.2f ms, worst %.1f; preparing the figures %.2f ms, worst %.1f)",
+                with.tick.average(), with.tick.max(), with.extract.average(), with.extract.max()));
+        line(String.format(Locale.ROOT, "  memory ................. %+6.0f KB allocated per frame",
+                (with.allocated - (off.allocated + offAgain.allocated) / 2.0) / 1024));
+        line(String.format(Locale.ROOT, "  figures drawn .......... %6d", with.drawn));
+        StringBuilder steps = new StringBuilder("  steps inside a frame ... ");
+        for (int step = 0; step < STEPS.length; step++) {
+            if (step > 0) steps.append(", ");
+            steps.append(String.format(Locale.ROOT, "%s %.2f ms", STEP_NAMES[step], with.steps[step]));
+        }
+        line(steps.toString());
+        line(String.format(Locale.ROOT, "Noise: the defaults, measured %d times, differ by up to %.1f ms per frame and %.2f ms",
+                defaults.size(), frameNoise, codeNoise));
+        line("of the mod's code. Smaller differences below are not results.");
+
+        line("");
+        line("======== What each setting does (changed alone, against the defaults) ========");
+        line("+ means slower, or more memory, once the setting is changed from its default.");
+        line(String.format(Locale.ROOT, "%-24s %-10s %9s %12s %9s   %s", "Setting", "Changed to", "Frame", "Mod's code", "Memory", "Verdict"));
+        List<String[]> lines = new ArrayList<>();
+        boolean starred = false;
+        for (int i = 0; i < settings.size(); i++) {
+            Row row = settings.get(i), before = defaults.get(i), after = defaults.get(i + 1);
+            double frame = row.frame.average() - (before.frame.average() + after.frame.average()) / 2;
+            double code = row.own.average() - (before.own.average() + after.own.average()) / 2;
+            double memory = (row.allocated - (before.allocated + after.allocated) / 2.0) / 1024;
+            boolean far = FAR_WORLD.contains(row.setting);
+            starred |= far;
+            String sort = String.format(Locale.ROOT, "%012.4f", 1000 - frame);
+            lines.add(new String[]{sort, String.format(Locale.ROOT, "%-24s %-10s %+6.1f ms %+9.2f ms %+6.0f KB   %s",
+                    row.name + (far ? " *" : ""), row.defaultOn ? "off" : "on", frame, code, memory,
+                    verdict(row.defaultOn, frame, code, frameNoise, codeNoise))});
+        }
+        lines.sort(java.util.Comparator.comparing(entry -> entry[0]));
+        for (String[] entry : lines) line(entry[1]);
+        if (starred) line("* Acts on Voxy's or Distant Horizons' terrain, which cannot run here: no difference expected.");
+    }
+
+    /**
+     * The verdict on a setting, from the frame time when it moved past the noise, else from
+     * the mod's own code: {@code frame} and {@code code} are how much slower each got once the
+     * setting was changed from its default.
+     */
+    private static String verdict(boolean defaultOn, double frame, double code, double frameNoise, double codeNoise) {
+        double change;
+        String what;
+        if (Math.abs(frame) > frameNoise) {
+            change = frame;
+            what = " per frame";
+        } else if (Math.abs(code) > codeNoise) {
+            change = code;
+            what = " of the mod's code";
+        } else {
+            return "no difference";
+        }
+        String amount = String.format(Locale.ROOT, "%.2f ms", Math.abs(change)) + what;
+        if (change > 0) return defaultOn ? "keep it on: saves " + amount : "keep it off: on costs " + amount;
+        return defaultOn ? "faster off: on costs " + amount : "faster on: saves " + amount;
+    }
+
+    private static void line(String text) {
+        Scene.log("perf " + text);
     }
 
     /** Copies every setting of {@code from} into {@code to}, field by field; {@code to}. */
@@ -236,16 +343,27 @@ public final class PerfScenario implements Scenario {
     }
 
     private static final class Row {
-        String name;
-        final Times frame = new Times(), tick = new Times(), extract = new Times();
+        /** The setting changed, its name in the game, and its default. */
+        String setting, name;
+        boolean defaultOn;
+        /** The whole frame; the mod's tick, its extraction, and the two together. */
+        final Times frame = new Times(), tick = new Times(), extract = new Times(), own = new Times();
         long allocated;
         int drawn;
+        /** Milliseconds per frame of each of {@link #STEPS}, smoothed. */
+        double[] steps = new double[STEPS.length];
     }
 
     /** Nanoseconds, given in; read back in milliseconds. */
     private static final class Times {
         private long total, max;
         private int count;
+
+        void addAll(Times other) {
+            total += other.total;
+            max = Math.max(max, other.max);
+            count += other.count;
+        }
 
         void add(long nanos) {
             total += nanos;

@@ -67,6 +67,12 @@ final class VoxySource implements LodSource {
         for (Cache cache : ALL_CACHES) releaseAll(cache);
     }
 
+    /** Each reader keeps its sections between reads: {@link #clear()} waits for the reads to end. */
+    @Override
+    public boolean keepsBetweenReads() {
+        return true;
+    }
+
     /** One reader's sections, for one world; a {@link Miss} where Voxy had none. */
     private static final class Cache {
         final LinkedHashMap<Long, Object> sections = new LinkedHashMap<>(128, 0.75f, true);
@@ -133,6 +139,16 @@ final class VoxySource implements LodSource {
      */
     @Override
     public double clearDistance() {
+        return distance(true);
+    }
+
+    /** Voxy's render distance, {@link #clearDistance} without its fog. */
+    @Override
+    public double drawnDistance() {
+        return distance(false);
+    }
+
+    private static double distance(boolean clear) {
         try {
             Class<?> type = Class.forName("me.cortex.voxy.client.config.VoxyConfig");
             Object config = type.getField("CONFIG").get(null);
@@ -143,6 +159,7 @@ final class VoxySource implements LodSource {
                 // A version without it: drawing, as far as this can tell.
             }
             double drawn = type.getField("sectionRenderDistance").getFloat(config) * 512.0;
+            if (!clear) return drawn;
             return drawn * (fogged(type, config) ? 0.5 : 0.9);
         } catch (ReflectiveOperationException | RuntimeException e) {
             return 0;
@@ -168,22 +185,11 @@ final class VoxySource implements LodSource {
         LivingHorizonClient.LOGGER.warn("Reading Voxy's world paused for 20 seconds: it did not answer as expected", e);
     }
 
-    /**
-     * The class whose static {@code getNullable()} gives Voxy's render system: renamed
-     * {@code IVoxyRenderSystemHolder} in 0.2.18, {@code IGetVoxyRenderSystem} before.
-     */
-    static Class<?> renderSystemGetter() throws ClassNotFoundException {
-        try {
-            return Class.forName("me.cortex.voxy.client.core.IVoxyRenderSystemHolder");
-        } catch (ClassNotFoundException e) {
-            return Class.forName("me.cortex.voxy.client.core.IGetVoxyRenderSystem");
-        }
-    }
-
     private void link() throws ReflectiveOperationException {
         MethodHandles.Lookup lookup = MethodHandles.publicLookup();
-        Class<?> getter = renderSystemGetter();
-        Class<?> system = Class.forName("me.cortex.voxy.client.core.VoxyRenderSystem");
+        // Found the way VoxyLink finds it for the depth: one place to follow Voxy's renames.
+        Class<?> getter = VoxyLink.renderSystemGetter();
+        Class<?> system = Class.forName(VoxyLink.RENDER_SYSTEM);
         Class<?> worldEngine = Class.forName("me.cortex.voxy.common.world.WorldEngine");
         Class<?> section = Class.forName("me.cortex.voxy.common.world.WorldSection");
         Class<?> mapperClass = Class.forName("me.cortex.voxy.common.world.other.Mapper");

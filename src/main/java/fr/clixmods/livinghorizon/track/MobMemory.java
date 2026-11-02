@@ -2,9 +2,13 @@ package fr.clixmods.livinghorizon.track;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.JsonStore;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
+import fr.clixmods.livinghorizon.Profile;
+import fr.clixmods.livinghorizon.ambient.Herd;
 import fr.clixmods.livinghorizon.platform.Platform;
 import fr.clixmods.livinghorizon.render.DepthFar;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -23,6 +27,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.TamableAnimal;
 //? if >=26.2 {
 /*import net.minecraft.world.entity.animal.bee.Bee;
 import net.minecraft.world.entity.animal.parrot.Parrot;
@@ -36,7 +41,6 @@ import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,6 +52,7 @@ import java.util.HashMap;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +68,8 @@ import java.util.concurrent.CompletableFuture;
  * never added to the world, saved as the game saves it (so the horse keeps its coat,
  * the sheep its colour, the wolf its collar), that plays where it was an animation
  * chosen from the blocks around it ({@link MobPaths}, {@link MobMotion}): a stroll, a pause
- * to graze or look around, and back. It is a picture of what lives there, not a simulation.
+ * to graze or look around, and back; a phantom or a ghast flies its own loop ({@link MobFlight}).
+ * It is a picture of what lives there, not a simulation.
  * When the server sends the real mob again, the copy walks up to it first: the real one
  * is only drawn once the copy stands where it is.
  *
@@ -97,6 +103,8 @@ public final class MobMemory {
         boolean fromPack;
         /** Wore a name tag when last seen. */
         boolean named;
+        /** Foreseen by this client ({@link Foresight}), not shared by the server: it lets it go. */
+        transient boolean foreseenHere;
         /**
          * Built from what the server said of it alone (kind, variant, age, what it wears), as that
          * text: rebuilt when the server says something else. Null for a mob this client saw.
@@ -134,6 +142,8 @@ public final class MobMemory {
         transient float serverBody = Float.NaN, serverHead = Float.NaN;
         /** Too small or too far for its animation to show; kept between ticks for the hysteresis. */
         transient boolean still;
+        /** The last choice that drew it ({@code MobMemory.choose}). */
+        transient int chosenIn;
         /** When it was last drawn, in nanoseconds; 0 if never. */
         transient long drawnAt;
 
@@ -148,19 +158,29 @@ public final class MobMemory {
         public double z() { return z; }
         public String type() { return type; }
         public boolean fromPack() { return fromPack; }
+        /** Its saved data, as text. */
+        public String nbt() { return nbt; }
+        /** When this client last had it loaded (or the server last said where it is), in milliseconds since the epoch. */
+        public long seenAt() { return seenAt; }
     }
 
     private static final Gson GSON = new GsonBuilder().create();
-    private static final List<String> DIMENSIONS =
-            List.of("minecraft:overworld", "minecraft:the_nether", "minecraft:the_end");
+    /** Where the game saves a pet's order to sit. */
+    private static final String SITTING = "Sitting";
+    /** Layout of the file: 1 is the list under {@code "mobs"}, with its version; 0 the bare list before it. */
+    static final int VERSION = 1;
     /** Bounds the file; the oldest sightings go first. */
     private static final int MAX_REMEMBERED = 2000;
     /** Nanoseconds per tick for building puppets, so that a crowd does not cost one long frame. */
     private static final long BUILD_BUDGET = 2_000_000L;
     /** A copy not drawn for this long (nanoseconds) is frozen, with {@link FarConfig#optFreezeHidden}. */
     private static final long FREEZE_AFTER = 500_000_000L;
-    /** Grounds read per tick, at most: a few thousand blocks each, when the chunks are loaded. */
+    /** Grounds asked for per tick, at most: a copy of a few sections each here, the rest off the game's thread. */
     private static final int READS_PER_TICK = 6;
+    /** Saved data this short (a mob foreseen or built from what the server said) is read at once, never queued. */
+    private static final int READ_AT_ONCE = 512;
+    /** Copies the player sees are built first: this far either side of where they look. */
+    private static final double SEEN_COS = Math.cos(Math.toRadians(70));
     /**
      * Ticks before a ground read with columns missing is read again - the far world may not
      * be open yet, as when the world was just entered - doubled each time, up to a minute.
@@ -168,7 +188,7 @@ public final class MobMemory {
     private static final int REPLAN_FIRST = 40, REPLAN_MAX = 1200;
 
     private final Map<UUID, Remembered> mobs = new LinkedHashMap<>();
-    /** The render distance, in blocks, as of the last tick. */
+    /** How far the server sends entities, in blocks, as of the last tick ({@link ServerView}). */
     private int renderBlocks;
     /** Mobs the server sends right now: never drawn twice. */
     private final Map<UUID, Entity> live = new HashMap<>();
@@ -208,13 +228,49 @@ public final class MobMemory {
     private long builtNow;
     /** In a single player world, where the server has the remembered mobs. */
     private final ServerMobs serverMobs = new ServerMobs();
+    /** The first animals of the land nobody explored, foreseen by this client. */
+    private final Foresight foresight = new Foresight();
+    private boolean scoping;
 
     public List<Remembered> shown() {
         return shown;
     }
 
+    /** The first animals of the land nobody explored, foreseen by this client: the scan, the spyglass. */
+    public Foresight foresight() {
+        return foresight;
+    }
+
     public int size() {
         return mobs.size();
+    }
+
+    /** Choices made so far, each copy marked with the last that drew it. */
+    private int choices;
+
+    /** Copies built last tick, and how many waited to be when it began. */
+    private int lastBuilds, lastCandidates;
+
+    /** How many mobs are remembered, and of which kind, for the Statistics screen. */
+    public record Stats(int remembered, int met, int shared, int guessed, int chosen, int built, int waiting,
+                        int reading, int builtLastTick, int candidatesLastTick, @Nullable Path file) {
+    }
+
+    public Stats stats() {
+        int met = 0, shared = 0, guessed = 0, built = 0, waiting = 0, reading = 0;
+        for (Remembered mob : mobs.values()) {
+            if (mob.fromPack) shared++;
+            else if (mob.foreseenHere) guessed++;
+            else met++;
+        }
+        for (Remembered mob : shown) {
+            if (mob.puppet() != null) built++;
+            else if (mob.waiting()) {
+                waiting++;
+                if (mob.parsed != null && !mob.parsed.isDone()) reading++;
+            }
+        }
+        return new Stats(mobs.size(), met, shared, guessed, shown.size(), built, waiting, reading, lastBuilds, lastCandidates, file);
     }
 
     /** The mobs and boats the server sends right now. */
@@ -288,21 +344,48 @@ public final class MobMemory {
         close();
         file = Platform.configDir()
                 .resolve("livinghorizon").resolve("mobs").resolve(RestingPlayers.safe(server) + ".json");
+        foresight.open(Platform.configDir().resolve("livinghorizon").resolve("foreseen").resolve(RestingPlayers.safe(server)));
         // No file yet: the mod has never been in this world.
         firstVisit = !Files.exists(file);
         if (firstVisit) return;
-        try (Reader reader = Files.newBufferedReader(file)) {
-            List<Remembered> read = GSON.fromJson(reader, new TypeToken<List<Remembered>>() { }.getType());
-            if (read != null) {
-                for (Remembered mob : read) {
-                    // A memory with no world cannot be told from another world's: dropped.
-                    if (mob != null && mob.id != null && mob.type != null && mob.dimension != null
-                            && mob.world != null) mobs.put(mob.id, mob);
-                }
-            }
-        } catch (IOException | RuntimeException e) {
-            LivingHorizonClient.LOGGER.warn("Could not read {}", file, e);
+        for (Remembered mob : read(file)) {
+            // A memory with no world cannot be told from another world's: dropped.
+            if (mob.world != null) mobs.put(mob.id, mob);
         }
+    }
+
+    /**
+     * The mobs saved in a file: none when it does not read, then kept aside ({@link JsonStore}),
+     * so that saving the memory again does not write over what it held.
+     */
+    static List<Remembered> read(Path file) {
+        JsonElement root = JsonStore.read(file);
+        if (root == null) return List.of();
+        try {
+            JsonStore.Versioned saved = JsonStore.unwrap(root, "mobs");
+            if (saved == null) throw new IllegalStateException("not a list of mobs");
+            if (saved.version() > VERSION) JsonStore.keepNewer(file, saved.version());
+            return read(saved.data());
+        } catch (RuntimeException e) {
+            JsonStore.keepBad(file, e);
+            return List.of();
+        }
+    }
+
+    /** The mobs of a list as saved; those missing what they need are left out. */
+    static List<Remembered> read(JsonElement list) {
+        List<Remembered> read = GSON.fromJson(list, new TypeToken<List<Remembered>>() { }.getType());
+        if (read == null) return List.of();
+        List<Remembered> kept = new ArrayList<>(read.size());
+        for (Remembered mob : read) {
+            if (mob != null && mob.id != null && mob.type != null && mob.dimension != null) kept.add(mob);
+        }
+        return kept;
+    }
+
+    /** Writes the mobs as {@link #read(Path)} reads them back. */
+    static void write(Collection<Remembered> mobs, Writer writer) throws IOException {
+        JsonStore.writeVersioned(writer, GSON, VERSION, "mobs", new ArrayList<>(mobs));
     }
 
     /** True once per world the mod has never been in before: the cue for a first scan. */
@@ -314,6 +397,7 @@ public final class MobMemory {
 
     void close() {
         save();
+        foresight.close();
         firstVisit = false;
         mobs.clear();
         live.clear();
@@ -350,7 +434,10 @@ public final class MobMemory {
      * up to it first, so that the mob does not jump from where the copy was.
      */
     public void onLoad(Entity entity) {
-        if (rememberable(entity)) live.put(entity.getUUID(), entity);
+        if (rememberable(entity)) {
+            live.put(entity.getUUID(), entity);
+            discover(entity);
+        }
         // Back in the world with its rider: remembered again once it leaves.
         takenAway.remove(entity.getUUID());
         Remembered mob = mobs.get(entity.getUUID());
@@ -447,7 +534,7 @@ public final class MobMemory {
         if (file == null || (bound != null && level != bound) || !rememberable(entity)) return;
         Entity mob = entity;
         FarConfig config = FarConfig.get();
-        if (!config.distantMobs || !worthRemembering(mob, config)) return;
+        if (!config.shows(MobKinds.creature(mob.getType())) || !worthRemembering(mob, config)) return;
         if ((mob instanceof LivingEntity living && living.isDeadOrDying()) || carriesPlayer(mob)
                 || takenAway.contains(mob.getUUID())) {
             forget(mob.getUUID());
@@ -460,6 +547,9 @@ public final class MobMemory {
         }
         CompoundTag tag = snapshot(mob, level);
         if (tag == null) return;
+        // The game saves a pet's order to sit, which only the server knows: on this client it
+        // always says no, and the copy would stand up. What the client sees goes in its place.
+        if (sitting(mob)) tag.putBoolean(SITTING, true);
         // The body as the game drew it: a mob standing still turns it, not its yaw.
         float body = mob instanceof LivingEntity living ? living.yBodyRot : mob.getYRot();
         remember(new MobScan.Found(mob.getUUID(), EntityType.getKey(mob.getType()).toString(),
@@ -483,7 +573,7 @@ public final class MobMemory {
      * between with neither the real mob nor its copy. The next choice puts the list in order.
      */
     private void showNow(Remembered mob, ClientLevel level, FarConfig config) {
-        if (config.maxDistantMobs <= 0 || carried.contains(mob.id)) return;
+        if (config.most(creature(mob), 1) <= 0 || carried.contains(mob.id)) return;
         if (mob.puppet == null) {
             // A crowd unloaded at once (a teleport) is left to the ticks and their budget.
             if (config.optBackgroundBuild && builtNow >= BUILD_BUDGET) return;
@@ -550,22 +640,56 @@ public final class MobMemory {
         dirty = true;
     }
 
+    /**
+     * The mobs met, the oldest first, past {@link #MAX_REMEMBERED}. The animals foreseen from the
+     * seed are not counted: there are as many as the server shares and this client foresees,
+     * <i>Max Mobs</i> at most ({@link Foresight#wanted}), and this file never holds them
+     * ({@link Foresight} keeps its own).
+     */
     private void trim() {
-        while (mobs.size() > MAX_REMEMBERED) mobs.remove(mobs.keySet().iterator().next());
+        int met = 0;
+        for (Remembered mob : mobs.values()) {
+            if (!SeedDraws.foreseen(mob.id)) met++;
+        }
+        for (Iterator<Remembered> it = mobs.values().iterator(); met > MAX_REMEMBERED && it.hasNext(); ) {
+            if (SeedDraws.foreseen(it.next().id)) continue;
+            it.remove();
+            met--;
+        }
     }
 
     /**
-     * Mobs, boats - a parked boat vanishes from far away just like an animal - and
-     * mannequins, the skinned figures that Distant Friends stands far away as fake players.
+     * Mobs, boats - a parked boat vanishes from far away just like an animal - other vehicles,
+     * other mods' aircraft and cars among them ({@link Vehicles}), and mannequins, the skinned
+     * figures that Distant Friends stands far away as fake players.
      */
     static boolean rememberable(Entity entity) {
-        // Mannequins came in 1.21.9; every boat was one class before 1.21.2.
+        // Mannequins came in 1.21.9.
         //? if >=1.21.9 {
-        return entity instanceof Mob || entity instanceof AbstractBoat || entity instanceof Mannequin;
-        //?} elif >=1.21.2 {
-        /*return entity instanceof Mob || entity instanceof AbstractBoat;
-        *///?} else
-        /*return entity instanceof Mob || entity instanceof net.minecraft.world.entity.vehicle.Boat;*/
+        return entity instanceof Mob || boat(entity) || entity instanceof Mannequin || Vehicles.is(entity);
+        //?} else
+        /*return entity instanceof Mob || boat(entity) || Vehicles.is(entity);*/
+    }
+
+    /** A boat or a raft, chest or not, other mods' boats built on the game's included. */
+    static boolean boat(Entity entity) {
+        // Every boat was one class before 1.21.2.
+        //? if >=1.21.2 {
+        return entity instanceof AbstractBoat;
+        //?} else
+        /*return entity instanceof net.minecraft.world.entity.vehicle.Boat;*/
+    }
+
+    /**
+     * A vehicle of a kind never met before, whose id the list of mobs cannot know (an aircraft,
+     * another mod's boat): from now on it is in that list, where the player chooses whether it
+     * is shown ({@link FarConfig#adoptVehicle}). The game's boats are listed already.
+     */
+    private static void discover(Entity entity) {
+        Vehicles.Kind kind = Vehicles.of(entity);
+        if (kind == Vehicles.Kind.NONE) return;
+        String id = EntityType.getKey(entity.getType()).toString();
+        if (!MobKinds.isBoat(id)) FarConfig.adoptVehicle(id, kind == Vehicles.Kind.STEERED);
     }
 
     private static boolean worthRemembering(Entity mob, FarConfig config) {
@@ -579,6 +703,26 @@ public final class MobMemory {
             if (passenger instanceof AbstractClientPlayer) return true;
         }
         return false;
+    }
+
+    /** A cat, wolf or parrot sitting where it was told to, as drawn. */
+    private static boolean sitting(Entity entity) {
+        return entity instanceof TamableAnimal pet && pet.isInSittingPose();
+    }
+
+    /**
+     * The pose the single player server has a pet in, given to its copy and to its saved data,
+     * which the copy is built from again next time. Nothing for any other mob, or no change.
+     */
+    private void sit(Remembered mob, @Nullable Boolean sitting) {
+        if (sitting == null || !(mob.puppet instanceof TamableAnimal pet) || pet.isInSittingPose() == sitting) return;
+        pet.setInSittingPose(sitting);
+        CompoundTag tag = parse(mob.nbt);
+        if (tag == null) return;
+        tag.putBoolean(SITTING, sitting);
+        mob.nbt = tag.toString();
+        mob.parsed = CompletableFuture.completedFuture(tag);
+        dirty = true;
     }
 
     /** The mob as the game saves it: variants, colours, equipment, name, age. */
@@ -603,32 +747,59 @@ public final class MobMemory {
         renderBlocks = renderDistanceBlocks;
         builtNow = 0;
         clock++;
-        if (!config.distantMobs) {
+        if (!config.distantMobs && !config.distantEntities) {
             shown = List.of();
             return;
         }
         String dimension = level.dimension().identifier().toString();
-        followServer(level, dimension);
+        foresight.tick(Minecraft.getInstance(), level, self, world, config, pack);
+        // Through a spyglass and back: the mobs where it looks are chosen first, and then no longer.
+        if (self.isScoping() != scoping) {
+            scoping = self.isScoping();
+            chooseSoon = true;
+        }
+        // Through the spyglass, those where it looks are taken at once; otherwise once a second,
+        // not at every batch found, which would go through thousands of mobs each time.
+        boolean foreseeNow = scoping && clock % 5 == 0;
+        long following = Profile.begin(Profile.Section.TICK_MOBS_FOLLOW);
+        try {
+            followServer(level, dimension);
+        } finally {
+            Profile.end(Profile.Section.TICK_MOBS_FOLLOW, following);
+        }
 
-        if (clock % 20 == 0) {
-            lastPack = pack;
-            if (pack != null) sync(pack);
-            learnReach();
-            reconcile(level, dimension, renderDistanceBlocks);
-            choose(dimension, config);
-        } else if (chooseSoon) {
-            choose(dimension, config);
+        if (clock % 20 == 0 || chooseSoon || foreseeNow) {
+            long choosing = Profile.begin(Profile.Section.TICK_MOBS_CHOOSE);
+            try {
+                if (clock % 20 == 0) {
+                    lastPack = pack;
+                    if (pack != null) sync(pack);
+                    foresee(config, dimension);
+                    learnReach();
+                    reconcile(level, dimension, renderDistanceBlocks);
+                } else if (foreseeNow) {
+                    foresee(config, dimension);
+                }
+                choose(dimension, config);
+            } finally {
+                Profile.end(Profile.Section.TICK_MOBS_CHOOSE, choosing);
+            }
         }
         if (clock % 1200 == 0 && dirty) save();
 
         Set<String> still = new HashSet<>(config.stillMobTypes);
         double pixelsPerRadian = config.optStillTiny ? pixelsPerRadian() : 0;
 
+        long buildNanos = 0, groundNanos = 0, joiningStarted = System.nanoTime();
         // Copies walking up to their real mob, before anything else.
         if (!joining.isEmpty()) {
             List<Remembered> arrived = new ArrayList<>();
             for (Map.Entry<Entity, Remembered> joined : joining.entrySet()) {
                 Remembered mob = joined.getValue();
+                // Sitting or standing as the real one is, which may have got up meanwhile.
+                if (mob.puppet() instanceof TamableAnimal pet && joined.getKey() instanceof TamableAnimal real) {
+                    pet.setInSittingPose(real.isInSittingPose());
+                }
                 if (joined.getKey().isRemoved() || !(mob.puppet() instanceof LivingEntity puppet)
                         || motion(mob).follow(puppet, mob, joined.getKey())) {
                     arrived.add(mob);
@@ -636,41 +807,80 @@ public final class MobMemory {
             }
             arrived.forEach(this::handOver);
         }
+        long motionNanos = System.nanoTime() - joiningStarted;
 
         boolean background = config.optBackgroundBuild;
         long budget = System.nanoTime() + BUILD_BUDGET;
         int reads = 0;
+        // Those the player sees first, the nearest first, then the others: sorted out before the
+        // budget starts, which counts the building alone, however many wait.
+        int builds = 0, unbuilt = 0;
+        if (background) {
+            Vec3 sight = self.getViewVector(1f);
+            List<Remembered> seen = new ArrayList<>(), unseen = new ArrayList<>();
+            for (Remembered mob : shown) {
+                if (mob.gone || mob.handover != null || mob.puppet != null || mob.failed) continue;
+                (seen(mob, sight) ? seen : unseen).add(mob);
+            }
+            unbuilt = seen.size() + unseen.size();
+            long started = System.nanoTime();
+            budget = started + BUILD_BUDGET;
+            building:
+            for (List<Remembered> group : List.of(seen, unseen)) {
+                for (Remembered mob : group) {
+                    if (System.nanoTime() >= budget) break building;
+                    if (mob.parsed == null) mob.parsed = read(mob.nbt, true);
+                    if (!mob.parsed.isDone()) continue;
+                    build(mob, level);
+                    builds++;
+                }
+            }
+            buildNanos += System.nanoTime() - started;
+        }
+        lastBuilds = builds;
+        lastCandidates = unbuilt;
         for (Remembered mob : shown) {
             if (mob.gone || mob.handover != null) continue;
             if (mob.puppet == null && !mob.failed) {
                 // The saved data is read on a background thread; the puppet is made here,
                 // where the world is, as long as this tick's budget lasts.
-                if (mob.parsed == null) {
-                    String nbt = mob.nbt;
-                    mob.parsed = background
-                            ? CompletableFuture.supplyAsync(() -> parse(nbt), Util.backgroundExecutor())
-                            : CompletableFuture.completedFuture(parse(nbt));
-                }
-                if (mob.parsed.isDone() && (!background || System.nanoTime() < budget)) {
+                if (mob.parsed == null) mob.parsed = read(mob.nbt, background);
+                if (mob.parsed.isDone() && !background) {
+                    long building = System.nanoTime();
                     build(mob, level);
+                    buildNanos += System.nanoTime() - building;
                 }
             }
             if (mob.puppet == null) continue;
+            // Too small or far to show its animation, standing with nothing left to walk or turn:
+            // looked at again once in sixteen ticks, each on a tick of its own, and only kept going
+            // meanwhile. Thousands far off cost little then. One that moves (the server's, one
+            // called back to its spot) is moved every tick: once in sixteen, it went in jerks.
+            if (mob.still && mob.motion != null && mob.motion.settled() && !mob.simulated && mob.handover == null
+                    && mob.puppet instanceof LivingEntity resting && ((clock + mob.id.hashCode()) & 15) != 0) {
+                mob.motion.rest(resting);
+                continue;
+            }
             if (mob.puppet instanceof LivingEntity living) {
                 // Not drawn for a moment: it keeps its place, as a position and nothing more.
+                // Held by easter egg 15 it turns all the same, out of view too.
                 if (config.optFreezeHidden && mob.motion != null && mob.motion.placed()
-                        && System.nanoTime() - mob.drawnAt > FREEZE_AFTER) {
+                        && System.nanoTime() - mob.drawnAt > FREEZE_AFTER && !Herd.holds(living)) {
                     // Moved by the server meanwhile: there when it shows again, not running there.
                     if (mob.simulated) mob.motion.jump(living, mob);
                     continue;
                 }
-                boolean roam = !still.contains(mob.type);
+                // A pet told to sit stays on its spot, as the real one does.
+                boolean roam = !still.contains(mob.type) && !sitting(living);
+                // A phantom or a ghast flies its own way, on no ground: nothing to read for it.
+                boolean grounded = roam && MobFlight.of(mob.type) == null;
+                long grounding = System.nanoTime();
                 // Moved by the server's word: the blocks are read again around where it is now.
                 MobPaths.Choice choice = mob.choice;
                 if (choice != null && !choice.ground().around(mob.x, mob.z)) mob.choice = choice = null;
                 // Read with part of the far world missing: read again, now that it may be there.
                 boolean again = choice != null && !choice.complete() && clock >= mob.replanAt;
-                if (choice == null && roam && !mob.simulated && !mob.planning && mob.ground != null) {
+                if (choice == null && grounded && !mob.simulated && !mob.planning && mob.ground != null) {
                     // Saved with it: the ground it was last seen on, if it is still where it was.
                     MobPaths.Ground saved = MobPaths.Ground.load(mob.ground);
                     if (saved != null && saved.around(mob.x, mob.z) && walker(living)) {
@@ -679,7 +889,7 @@ public final class MobMemory {
                         mob.ground = null;
                     }
                 }
-                if ((choice == null || again) && roam && !mob.simulated && !mob.planning && reads < READS_PER_TICK) {
+                if ((choice == null || again) && grounded && !mob.simulated && !mob.planning && reads < READS_PER_TICK) {
                     reads++;
                     mob.planning = true;
                     if (choice == null) mob.replans = 0;
@@ -700,15 +910,28 @@ public final class MobMemory {
                     mob.ground = choice.ground().save();
                     dirty = true;
                 }
+                long moving = System.nanoTime();
+                groundNanos += moving - grounding;
                 mob.still = isStill(living, mob, config, pixelsPerRadian);
                 boolean tiny = mob.still;
                 double handover = Math.max(24, Math.min(sent(type(mob)), renderDistanceBlocks));
                 float home = MobMotion.home(Math.hypot(mob.x - selfX, mob.z - selfZ), handover);
-                motion(mob).tick(living, mob, choice, clock, roam, tiny, home);
+                // Easter egg 15 holds a few copies still, turned to the player: their loop waits.
+                if (Herd.turn(living)) {
+                    motion(mob).held(living, mob);
+                } else {
+                    motion(mob).tick(living, mob, choice, clock, roam, tiny, home);
+                }
+                motionNanos += System.nanoTime() - moving;
             } else {
+                long holding = System.nanoTime();
                 hold(mob.puppet, mob);
+                motionNanos += System.nanoTime() - holding;
             }
         }
+        Profile.record(Profile.Section.TICK_MOBS_BUILD, buildNanos);
+        Profile.record(Profile.Section.TICK_MOBS_GROUND, groundNanos);
+        Profile.record(Profile.Section.TICK_MOBS_MOTION, motionNanos);
     }
 
     private static long seed(Remembered mob) {
@@ -716,11 +939,11 @@ public final class MobMemory {
     }
 
     private static MobMotion motion(Remembered mob) {
-        if (mob.motion == null) mob.motion = new MobMotion(seed(mob));
+        if (mob.motion == null) mob.motion = new MobMotion(seed(mob), MobFlight.of(mob.type));
         return mob.motion;
     }
 
-    /** Where it was, facing where it faced, not moving: a boat, which has no animation. */
+    /** Where it was, facing where it faced, not moving: a boat or another vehicle, which has no animation. */
     private static void hold(Entity puppet, Remembered mob) {
         puppet.setOldPosAndRot();
         puppet.setPos(mob.x, mob.y, mob.z);
@@ -751,11 +974,6 @@ public final class MobMemory {
         return Math.max(apparent, config.minApparentPixels);
     }
 
-    private static int dimensionCode(String dimension) {
-        int code = DIMENSIONS.indexOf(dimension);
-        return code < 0 ? 3 : code;
-    }
-
     /**
      * Takes the server's word: where every mob it publishes around this client is now, as last
      * seen by whoever was near it. A mob this client has seen keeps the look it saved; one it
@@ -763,12 +981,12 @@ public final class MobMemory {
      * it sent the mobs died: the server forgets a mob whose chunk is loaded without it.
      */
     private void sync(SharedPositions pack) {
+        FarConfig config = FarConfig.get();
         Set<UUID> published = new HashSet<>();
         for (UUID id : pack.mobs()) {
             SharedPositions.MobReport report = pack.readMob(id);
             String type = report == null ? null : MobKinds.type(report.kind());
-            String dimension = report == null || report.dimension() >= DIMENSIONS.size()
-                    ? null : DIMENSIONS.get(report.dimension());
+            String dimension = report == null ? null : report.dimension();
             if (type == null || dimension == null) continue;
             published.add(id);
             if (live.containsKey(id)) continue;
@@ -781,6 +999,8 @@ public final class MobMemory {
             Remembered mob = mobs.get(id);
             // Followed on the single player server, which knows better than the last report.
             if (mob != null && mob.simulated) continue;
+            // An animal foreseen from the seed, which would not be drawn: not taken at all.
+            if (mob == null && SeedDraws.foreseen(id) && !wantsForeseen(report, config)) continue;
             String look = packLook(report);
             if (mob == null) {
                 mob = new Remembered();
@@ -815,9 +1035,74 @@ public final class MobMemory {
         for (Remembered mob : mobs.values()) {
             // Only where the server just sent the mobs around: one farther off is out of reach, not gone.
             if (mob.fromPack && isHere(mob) && !published.contains(mob.id) && !live.containsKey(mob.id)
-                    && pack.covers(dimensionCode(mob.dimension), mob.x, mob.z)) dead.add(mob.id);
+                    && pack.covers(mob.dimension, mob.x, mob.z)) dead.add(mob.id);
         }
         dead.forEach(this::forget);
+    }
+
+    /**
+     * The animals this client foresees that are worth remembering now ({@link Foresight#wanted}):
+     * those not remembered yet become remembered mobs, built from their kind, variant and age as
+     * the server's are; those it foresaw and no longer wants are forgotten. The server's own stay
+     * as it says.
+     */
+    private void foreseen(List<PositionsMessage.Mob> wanted, String dimension) {
+        Set<UUID> kept = new HashSet<>();
+        for (PositionsMessage.Mob found : wanted) {
+            UUID id = found.id();
+            kept.add(id);
+            if (mobs.containsKey(id) || live.containsKey(id) || dismissed.containsKey(id)) continue;
+            String type = MobKinds.type(found.kind());
+            if (type == null) continue;
+            SharedPositions.MobReport report = new SharedPositions.MobReport(id, found.x(), found.y(), found.z(),
+                    found.kind(), found.dimension(), found.baby(), found.variant(), null);
+            Remembered mob = new Remembered();
+            mob.id = id;
+            mob.type = type;
+            mob.nbt = packNbt(type, report);
+            mob.packLook = packLook(report);
+            mob.seenAt = System.currentTimeMillis();
+            mob.world = world;
+            mob.dimension = dimension;
+            mob.x = found.x();
+            mob.y = found.y();
+            mob.z = found.z();
+            mob.foreseenHere = true;
+            mobs.put(id, mob);
+            // Where the spyglass looks, drawn at once; otherwise at the next choice, within a second,
+            // not a choice through thousands of mobs at every batch found.
+            if (scoping) chooseSoon = true;
+        }
+        List<UUID> dropped = new ArrayList<>();
+        for (Remembered mob : mobs.values()) {
+            if (mob.foreseenHere && !mob.fromPack && !kept.contains(mob.id)) dropped.add(mob.id);
+        }
+        dropped.forEach(this::forget);
+    }
+
+    /** The foreseen mobs worth remembering, worked out again only when what they depend on changed. */
+    private void foresee(FarConfig config, String dimension) {
+        long started = Profile.begin(Profile.Section.TICK_MOBS_FORESEE);
+        try {
+            List<PositionsMessage.Mob> wanted = foresight.wantedIfChanged(selfX, selfY, selfZ, config);
+            if (wanted != null) foreseen(wanted, dimension);
+        } finally {
+            Profile.end(Profile.Section.TICK_MOBS_FORESEE, started);
+        }
+    }
+
+    /**
+     * Whether the chunk of an animal foreseen from the seed is here: generated, with mobs of its
+     * own, which the server stops foreseeing at its next share.
+     */
+    private boolean generated(Remembered mob) {
+        return bound != null && bound.getChunkSource().hasChunk((int) Math.floor(mob.x) >> 4, (int) Math.floor(mob.z) >> 4);
+    }
+
+    /** Whether an animal foreseen from the seed is worth remembering: shown, and not past the distance mobs are drawn at. */
+    private boolean wantsForeseen(SharedPositions.MobReport report, FarConfig config) {
+        if (!config.seedMobs) return false;
+        return config.mobMaxDistance <= 0 || Math.hypot(report.x() - selfX, report.z() - selfZ) <= config.mobMaxDistance + 64;
     }
 
     /** How the server says a mob looks, as one text. */
@@ -878,6 +1163,7 @@ public final class MobMemory {
                 }
                 mob.serverBody = where.body();
                 mob.serverHead = where.head();
+                sit(mob, where.sitting());
             }
             for (UUID id : answer.gone()) {
                 if (!live.containsKey(id)) forget(id);
@@ -919,7 +1205,8 @@ public final class MobMemory {
      * How close to the player a copy of this kind of mob cannot be: where the real mob would be
      * sent, and so drawn by the game or by the mod, were it still there. That is how far the
      * server sends this kind (which follows the "Entity Distance" slider in a single player
-     * world, and the view distance), within the render distance, less a margin. The simulation
+     * world), within the server's view distance ({@link ServerView}: never Bobby's render
+     * distance, whose far chunks hold no mobs), less a margin. The simulation
      * distance does not shrink it: mobs past it still stand in the loaded chunks and are sent.
      */
     public double nearRange(Remembered mob) {
@@ -932,12 +1219,21 @@ public final class MobMemory {
 
     private void reconcile(ClientLevel level, String dimension, int renderDistanceBlocks) {
         List<Remembered> missing = new ArrayList<>();
+        double bound = Math.max(24, renderBlocks);
         for (Remembered mob : mobs.values()) {
+            // Past the render distance it is never in range: nothing more looked up for it.
+            double dx = mob.x - selfX, dz = mob.z - selfZ, across = dx * dx + dz * dz;
+            if (across >= bound * bound) {
+                mob.missingChecks = 0;
+                continue;
+            }
             if (!mob.dimension.equals(dimension) || !isHere(mob) || live.containsKey(mob.id)) continue;
-            EntityType<?> type = type(mob);
-            double range = nearRange(type);
-            boolean inRange = Math.hypot(mob.x - selfX, mob.z - selfZ) < range
-                    && level.hasChunk((int) Math.floor(mob.x) >> 4, (int) Math.floor(mob.z) >> 4);
+            boolean inRange = false;
+            {
+                double range = nearRange(type(mob));
+                inRange = across < range * range
+                        && level.hasChunk((int) Math.floor(mob.x) >> 4, (int) Math.floor(mob.z) >> 4);
+            }
             mob.missingChecks = inRange ? mob.missingChecks + 1 : 0;
             if (mob.missingChecks >= 5) missing.add(mob);
         }
@@ -965,27 +1261,93 @@ public final class MobMemory {
         return sent(type, reach);
     }
 
+    /** Milliseconds a change in the list of mobs may spend building the copies it shows. */
+    private static final long CHANGE_BUDGET = 100;
+
+    /**
+     * The kinds shown far away were just changed in the list of mobs: drawn or left out from
+     * this frame, not from the next tick, which never comes while the list pauses the game.
+     */
+    public void kindsChanged() {
+        FarConfig config = FarConfig.get();
+        ClientLevel level = bound;
+        chooseSoon = true;
+        if (level == null || file == null || (!config.distantMobs && !config.distantEntities)) return;
+        choose(level.dimension().identifier().toString(), config);
+        long until = System.nanoTime() + CHANGE_BUDGET * 1_000_000L;
+        for (Remembered mob : shown) {
+            if (System.nanoTime() > until) break;
+            if (mob.puppet != null || mob.failed || mob.gone || mob.handover != null) continue;
+            if (mob.parsed == null) mob.parsed = CompletableFuture.completedFuture(parse(mob.nbt));
+            if (mob.parsed.isDone()) build(mob, level);
+        }
+    }
+
+    /**
+     * A mob's saved data, read: at once when short, otherwise on a background thread when
+     * {@code background} (the game's own, busy with its world as it generates).
+     */
+    private static CompletableFuture<CompoundTag> read(String nbt, boolean background) {
+        return background && nbt.length() > READ_AT_ONCE
+                ? CompletableFuture.supplyAsync(() -> parse(nbt), Util.backgroundExecutor())
+                : CompletableFuture.completedFuture(parse(nbt));
+    }
+
+    /** Whether a copy is in front of the player, across the ground, or right by them. */
+    private boolean seen(Remembered mob, Vec3 sight) {
+        double dx = mob.x - selfX, dz = mob.z - selfZ, length = Math.sqrt(dx * dx + dz * dz);
+        double flat = Math.sqrt(sight.x * sight.x + sight.z * sight.z);
+        return length < 16 || flat < 1e-3 || (dx * sight.x + dz * sight.z) / (length * flat) >= SEEN_COS;
+    }
+
     /** The nearest few, in this dimension: the ones drawn until the next choice. */
     private void choose(String dimension, FarConfig config) {
         chooseSoon = false;
         Set<String> wanted = new HashSet<>(config.mobTypes);
-        List<Remembered> here = new ArrayList<>();
+        // The mobs and the other entities, each shown or not and each limited on its own: a
+        // crowd of mobs never pushes an aircraft out.
+        List<Remembered> creatures = new ArrayList<>(), others = new ArrayList<>();
         for (Remembered mob : mobs.values()) {
             if (!mob.dimension.equals(dimension) || !isHere(mob)
                     || (live.containsKey(mob.id) && mob.handover == null) || carried.contains(mob.id)) continue;
             if (!wanted.contains(mob.type) && !(config.rememberNamedMobs && mob.named)) continue;
+            boolean creature = creature(mob);
+            if (!config.shows(creature)) continue;
             mob.distance = distance(mob.x, mob.y, mob.z);
-            here.add(mob);
+            // Only a chunk within the render distance can be held: no lookup for those past it.
+            if (SeedDraws.foreseen(mob.id) && (!config.seedMobs
+                    || mob.distance < renderBlocks + 64 && generated(mob))) continue;
+            (creature ? creatures : others).add(mob);
         }
-        here.sort(Comparator.comparingDouble(mob -> mob.distance));
-        int most = config.maxDistantMobs >= FarConfig.UNLIMITED_MOBS ? here.size() : Math.max(0, config.maxDistantMobs);
-        List<Remembered> chosen = here.subList(0, Math.min(here.size(), most));
-        Set<Remembered> kept = Collections.newSetFromMap(new IdentityHashMap<>());
-        kept.addAll(chosen);
+        List<Remembered> chosen = new ArrayList<>(creatures.size() + others.size());
+        for (List<Remembered> here : List.of(creatures, others)) {
+            int most = config.most(here == creatures, here.size());
+            // All of them drawn and no spyglass: no order to put them in. Otherwise the nearest,
+            // where the spyglass looks first, however far: the player is looking for them there.
+            if (most < here.size() || scoping) {
+                for (Remembered mob : here) {
+                    if (foresight.inScope(mob.x, mob.y + 0.5, mob.z)) mob.distance -= 1e9;
+                }
+                here.sort(Comparator.comparingDouble(mob -> mob.distance));
+                for (Remembered mob : here) {
+                    if (mob.distance < 0) mob.distance += 1e9;
+                }
+            }
+            chosen.addAll(most < here.size() ? here.subList(0, most) : here);
+        }
+        // Those no longer drawn let their copy go: marked by this choice's number, no set of thousands.
+        int choice = ++choices;
+        for (Remembered mob : chosen) mob.chosenIn = choice;
         for (Remembered mob : shown) {
-            if (!kept.contains(mob)) mob.puppet = null;
+            if (mob.chosenIn != choice) mob.puppet = null;
         }
-        shown = Collections.unmodifiableList(new ArrayList<>(chosen));
+        shown = Collections.unmodifiableList(chosen);
+    }
+
+    /** A mob rather than another entity (a boat, a vehicle, a mannequin); one of a kind not known here is taken for a mob. */
+    private static boolean creature(Remembered mob) {
+        EntityType<?> type = type(mob);
+        return type == null || MobKinds.creature(type);
     }
 
     /** A mob that walks on the ground, and so can fall: not one that flies or swims. */
@@ -1081,6 +1443,7 @@ public final class MobMemory {
 
     /** Forgets every mob, here and in the file. */
     public void forgetAll() {
+        foresight.forgetAll();
         for (Remembered mob : mobs.values()) mob.gone = true;
         mobs.clear();
         joining.clear();
@@ -1096,13 +1459,20 @@ public final class MobMemory {
     private void save() {
         if (file == null) return;
         dirty = false;
+        long started = Profile.begin(Profile.Section.SAVE_MOBS);
+        long bytes = -1;
         try {
-            Files.createDirectories(file.getParent());
-            try (Writer writer = Files.newBufferedWriter(file)) {
-                GSON.toJson(new ArrayList<>(mobs.values()), writer);
+            // Those foreseen from the seed are the server's to share again, not this client's to keep.
+            Collection<Remembered> kept = new ArrayList<>();
+            for (Remembered mob : mobs.values()) {
+                if (!SeedDraws.foreseen(mob.id)) kept.add(mob);
             }
+            JsonStore.write(file, writer -> write(kept, writer));
+            bytes = Files.size(file);
         } catch (IOException e) {
             LivingHorizonClient.LOGGER.warn("Could not write {}", file, e);
+        } finally {
+            Profile.end(Profile.Section.SAVE_MOBS, started, bytes);
         }
     }
 }

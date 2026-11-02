@@ -140,6 +140,9 @@ jobs:
         target: ${{ fromJSON(needs.version.outputs.targets) }}
     name: build ${{ matrix.target.node }}
     runs-on: ubuntu-latest
+    # A healthy build takes minutes; gradle.sh gives each of its three attempts 25. Without
+    # a ceiling, a hung download held the job, and every release queued behind it, 6 hours.
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -188,12 +191,20 @@ jobs:
             17
             21
 
+      - name: Restore the Gradle cache
+        # Read only, as on a pull request: develop reads what the cache workflow saved
+        # there, main finds nothing of it and builds without.
+        if: steps.reuse.outputs.taken != 'true'
+        uses: ./.github/actions/gradle-cache
+        with:
+          node: ${{ matrix.target.node }}
+
       - name: Set up Gradle
         if: steps.reuse.outputs.taken != 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
-          cache-cleanup: always
+          # Writing here would evict what the cache workflow keeps for the pull requests.
+          cache-disabled: true
 
       - name: Stamp the version
         if: steps.reuse.outputs.taken != 'true'
@@ -208,23 +219,11 @@ jobs:
 
       - name: Build
         if: steps.reuse.outputs.taken != 'true'
-        # The tests already ran on the pull request; this only builds the jar.
-        # Over fifty runners download the same plugins and Minecraft files at
-        # once, so a download that fails is tried again; any other failure is not.
+        # The tests already ran on the pull request; this only builds the jar. A
+        # download that fails or hangs is tried again (gradle.sh); any other failure is not.
         env:
           NODE: ${{ matrix.target.node }}
-        run: |
-          set -uo pipefail
-          for attempt in 1 2 3; do
-            ./gradlew ":${NODE}:buildAndCollect" --stacktrace --configure-on-demand \
-              -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64 \
-              2>&1 | tee gradle.log
-            [ "${PIPESTATUS[0]}" -eq 0 ] && exit 0
-            grep -qE "Could not (resolve|GET|HEAD|download)|could not resolve plugin artifact|Connection (reset|refused|timed out)|Read timed out|Remote host terminated|status code 5[0-9][0-9]" gradle.log || exit 1
-            echo "::warning::A download failed on attempt ${attempt}; trying again."
-            sleep $((attempt * 30))
-          done
-          exit 1
+        run: .github/scripts/gradle.sh ":${NODE}:buildAndCollect"
 
       - name: Hand the files to the release
         uses: actions/upload-artifact@v4
@@ -288,17 +287,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          args=(--generate-notes --title "v${VERSION}")
-
-          # Below 1.0.0 the mod is in beta: say so, and keep it off GitHub's
-          # "Latest" badge. 1.0.0 is the day this stops applying.
+          # A release from main is a full release, GitHub's "Latest" one, never a
+          # pre-release. Below 1.0.0 the mod is in beta: the title says so.
+          args=(--generate-notes --title "v${VERSION}" --latest)
           if [ "$CHANNEL" = 'stable' ] && [[ $VERSION == 0.* ]]; then
-            args=(--generate-notes --title "v${VERSION} (beta)" --prerelease)
+            args=(--generate-notes --title "v${VERSION} (beta)" --latest)
           fi
 
           if [ "$CHANNEL" = 'dev' ]; then
             # Marked as a pre-release so it never displays as the latest version.
-            args+=(--prerelease --target "${{ github.sha }}")
+            args=(--generate-notes --title "v${VERSION}" --prerelease --latest=false --target "${{ github.sha }}")
 
             # Generate the notes from the last stable release, so a dev build lists
             # what it adds over the last thing that shipped rather than over the

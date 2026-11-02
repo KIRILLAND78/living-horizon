@@ -12,6 +12,26 @@ accessible field net/minecraft/world/entity/Avatar DATA_PLAYER_MODE_CUSTOMISATIO
 # @until 1.21.8
 accessible field net/minecraft/world/entity/player/Player DATA_PLAYER_MODE_CUSTOMISATION Lnet/minecraft/network/syncher/EntityDataAccessor;
 
+# The block an easter egg's campfire shows, set outright: read from saved data, 26.3 left it air.
+accessible method net/minecraft/world/entity/Display$BlockDisplay setBlockState (Lnet/minecraft/world/level/block/state/BlockState;)V
+
+# How long a far player has been gliding, which tilts their body; tick() counts it, and a puppet never runs it.
+accessible field net/minecraft/world/entity/LivingEntity fallFlyTicks I
+
+# A mannequin takes the skin its profile was looked up to in tick(), which a puppet never runs.
+# @since 1.21.9
+accessible field net/minecraft/client/entity/ClientMannequin skinLookup Ljava/util/concurrent/CompletableFuture;
+accessible method net/minecraft/client/entity/ClientMannequin setSkin (Lnet/minecraft/world/entity/player/PlayerSkin;)V
+
+# Where a mannequin's cape hangs from, which its tick() also moves after it.
+# @since 1.21.9
+accessible field net/minecraft/client/entity/ClientAvatarState xCloak D
+accessible field net/minecraft/client/entity/ClientAvatarState yCloak D
+accessible field net/minecraft/client/entity/ClientAvatarState zCloak D
+accessible field net/minecraft/client/entity/ClientAvatarState xCloakO D
+accessible field net/minecraft/client/entity/ClientAvatarState yCloakO D
+accessible field net/minecraft/client/entity/ClientAvatarState zCloakO D
+
 # Before 1.21.2, with no render states: a figure is told it swims, stands still or walks
 # while it is drawn, and the faces of each cube of a model are counted as it is drawn.
 # @until 1.21.1
@@ -22,6 +42,9 @@ accessible field net/minecraft/world/entity/WalkAnimationState speed F
 accessible field net/minecraft/world/entity/WalkAnimationState speedOld F
 accessible class net/minecraft/client/model/geom/ModelPart$Polygon
 accessible field net/minecraft/client/model/geom/ModelPart$Cube polygons [Lnet/minecraft/client/model/geom/ModelPart$Polygon;
+
+# The view distance the server announced, which Bobby leaves out of the effective render distance.
+accessible field net/minecraft/client/Options serverRenderDistance I
 
 # The hashed seed the server sends, which tells one world from another.
 accessible field net/minecraft/world/level/biome/BiomeManager biomeZoomSeed J
@@ -85,3 +108,11 @@ accessible field net/minecraft/world/entity/animal/rabbit/Rabbit jumpDuration I
 # @until 1.21.10
 accessible field net/minecraft/world/entity/animal/Rabbit jumpTicks I
 accessible field net/minecraft/world/entity/animal/Rabbit jumpDuration I
+
+# Each kind's renderer, whose declared entity class tells a vehicle kind before one is met.
+accessible field net/minecraft/client/renderer/entity/EntityRenderDispatcher renderers Ljava/util/Map;
+
+# The values of an option, which the mod's sliders implement to be built by the game's own
+# option lists (ui/NumberSlider). Public from 26.2.
+# @until 26.1.2
+accessible class net/minecraft/client/OptionInstance$ValueSet

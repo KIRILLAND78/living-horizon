@@ -1,5 +1,9 @@
 package fr.clixmods.livinghorizon.render.impostor;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+
 /**
  * Turns one rendered picture of a figure into the mip levels of its tile, on the CPU.
  *
@@ -53,6 +57,70 @@ public final class ImpostorPixels {
             out[i] = cut(level, side);
         }
         return out;
+    }
+
+    /**
+     * The mip levels of a whole sheet, its views side by side in each, top row first.
+     *
+     * @param pictures the views as read back, bottom row first, {@code render * render} pixels each
+     * @param render   the side of a picture, a power of two times {@code tile}
+     * @param tile     the side of a tile at level 0
+     * @param levels   how many levels
+     */
+    public static int[][] sheet(int[][] pictures, int render, int tile, int levels) {
+        int views = pictures.length;
+        int[][][] mips = new int[views][][];
+        for (int view = 0; view < views; view++) mips[view] = mips(pictures[view], render, tile, levels);
+        int[][] out = new int[levels][];
+        for (int level = 0; level < levels; level++) {
+            int side = tile >> level;
+            int width = side * views;
+            int[] strip = new int[width * side];
+            for (int view = 0; view < views; view++) {
+                int[] pixels = mips[view][level];
+                // Read back bottom row first: turned so that the top of the figure is at the top.
+                for (int y = 0; y < side; y++) {
+                    System.arraycopy(pixels, y * side, strip, (side - 1 - y) * width + view * side, side);
+                }
+            }
+            out[level] = strip;
+        }
+        return out;
+    }
+
+    /**
+     * Whether levels read from disk have the size of a sheet's: {@code count} levels of
+     * {@link ImpostorViews#VIEWS} tiles of {@link ImpostorViews#TILE} pixels at level 0.
+     * Written by another format otherwise.
+     */
+    public static boolean fits(int[][] levels, int count) {
+        if (levels.length != count) return false;
+        for (int level = 0; level < count; level++) {
+            int tile = ImpostorViews.TILE >> level;
+            if (levels[level] == null || levels[level].length != tile * ImpostorViews.VIEWS * tile) return false;
+        }
+        return true;
+    }
+
+    /** A hash of a picture's pixels: two looks drawn the same have the same. */
+    public static long hash(int[] level) {
+        long hash = 1125899906842597L;
+        for (int pixel : level) hash = hash * 31 + pixel;
+        return hash;
+    }
+
+    /**
+     * The views read back from the graphics card, one after the other in {@code data}, each
+     * {@code render * render} pixels packed as {@code 0xAABBGGRR}.
+     */
+    public static int[][] views(ByteBuffer data, int views, int render) {
+        int[][] read = new int[views][];
+        IntBuffer pixels = data.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+        for (int view = 0; view < views; view++) {
+            read[view] = new int[render * render];
+            pixels.get(view * read[view].length, read[view]);
+        }
+        return read;
     }
 
     /**
