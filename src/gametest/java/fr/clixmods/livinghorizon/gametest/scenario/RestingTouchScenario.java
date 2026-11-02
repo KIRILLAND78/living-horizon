@@ -60,12 +60,23 @@ public final class RestingTouchScenario implements Scenario {
         Scene.screenshot(context, this, "pushed");
     }
 
-    /** You look at it from 5 blocks: it turns to you, then crouches when you crouch, and stands up with you. */
+    /**
+     * You look at it from 10 blocks: it pays no attention. From 5: it turns to you, then
+     * crouches when you crouch, and stands up with you.
+     */
     private void gaze(ClientGameTestContext context, TestSingleplayerContext world) {
         Vec3[] aimed = {null};
+        for (int i = 0; i < 10; i++) {
+            aim(context, world, aimed, 10);
+            // The first two seconds, it may still be looking at you from when it was pushed.
+            if (i >= 4 && read(context, RestingPuppet::state).startsWith("looking at you")) {
+                throw new AssertionError("restingtouch: looked back from 10 blocks away");
+            }
+        }
+        aimed[0] = null;
         boolean facing = false;
         for (int i = 0; i < 60 && !facing; i++) {
-            aim(context, world, aimed);
+            aim(context, world, aimed, 5);
             facing = Math.abs(Mth.wrapDegrees(read(context, p -> p.yHeadRot) - 180f)) < 20;
         }
         Scene.log("restingtouch looked at: " + read(context, RestingPuppet::state));
@@ -75,7 +86,7 @@ public final class RestingTouchScenario implements Scenario {
         context.getInput().holdKey(options -> options.keyShift);
         boolean down = false;
         for (int i = 0; i < 60 && !down; i++) {
-            aim(context, world, aimed);
+            aim(context, world, aimed, 5);
             down = read(context, RestingPuppet::crouched);
         }
         Scene.log("restingtouch you crouch: " + read(context, RestingPuppet::state));
@@ -87,13 +98,14 @@ public final class RestingTouchScenario implements Scenario {
     }
 
     /**
-     * Wherever it goes, you keep it under your crosshair, 5 blocks north of it, facing south a
-     * little down, at its chest; then 10 ticks.
+     * Wherever it goes, you keep it under your crosshair, {@code blocks} north of it, facing
+     * south a little down, at its chest; then 10 ticks.
      */
-    private void aim(ClientGameTestContext context, TestSingleplayerContext world, Vec3[] aimed) {
+    private void aim(ClientGameTestContext context, TestSingleplayerContext world, Vec3[] aimed, double blocks) {
         Vec3 at = read(context, RestingPuppet::position);
         if (aimed[0] == null || aimed[0].distanceTo(at) > 0.3) {
-            Scene.command(world, "tp @a " + at.x + " " + GROUND + " " + (at.z - 5) + " 0 5");
+            float pitch = (float) Math.toDegrees(Math.atan2(0.5, blocks));
+            Scene.command(world, "tp @a " + at.x + " " + GROUND + " " + (at.z - blocks) + " 0 " + pitch);
             aimed[0] = at;
         }
         context.waitTicks(10);

@@ -718,8 +718,8 @@ public final class RestingPlayers {
         if (!fakes.contains(key)) dirty = true;
     }
 
-    /** Blocks within which one notices you looking at it. */
-    private static final double GAZE = 24;
+    /** Blocks within which one notices you looking at it: close by, as someone would. */
+    private static final double GAZE = 6;
 
     /**
      * The nearest of them under your crosshair, within {@link #GAZE} blocks, living its life

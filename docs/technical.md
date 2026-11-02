@@ -288,7 +288,7 @@ under 48.
 - **A creeper** blowing up within 7 blocks, in sight, throws them, shield up, and they walk
   back.
 - **Hit by you**, they raise their shield.
-- **Looked at** by you (the nearest under your crosshair, within 24 blocks, nothing in
+- **Looked at** by you (the nearest under your crosshair, within 6 blocks, nothing in
   between), they look back for as long as you look and 1.5 seconds more: standing, they turn
   to you, and facing you they crouch while you crouch; walking, seated, fishing or on a
   mount, they turn their head only and never crouch.
