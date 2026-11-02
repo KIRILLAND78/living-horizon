@@ -4,6 +4,9 @@
 
 ### Client
 
+#### Nouveautés
+- **Pousser les joueurs déconnectés** — avance dans un joueur déconnecté et tu le pousses de ton chemin ; lui ne te pousse jamais.
+
 #### Améliorations
 - **Joueurs déconnectés la nuit** — les joueurs déconnectés ne s'allongent plus par terre la nuit : ils dorment dans un lit à leur portée, ou restent debout.
 

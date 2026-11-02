@@ -4,6 +4,9 @@
 
 ### Client
 
+#### New
+- **Pushing offline players** — walk into a player who logged off and you push them out of your way; they never push you.
+
 #### Improved
 - **Offline players at night** — players who logged off no longer lie down on the ground at night: they sleep in a bed they can reach, or stay on their feet.
 

@@ -186,6 +186,9 @@ under 48.
 - **A creeper** blowing up within 7 blocks, in sight, throws them, shield up, and they walk
   back.
 - **Hit by you**, they raise their shield.
+- **Walked into** by you or what you ride, they are shoved out of your way (a quarter of a
+  block per tick at most, never into a wall), getting up if they sat; never out of a bed.
+  They never push you: nothing of them exists on the server.
 - **In lava or fire** they show the swirls of fire resistance; **under water**, those of
   water breathing.
 

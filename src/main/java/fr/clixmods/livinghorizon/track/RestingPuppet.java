@@ -54,6 +54,9 @@ import java.util.Set;
  * shield. In lava or fire it shows fire resistance, under water water breathing. Where the
  * blocks are not loaded it only stands or sits where it was, standing at night.
  *
+ * <p>Walk into it and it is shoved aside, as players push each other; it never pushes back,
+ * being a picture on this client only.
+ *
  * <p>Off, it sits on its spot. Either way it keeps to the ground: break what it rests on and
  * it falls; bury it and it reappears on top. Sitting, its own spot wins again once it has
  * room and something under it, since that is where the player will come back.
@@ -86,6 +89,8 @@ public final class RestingPuppet extends RemotePlayer {
     private static final int STAND_TICKS = 15;
     /** Ticks it stands at night with no bed, looking around, before looking for one again. */
     private static final int AWAKE = 200;
+    /** Blocks it is shoved aside in a tick at most, out of the way of whoever walks into it. */
+    private static final double SHOVE = 0.25;
     /** The game lays a sleeper this high above the block of its bed. */
     private static final double BED_HEIGHT = 0.6875;
     /** Blocks per tick: a stroll, and getting out of a monster's way. */
@@ -302,7 +307,7 @@ public final class RestingPuppet extends RemotePlayer {
         return riding && carried != null ? carried.away() : far;
     }
 
-    void tick(ClientLevel level, FarConfig config, Set<BlockPos> beds, boolean night, int[] work) {
+    void tick(ClientLevel level, FarConfig config, Set<BlockPos> beds, boolean night, int[] work, @Nullable Entity you) {
         setOldPosAndRot();
         yBodyRotO = yBodyRot;
         yHeadRotO = yHeadRot;
@@ -365,6 +370,7 @@ public final class RestingPuppet extends RemotePlayer {
         roam = config.offlineRoam;
         survey(level, work);
         double before = getX(), beforeZ = getZ();
+        if (activity != Activity.FLY) shove(level, you);
 
         if (activity == Activity.FLY) {
             fly(level);
@@ -382,6 +388,30 @@ public final class RestingPuppet extends RemotePlayer {
         double moved = Math.hypot(getX() - before, getZ() - beforeZ);
         Puppets.walk(this, (float) Math.min(moved * 4.0, 1.0), 0.4f, 1f);
         setYRot(yBodyRot);
+    }
+
+    /**
+     * Walked into by you, or by what you ride: it is shoved out of your way, getting up if it
+     * sat, never into a wall. Never out of its bed.
+     */
+    private void shove(ClientLevel level, @Nullable Entity you) {
+        if (you == null || you.isSpectator() || activity == Activity.BED) return;
+        Entity body = you.getRootVehicle();
+        if (!getBoundingBox().intersects(body.getBoundingBox())) return;
+        double dx = getX() - body.getX(), dz = getZ() - body.getZ();
+        double d = Math.hypot(dx, dz);
+        if (d < 1e-4) {
+            // Right on it: straight ahead of whoever walks in.
+            double yaw = Math.toRadians(body.getYRot());
+            dx = -Math.sin(yaw);
+            dz = Math.cos(yaw);
+            d = 1;
+        }
+        double step = Math.min(SHOVE, Math.max(0.05, (getBbWidth() + body.getBbWidth()) / 2 - d));
+        double x = getX() + dx / d * step, z = getZ() + dz / d * step;
+        if (!Footing.fits(level, x, getY(), z, Footing.STANDING)) return;
+        setPos(x, getY(), z);
+        if (activity == Activity.SIT) start(Activity.IDLE, 40 + random.nextInt(40));
     }
 
     // --- In the saddle ----------------------------------------------------------------------
