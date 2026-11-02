@@ -624,6 +624,9 @@ public final class GhostRenderer {
             //?}
             add(frame, minecraft, eye, body, mountState, true, Mark.PLAYER, config, spot.name());
             body.nameTag = name;
+            // Fishing: its bobber on the water, the line drawn from the rod by the game.
+            Entity hook = puppet.hook();
+            if (hook != null) add(frame, minecraft, eye, extract(dispatcher, hook, partialTick), null, true, Mark.PLAYER, config, null);
         }
     }
 

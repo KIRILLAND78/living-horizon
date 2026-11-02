@@ -5,6 +5,7 @@
 ### Client
 
 #### New
+- **Offline players fishing** — players who logged off may stop at the water's edge to fish for a while, one at a time on a stretch of shore.
 - **Pushing offline players** — walk into a player who logged off and you push them out of your way; they never push you.
 
 #### Improved

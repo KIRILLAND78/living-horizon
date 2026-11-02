@@ -186,6 +186,11 @@ under 48.
 - **A creeper** blowing up within 7 blocks, in sight, throws them, shield up, and they walk
   back.
 - **Hit by you**, they raise their shield.
+- **At the water's edge**, where open water runs 3 blocks out from a spot they can reach, they
+  may fish for a minute or so: a rod in hand, the bobber on the water with the game's line,
+  a fish's wake now and then, a bite that pulls the bobber under, the line reeled in and cast
+  again. Nothing is caught. Never two within 16 blocks of each other at once, those walking
+  to the water included; at night they leave it for a bed.
 - **Walked into** by you or what you ride, they are shoved out of your way (a quarter of a
   block per tick at most, never into a wall), getting up if they sat; never out of a bed.
   They never push you: nothing of them exists on the server.

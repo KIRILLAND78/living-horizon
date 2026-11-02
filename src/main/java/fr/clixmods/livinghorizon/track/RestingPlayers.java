@@ -491,8 +491,12 @@ public final class RestingPlayers {
     /** Every one of them lives a tick: idle animations, their life around their spot, the ground under them. */
     void tick(ClientLevel level, FarConfig config) {
         Set<BlockPos> beds = new HashSet<>();
+        // Where they fish, or walk to fish: one on a stretch of shore.
+        List<Vec3> fishers = new ArrayList<>();
         for (RestingPuppet puppet : puppets.values()) {
             if (puppet.bed() != null) beds.add(puppet.bed());
+            Vec3 fishing = puppet.fishing();
+            if (fishing != null) fishers.add(fishing);
         }
         boolean night = !level.isBrightOutside();
         // Spots read per tick by all of them together, looking around and for their way.
@@ -503,7 +507,7 @@ public final class RestingPlayers {
             // Near the camera they live their life; away from it, they play a loop.
             if (camera != null) puppet.near(camera.getEyePosition());
             // You may shove them out of your way; they never push you.
-            puppet.tick(level, config, beds, night, work, minecraft.player);
+            puppet.tick(level, config, beds, fishers, night, work, minecraft.player);
         }
     }
 

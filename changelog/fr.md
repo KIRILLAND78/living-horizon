@@ -5,6 +5,7 @@
 ### Client
 
 #### Nouveautés
+- **Joueurs déconnectés à la pêche** — les joueurs déconnectés peuvent s'arrêter au bord de l'eau pour pêcher un moment, un seul à la fois sur un même bout de rive.
 - **Pousser les joueurs déconnectés** — avance dans un joueur déconnecté et tu le pousses de ton chemin ; lui ne te pousse jamais.
 
 #### Améliorations
