@@ -14,9 +14,9 @@ import net.minecraft.world.phys.Vec3;
  * Easter egg 11, called: the figure stands far ahead with its spyglass raised, seen from where
  * it came and from 60 blocks. Then the player scopes at it: with a real spyglass held to the
  * eye (the use key held down) where the game lets the test do it, otherwise faked through
- * {@link Watcher#scoping(Boolean)}; looked at a few seconds, it lowers its spyglass, walks a
- * few steps away and is gone. Called again: gone once the player stops scoping, and gone as
- * they come near.
+ * {@link Watcher#scoping(Boolean)}; looked at, it stands where it is, lowers its spyglass a
+ * while and raises it again, and is gone once the spyglass turns away from it. Called again:
+ * gone once the player stops scoping, and gone as they come near.
  */
 public final class Egg11 {
     private Egg11() {
@@ -72,7 +72,7 @@ public final class Egg11 {
         context.waitTicks(3);
         Scene.screenshot(context, scenario, "ee11-close");
 
-        // Through the spyglass, a few seconds: it lowers its own and walks away.
+        // Through the spyglass: it never moves, lowers its own a while and raises it again.
         context.runOnClient(minecraft -> minecraft.options.keyUse.setDown(true));
         context.waitTicks(10);
         boolean real = context.computeOnClient(minecraft -> minecraft.player.isScoping());
@@ -85,23 +85,31 @@ public final class Egg11 {
         Scene.log("eggs2 ee11 scoping " + (real ? "with the spyglass" : "faked"));
         context.runOnClient(minecraft -> lookAt(minecraft.player, at.x, at.y + 1.5, at.z));
         Scene.screenshot(context, scenario, "ee11-scope");
-        int waited = 0;
-        while (!context.computeOnClient(minecraft -> watcher().leaving())) {
-            if (!context.computeOnClient(minecraft -> watcher().busy())) throw new AssertionError("ee11 gone before it was left");
-            if (++waited > 160) throw new AssertionError("ee11 never left, looked at " + waited + " ticks");
-            context.waitTick();
-        }
         Vec3 from = context.computeOnClient(minecraft -> watcher().position());
-        double walked = 0;
-        for (int i = 0; i < 200 && context.computeOnClient(minecraft -> watcher().busy()); i++) {
+        boolean lowered = false, raisedAgain = false;
+        double moved = 0;
+        for (int i = 0; i < 400 && !raisedAgain; i++) {
+            if (!context.computeOnClient(minecraft -> watcher().busy())) throw new AssertionError("ee11 gone while looked at, after " + i + " ticks");
             Vec3 now = context.computeOnClient(minecraft -> watcher().position());
-            if (now != null) walked = Math.max(walked, Math.hypot(now.x - from.x, now.z - from.z));
-            if (i == 40) Scene.screenshot(context, scenario, "ee11-leaving");
+            moved = Math.max(moved, now.distanceTo(from));
+            boolean up = context.computeOnClient(minecraft -> watcher().raised());
+            if (!up && !lowered) {
+                lowered = true;
+                Scene.screenshot(context, scenario, "ee11-lowered");
+            } else if (up && lowered) {
+                raisedAgain = true;
+            }
             context.waitTick();
         }
-        Scene.log("eggs2 ee11 walked " + String.format("%.1f", walked) + " blocks away");
-        if (context.computeOnClient(minecraft -> watcher().busy())) throw new AssertionError("ee11 never went");
-        if (walked < 2) throw new AssertionError("ee11 went without walking away: " + walked);
+        Scene.log("eggs2 ee11 looked at: moved " + String.format("%.2f", moved) + " blocks, lowered " + lowered + ", raised again " + raisedAgain);
+        if (moved > 0.01) throw new AssertionError("ee11 moved " + moved + " blocks while looked at");
+        if (!lowered) throw new AssertionError("ee11 never lowered its spyglass");
+        if (!raisedAgain) throw new AssertionError("ee11 never raised its spyglass again");
+
+        // The spyglass turned away from it: gone at once.
+        context.runOnClient(minecraft -> minecraft.player.setYRot(minecraft.player.getYRot() + 90f));
+        context.waitTicks(10);
+        if (context.computeOnClient(minecraft -> watcher().busy())) throw new AssertionError("ee11 still there once looked away from");
         context.runOnClient(minecraft -> {
             minecraft.options.keyUse.setDown(false);
             watcher().scoping(null);

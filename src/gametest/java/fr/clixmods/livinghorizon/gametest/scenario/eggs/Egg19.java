@@ -8,8 +8,12 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
 
 /**
  * Easter egg 19 at midnight: a mound of stone five blocks high built 120 blocks ahead on the
@@ -50,6 +54,7 @@ public final class Egg19 {
         if (fire.y < feet + 2) throw new AssertionError("ee19 at height " + fire.y + ", not on the mound");
         if (!context.computeOnClient(minecraft -> campfire().burning())) throw new AssertionError("ee19 not burning");
         context.waitTicks(20);
+        context.runOnClient(minecraft -> standsStill(campfire().figures(), "ee19"));
         Scene.screenshot(context, scenario, "ee19-fire");
 
         // Nearer, still farther than where it is out.
@@ -108,5 +113,20 @@ public final class Egg19 {
         double dx = x - player.getX(), dy = y - player.getEyeY(), dz = z - player.getZ();
         player.setYRot((float) Math.toDegrees(Math.atan2(-dx, dz)));
         player.setXRot((float) -Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz))));
+    }
+
+    /**
+     * The campfire stands still: drawn where it is at any moment of a tick. Its last tick's
+     * place left elsewhere (the world's origin), the game drew it somewhere between the two,
+     * a different place every frame.
+     */
+    static void standsStill(List<? extends Entity> figures, String egg) {
+        for (Entity figure : figures) {
+            if (!(figure instanceof Display.BlockDisplay)) continue;
+            Vec3 before = figure.getPosition(0f), now = figure.position();
+            if (before.distanceTo(now) > 0.01) {
+                throw new AssertionError(egg + "'s campfire drawn moving from " + before + " to " + now);
+            }
+        }
     }
 }

@@ -450,7 +450,8 @@ come back, add it here in the same pull request: this file is what the next sess
   tick: the game plays idle movements at `tickCount` plus the frame's part of a tick, so a stopped
   one replays a tick's worth twenty times a second. Still copies are looked at once in sixteen
   ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
-  once in sixteen ticks went in jerks. The `stillmobs` scenario checks it all.
+  once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
+  skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
 - **Distant mobs only turning on the spot**, never walking, after the world was opened, while
   those met since walk: their ground was read (`MobPaths.plan`) where the far world had nothing
   (Voxy or Distant Horizons not open yet, or Voxy turned off for the session by one failed
