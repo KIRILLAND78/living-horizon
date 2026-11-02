@@ -33,9 +33,10 @@ import java.util.concurrent.CompletableFuture;
  * player on foot. Where the blocks are not loaded it stays put.
  *
  * <p>That only near the camera, as for a player on foot ({@link RestingPuppet#NEAR_IN}).
- * Farther it plays one of the animations distant mobs play, in a loop around its spot
- * ({@link RestingLoop}): a horse walks the ground read around the spot, a boat the water,
- * a happy ghast the air at its height. Nothing is read nor decided while it plays.
+ * Farther it plays one of the animations distant mobs play, in a loop around where it is,
+ * never going back to its spot nor farther from it than it roams ({@link RestingLoop}): a
+ * horse walks the ground read around, a boat the water, a happy ghast the air at its height.
+ * Nothing is read nor decided while it plays.
  */
 final class RestingMount {
     /**
@@ -94,6 +95,8 @@ final class RestingMount {
     /** Playing its loop, away from the camera. */
     private boolean far;
     private @Nullable RestingLoop loop;
+    /** Blocks from its spot it may go, its spot the middle: its loop never takes it farther. */
+    private int roam = 50;
     /** How deep a boat sits in the water, below its surface: as it sat when they logged off. */
     private double draft = Double.NaN;
 
@@ -334,6 +337,7 @@ final class RestingMount {
         }
         entity.tickCount++;
         moved = 0;
+        this.roam = roam;
         if (kind == Kind.CIRCLE && lively) {
             // In the air, near or far: nothing to read, nothing in its way at its height.
             circle();
@@ -414,44 +418,50 @@ final class RestingMount {
 
     // --- Away from the camera -----------------------------------------------------------------
 
-    /** One tick of its loop around its spot. */
+    /** One tick of its loop around where it is: it never goes back to its spot. */
     private void playLoop() {
-        RestingLoop playing = loop();
         if (!far) {
             far = true;
             stop();
-            playing.from(entity.getX(), entity.getY(), entity.getZ(), yaw);
+            loop = null;
         }
+        RestingLoop playing = loop();
         moved = playing.tick((int) level.getGameTime(), kind == Kind.AIR || kind == Kind.WATER);
         entity.setPos(playing.x, playing.y, playing.z);
         yaw = playing.body;
     }
 
-    /** Its loop: the animation that fits the ground, the water or the air around its spot. */
+    /**
+     * Its loop: the animation that fits the ground, the water or the air around where it is,
+     * within {@link #roam} blocks of its spot.
+     */
     private RestingLoop loop() {
         if (loop == null) {
             double pace = kind == Kind.WATER ? ROW : kind == Kind.AIR ? DRIFT : WALK;
-            loop = new RestingLoop(seed, home.x, home.y, home.z, homeYaw, pace, this::plan);
+            Vec3 at = entity.position();
+            loop = new RestingLoop(seed, at.x, at.y, at.z, yaw, pace, () -> plan(at));
         }
         return loop;
     }
 
-    private CompletableFuture<MobPaths.Choice> plan() {
+    private CompletableFuture<MobPaths.Choice> plan(Vec3 at) {
+        double width = entity.getBbWidth(), radius = roam;
         return switch (kind) {
-            case GROUND -> MobPaths.plan(level, home.x, home.y, home.z, entity.getBbWidth(), seed);
-            case AIR -> CompletableFuture.completedFuture(MobPaths.free(home.x, home.y, home.z, seed));
-            case WATER -> water();
-            case STILL, HOVER, CIRCLE -> CompletableFuture.completedFuture(MobPaths.stand(home.x, home.y, home.z));
+            case GROUND -> MobPaths.plan(level, at.x, at.y, at.z, width, seed)
+                    .thenApply(choice -> MobPaths.within(choice, home.x, home.z, radius, width, seed));
+            case AIR -> CompletableFuture.completedFuture(MobPaths.free(at.x, at.y, at.z, seed));
+            case WATER -> water(at).thenApply(choice -> MobPaths.within(choice, home.x, home.z, radius, width, seed));
+            case STILL, HOVER, CIRCLE -> CompletableFuture.completedFuture(MobPaths.stand(at.x, at.y, at.z));
         };
     }
 
     /**
-     * The water around its spot, read like the ground around a mob ({@link MobPaths}): every
+     * The water around {@code at}, read like the ground around a mob ({@link MobPaths}): every
      * column it can float in, from a copy of the blocks this client has, off the game's
      * thread; the others are read again later.
      */
-    private CompletableFuture<MobPaths.Choice> water() {
-        int bx = Mth.floor(home.x), by = Mth.floor(home.y), bz = Mth.floor(home.z), r = MobPaths.RADIUS;
+    private CompletableFuture<MobPaths.Choice> water(Vec3 at) {
+        int bx = Mth.floor(at.x), by = Mth.floor(at.y), bz = Mth.floor(at.z), r = MobPaths.RADIUS;
         boolean complete = true;
         for (int cx = (bx - r) >> 4; cx <= (bx + r) >> 4; cx++) {
             for (int cz = (bz - r) >> 4; cz <= (bz + r) >> 4; cz++) {
@@ -470,13 +480,13 @@ final class RestingMount {
                     for (int dy : new int[]{0, -1, 1}) {
                         double surface = Footing.afloat(copy, cx, by + dy, cz, half, height);
                         if (!Double.isNaN(surface)) {
-                            ground[i][j] = home.y;
+                            ground[i][j] = at.y;
                             break;
                         }
                     }
                 }
             }
-            return MobPaths.choose(new MobPaths.Ground(ground, home.x, home.y, home.z, whole), width, seed);
+            return MobPaths.choose(new MobPaths.Ground(ground, at.x, at.y, at.z, whole), width, seed);
         });
     }
 

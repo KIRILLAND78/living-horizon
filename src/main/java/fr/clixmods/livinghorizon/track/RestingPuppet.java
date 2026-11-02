@@ -76,8 +76,9 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>All of this only near the camera, within {@link #NEAR_IN} blocks: farther, no life of
  * its own any more, nothing read nor decided, it plays one of the animations distant mobs
- * play, in a loop around its spot ({@link RestingLoop}): a walk with pauses, seated in some
- * of them by day, in the bed it already lies in at night.
+ * play, in a loop around where its life left it, never farther from its spot than it roams
+ * ({@link RestingLoop}): a walk with pauses, seated in some of them by day, in the bed it
+ * already lies in at night.
  *
  * <p>A player who logged off riding something stays on it ({@link RestingMount}): with
  * {@link FarConfig#offlineLife} on, the horse walks, the boat rows and the happy ghast drifts
@@ -377,6 +378,7 @@ public final class RestingPuppet extends RemotePlayer {
         // Crouched with you only while it lives its life on foot.
         if (crouched && (gazed <= 0 || riding || !lively || !near)) crouch(false);
 
+        roam = config.offlineRoam;
         if (lively != config.offlineLife) {
             lively = config.offlineLife;
             calmDown(beds);
@@ -431,7 +433,6 @@ public final class RestingPuppet extends RemotePlayer {
 
         if (shieldTicks > 0) shieldTicks--;
         if (tickCount % 5 == 0) swirls(level);
-        roam = config.offlineRoam;
         survey(level, work);
         double before = getX(), beforeZ = getZ();
         if (activity != Activity.FLY) shove(level, you);
@@ -512,24 +513,26 @@ public final class RestingPuppet extends RemotePlayer {
     // --- Away from the camera -----------------------------------------------------------------
 
     /**
-     * Its loop: a walk around its spot with pauses, seated in some of them by day; at night on
-     * its feet, or in the bed it already lies in until the morning.
+     * Its loop: a walk around where it stands with pauses, seated in some of them by day; at
+     * night on its feet, or in the bed it already lies in until the morning. It never walks
+     * back to its spot: the loop starts wherever its life left it.
      */
     private void away(ClientLevel level, Set<BlockPos> beds, boolean night) {
-        RestingLoop playing = loop(level);
         if (!far) {
             far = true;
             if (!(night && activity == Activity.BED)) calmDown(beds);
-            playing.from(getX(), getY(), getZ(), yBodyRot);
+            loop = null;
         }
         if (activity == Activity.BED) {
             if (night) {
                 Puppets.walk(this, 0f, 1f, 1f);
                 return;
             }
+            // Up in the morning: its loop starts beside the bed.
             leaveBed(beds);
-            playing.from(getX(), getY(), getZ(), yBodyRot);
+            loop = null;
         }
+        RestingLoop playing = loop(level);
         double moved = playing.tick((int) level.getGameTime(), false);
         if (getX() != playing.x || getY() != playing.y || getZ() != playing.z) setPos(playing.x, playing.y, playing.z);
         yBodyRot = playing.body;
@@ -539,15 +542,18 @@ public final class RestingPuppet extends RemotePlayer {
         setYRot(yBodyRot);
     }
 
-    /** Its loop around its spot, or the shore it rests on, the ground under it read once. */
+    /**
+     * Its loop around where it stands, the ground under it read once, never farther from its
+     * spot than it roams ({@link FarConfig#offlineRoam}): its spot is the middle of where it may go.
+     */
     private RestingLoop loop(ClientLevel level) {
         if (loop == null) {
             long seed = spot.name().toLowerCase(java.util.Locale.ROOT).hashCode() * 0x9E3779B97F4A7C15L;
-            Vec3 at = shore != null ? shore : new Vec3(spot.x(), spot.y(), spot.z());
+            double x = getX(), y = getY(), z = getZ(), cx = spot.x(), cz = spot.z(), radius = roam;
             // Where no animation fits, a cramped one; where not even that, it turns on its spot.
-            loop = new RestingLoop(seed, at.x, at.y, at.z, spot.yaw(), MobAnimations.WALK, true,
-                    () -> MobPaths.plan(level, at.x, at.y, at.z, 0.6, seed)
-                            .thenApply(choice -> MobPaths.orCramped(choice, 0.6, seed)));
+            loop = new RestingLoop(seed, x, y, z, yBodyRot, MobAnimations.WALK, true,
+                    () -> MobPaths.plan(level, x, y, z, 0.6, seed)
+                            .thenApply(choice -> MobPaths.orCramped(MobPaths.within(choice, cx, cz, radius, 0.6, seed), 0.6, seed)));
         }
         return loop;
     }
@@ -640,7 +646,10 @@ public final class RestingPuppet extends RemotePlayer {
             } else if (!under.water() && top < spot.y() - 1) {
                 forgetShore(new Vec3(spot.x(), top, spot.z()));
                 guessed = true;
-                if (!riding) snap(spot.x(), top, spot.z());
+                if (!riding) {
+                    snap(spot.x(), top, spot.z());
+                    loop = null;
+                }
             }
             return;
         }
@@ -663,11 +672,16 @@ public final class RestingPuppet extends RemotePlayer {
         return Footing.floorBelow(blocks, x, y, z);
     }
 
-    /** A new place to rest: its loop is drawn again around it, from wherever it is. */
+    /**
+     * A new place to rest. Away from the camera and left in water, it is moved there, its loop
+     * drawn again around it; anywhere else its loop goes on where it is.
+     */
     private void forgetShore(@Nullable Vec3 land) {
         shore = land;
+        if (!far || riding || !Footing.wet(blocks, getX(), getY(), getZ())) return;
+        Vec3 at = place();
+        snap(at.x, at.y, at.z);
         loop = null;
-        far = false;
     }
 
     /**

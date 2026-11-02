@@ -21,7 +21,7 @@
 #### Fixed
 - **Offline players' names shown on Forge** — Aiming at an offline player now shows their name and when they were last seen, instead of nothing at all. (Forge, Minecraft 1.20.1 to 1.20.4.)
 - **Better integration with Bobby** — Distant mobs now stay visible just past the distance the server sends them, over the terrain Bobby keeps, instead of disappearing. Distant players also no longer stop short as they walk out of that distance.
-- **Offline players keep moving in the distance** — Offline players now keep moving once you walk away, even where there is no room for their usual stroll: they take a few steps, turn around or sit down for a while, instead of standing perfectly still.
+- **Offline players keep moving in the distance** — Once you walk away, offline players now keep strolling right where they are, instead of walking back to where they logged off or standing perfectly still. Where there is no room for a stroll, they take a few steps, turn around or sit down for a while.
 
 ## 0.15.0 — 2026-10-31
 

@@ -21,7 +21,7 @@
 #### Corrections
 - **Nom des joueurs déconnectés affiché sur Forge** — Viser un joueur déconnecté affiche maintenant son nom et quand il a été vu pour la dernière fois, au lieu de ne rien afficher. (Forge, Minecraft 1.20.1 à 1.20.4.)
 - **Meilleure intégration avec Bobby** — Les créatures lointaines restent maintenant visibles juste au-delà de la distance jusqu'où le serveur les envoie, sur le terrain que Bobby conserve, au lieu de disparaître. Les joueurs lointains ne s'arrêtent plus net non plus en sortant de cette distance.
-- **Les joueurs déconnectés restent animés au loin** — Les joueurs déconnectés continuent maintenant de bouger quand vous vous éloignez, même là où ils n'ont pas la place de se promener : ils font quelques pas, se retournent ou s'assoient un moment, au lieu de rester parfaitement immobiles.
+- **Les joueurs déconnectés restent animés au loin** — Quand vous vous éloignez, les joueurs déconnectés continuent maintenant de se promener là où ils sont, au lieu de revenir à l'endroit où ils se sont déconnectés ou de rester parfaitement immobiles. Là où ils n'ont pas la place de se promener, ils font quelques pas, se retournent ou s'assoient un moment.
 
 ## 0.15.0 — 2026-10-31
 

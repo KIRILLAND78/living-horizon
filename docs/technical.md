@@ -310,8 +310,8 @@ Where the blocks are not loaded, they only stand or sit where they are, standing
 
 Past 64 blocks they have no life of their own (`track/RestingLoop`): nothing is decided,
 but once a second they are still kept out of water (below). They play one of the animations
-distant mobs play (`track/MobAnimations`) in a loop around their spot, on the ground read
-around it (`track/MobPaths`, read again every 30 seconds while some of it is missing),
+distant mobs play (`track/MobAnimations`) in a loop around where they stand, on the ground
+read there (`track/MobPaths`, read again every 30 seconds while some of it is missing),
 sitting in some of its pauses by day. At night they stand in those pauses, or stay in their
 bed until the morning if they are in one.
 
@@ -319,8 +319,12 @@ bed until the morning if they are in one.
   cramped one (`MobAnimations.CRAMPED`: a step or two and back). Where not even that fits,
   or while the ground is not read, they turn on their spot every 8 seconds, as mobs do, and
   sit in one stance out of three: never a statue.
-- From wherever their life left them, they stroll back to the loop, stopping now and then to
-  look around, and start it once there.
+- The loop starts wherever their life left them (beside the bed in the morning): they never
+  walk back to their spot. Their spot stays the middle of where they may go: ground farther
+  than `offlineRoam` from it is left out when the animation is chosen (`MobPaths.within`).
+  Mounts do the same.
+- Only a figure left standing in water when its rest place is found (`forgetShore`), or one
+  that logged off flying and is put on the ground under it, is moved there.
 - When the camera comes near again, their life goes on from where the loop left them.
 
 ### Ground and water
