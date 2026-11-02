@@ -856,8 +856,10 @@ public final class MobMemory {
             // looked at again once in sixteen ticks, each on a tick of its own, and only kept going
             // meanwhile. Thousands far off cost little then. One that moves (the server's, one
             // called back to its spot) is moved every tick: once in sixteen, it went in jerks.
+            // One held by easter egg 15 turns every tick, small on screen or not.
             if (mob.still && mob.motion != null && mob.motion.settled() && !mob.simulated && mob.handover == null
-                    && mob.puppet instanceof LivingEntity resting && ((clock + mob.id.hashCode()) & 15) != 0) {
+                    && mob.puppet instanceof LivingEntity resting && !Herd.holds(resting)
+                    && ((clock + mob.id.hashCode()) & 15) != 0) {
                 mob.motion.rest(resting);
                 continue;
             }
