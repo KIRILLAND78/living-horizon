@@ -292,6 +292,11 @@ under 48.
   between), they look back for as long as you look and 1.5 seconds more: standing, they turn
   to you, and facing you they crouch while you crouch; walking, seated, fishing or on a
   mount, they turn their head only and never crouch.
+- **A chat**: by day one of them may walk up to another within 24 blocks who is idle, seated
+  or looking at something, to a spot 2 blocks from them; the other waits, turned to it, then
+  both talk face to face for 20 to 40 seconds, each nodding while it speaks, in turn. Never a
+  third, and never another pair within 16 blocks. Night, a monster, a hit or a push of more
+  than a few blocks ends it.
 - **At the water's edge**, where open water runs 3 blocks out from a spot they can reach, they
   may fish for a minute or so: a rod in hand, the bobber on the water with the game's line,
   a fish's wake now and then, a bite that pulls the bobber under, the line reeled in and cast

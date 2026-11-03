@@ -677,6 +677,7 @@ public final class RestingPlayers {
             if (fishing != null) fishers.add(fishing);
         }
         boolean night = !level.isBrightOutside();
+        RestingPuppet.Around around = new RestingPuppet.Around(beds, fishers, puppets.values(), night);
         // Sections copied per tick by all of them together, to look around. Each tick another
         // goes first, so that the same few never take it all.
         int[] work = {WORK};
@@ -696,7 +697,7 @@ public final class RestingPlayers {
             // Near the camera they live their life; away from it, they play a loop.
             if (camera != null) puppet.near(camera.getEyePosition());
             // You may shove them out of your way; they never push you.
-            puppet.tick(level, config, beds, fishers, night, work, minecraft.player);
+            puppet.tick(level, config, around, work, minecraft.player);
             if (puppet.restFound()) rested.add(spot);
         }
         for (Spot spot : rested) keepRest(spot, puppets.get(spot).rest());

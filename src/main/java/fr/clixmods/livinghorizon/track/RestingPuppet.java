@@ -38,6 +38,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +67,9 @@ import java.util.concurrent.CompletableFuture;
  * In lava or fire it shows fire resistance, under water water breathing. Where the blocks
  * are not loaded it only stands or sits where it was, standing at night.
  *
+ * <p>Two of them close by may walk up to each other and chat a while, face to face, nodding
+ * as they talk; never a third, and never another pair close by.
+ *
  * <p>Look at it and it looks back at you; facing you, it crouches when you crouch. Walk into
  * it and it is shoved aside, as players push each other; it never pushes back, being a
  * picture on this client only.
@@ -93,7 +97,14 @@ public final class RestingPuppet extends RemotePlayer {
     /** How it is drawn. */
     public enum Look { STAND, SIT, BED, RIDE }
 
-    private enum Activity { IDLE, SIT, WALK, FACE, FISH, BED, GUARD, FLY }
+    private enum Activity { IDLE, SIT, WALK, FACE, FISH, TALK, BED, GUARD, FLY }
+
+    /**
+     * What all of them share this tick: the beds kept, where they fish, every one of them (for
+     * a chat), and whether it is night.
+     */
+    record Around(Set<BlockPos> beds, List<Vec3> fishers, Collection<RestingPuppet> crowd, boolean night) {
+    }
 
     /** Blocks per tick², the drag and the most it falls in one tick: the game's own. */
     private static final double GRAVITY = 0.08, DRAG = 0.98, TERMINAL = 3.92;
@@ -113,6 +124,15 @@ public final class RestingPuppet extends RemotePlayer {
     private static final int GAZE = 30;
     /** Degrees: how far it turns its head from its body, and how near facing you counts as facing you. */
     private static final float NECK = 75, FACING = 30;
+    /**
+     * Blocks: how far it looks for someone to chat with, how far apart two pairs keep, and how
+     * far from each other the two stand.
+     */
+    private static final double TALK_REACH = 24, TALKERS_APART = 16, TALK_GAP = 2;
+    /** Ticks the one called waits for the other to come, and a chat lasts at least. */
+    private static final int TALK_WAIT = 600, CHAT = 400;
+    /** Ticks each speaks before the other answers. */
+    private static final int TURN_TO_SPEAK = 60;
     /** Ticks a fish takes to come to the bobber, and the bobber stays under once it bites. */
     private static final int WAKE = 40, DIP = 12;
     /** The game lays a sleeper this high above the block of its bed. */
@@ -218,6 +238,9 @@ public final class RestingPuppet extends RemotePlayer {
     /** Its bobber while the line is out, drawn with it; ticks to the next bite, or before casting again. */
     private @Nullable FishingHook hook;
     private int bite;
+    /** Who it chats with, or walks up to for that; whether it went to them, rather than waited. */
+    private @Nullable RestingPuppet partner;
+    private boolean caller;
     /** Your eyes while you look at it, and for {@link #GAZE} ticks after; whether you crouch. */
     private @Nullable Vec3 gazer;
     private int gazed;
@@ -333,7 +356,7 @@ public final class RestingPuppet extends RemotePlayer {
             faceAt(from, 0);
             return;
         }
-        if (activity == Activity.BED || activity == Activity.SIT || activity == Activity.FISH) {
+        if (activity == Activity.BED || activity == Activity.SIT || activity == Activity.FISH || activity == Activity.TALK) {
             // Out of bed: the bed is free again, the next look for one finds it.
             leaveBedIfIn();
             bed = null;
@@ -367,8 +390,9 @@ public final class RestingPuppet extends RemotePlayer {
         return riding && carried != null ? carried.away() : far;
     }
 
-    void tick(ClientLevel level, FarConfig config, Set<BlockPos> beds, List<Vec3> fishers, boolean night, int[] work,
-              @Nullable Entity you) {
+    void tick(ClientLevel level, FarConfig config, Around around, int[] work, @Nullable Entity you) {
+        Set<BlockPos> beds = around.beds();
+        boolean night = around.night();
         setOldPosAndRot();
         yBodyRotO = yBodyRot;
         yHeadRotO = yHeadRot;
@@ -443,7 +467,7 @@ public final class RestingPuppet extends RemotePlayer {
             watch(level, beds);
             // Thrown just now by a blast: nothing else this tick.
             if (activity == Activity.GUARD) guard(level);
-            else if (activity != Activity.FLY) live(level, beds, fishers, night);
+            else if (activity != Activity.FLY) live(level, around);
             if (activity != Activity.WALK && activity != Activity.BED && activity != Activity.FLY && path == null) {
                 settle(level, false);
             }
@@ -707,7 +731,9 @@ public final class RestingPuppet extends RemotePlayer {
 
     // --- A life ---------------------------------------------------------------------------
 
-    private void live(ClientLevel level, Set<BlockPos> beds, List<Vec3> fishers, boolean night) {
+    private void live(ClientLevel level, Around around) {
+        Set<BlockPos> beds = around.beds();
+        boolean night = around.night();
         if (route != null) routing(level, beds);
         switch (activity) {
             case WALK -> {
@@ -729,15 +755,21 @@ public final class RestingPuppet extends RemotePlayer {
                 if (night) start(Activity.IDLE, 20);
                 else fish(level);
             }
+            case TALK -> {
+                if (night) start(Activity.IDLE, 20);
+                else talk();
+            }
             default -> {
             }
         }
-        if (gazed <= 0) glance(activity == Activity.FACE || activity == Activity.FISH);
-        if (--timer <= 0) decide(level, beds, fishers, night);
+        if (gazed <= 0 && activity != Activity.TALK) glance(activity == Activity.FACE || activity == Activity.FISH);
+        if (--timer <= 0) decide(level, around);
     }
 
     /** What it does next. */
-    private void decide(ClientLevel level, Set<BlockPos> beds, List<Vec3> fishers, boolean night) {
+    private void decide(ClientLevel level, Around around) {
+        Set<BlockPos> beds = around.beds();
+        boolean night = around.night();
         if (route != null) return;
         Walkway.Survey map = known;
         if (night) {
@@ -754,9 +786,11 @@ public final class RestingPuppet extends RemotePlayer {
         int roll = random.nextInt(100);
         if (roll < 30 || map == null) {
             start(Activity.IDLE, 60 + random.nextInt(100));
-        } else if (roll < 50) {
+        } else if (roll < 45) {
             start(Activity.SIT, 200 + random.nextInt(300));
-        } else if (roll < 60 && towardsWater(fishers)) {
+        } else if (roll < 55 && towardsWater(around.fishers())) {
+            return;
+        } else if (roll < 63 && towardsChat(map, around.crowd())) {
             return;
         } else if (!(roll < 72 && towardsSomething()) && !stroll(map)) {
             start(Activity.IDLE, 60 + random.nextInt(60));
@@ -765,6 +799,7 @@ public final class RestingPuppet extends RemotePlayer {
 
     private void start(Activity next, int ticks) {
         reelIn();
+        if (next != Activity.TALK) hangUp();
         if (next != Activity.FISH) fishingFrom = null;
         activity = next;
         timer = ticks;
@@ -823,7 +858,7 @@ public final class RestingPuppet extends RemotePlayer {
         BlockPos at = feet();
         BlockPos home = home();
         int radius = roam + 4, budget = budget(roam);
-        start(activity == Activity.SIT || activity == Activity.FISH ? Activity.IDLE : activity, 400);
+        start(activity == Activity.SIT || activity == Activity.FISH || activity == Activity.TALK ? Activity.IDLE : activity, 400);
         route = GroundWork.run(() -> Optional.ofNullable(Walkway.way((x, y, z) -> Footing.stand(copy, x, y, z),
                 at.getX(), at.getY(), at.getZ(), target, home.getX(), home.getZ(), radius, budget)));
         then = after;
@@ -966,6 +1001,12 @@ public final class RestingPuppet extends RemotePlayer {
         path = null;
         switch (then) {
             case FACE -> start(Activity.FACE, 100 + random.nextInt(140));
+            case TALK -> {
+                start(Activity.TALK, CHAT + random.nextInt(CHAT));
+                // Both talk as long, the one who waited from now on too.
+                RestingPuppet other = partner;
+                if (other != null && other.partner == this) other.timer = timer;
+            }
             case FISH -> {
                 start(Activity.FISH, 900 + random.nextInt(900));
                 bite = 10 + random.nextInt(30);
@@ -1079,6 +1120,111 @@ public final class RestingPuppet extends RemotePlayer {
     /** Its body turned to {@code target}, near enough. */
     private boolean facing(Vec3 target) {
         return Math.abs(wrap(yawTowards(target.x - getX(), target.z - getZ()) - yBodyRot)) < FACING;
+    }
+
+    // --- A chat ------------------------------------------------------------------------------
+
+    /** Who it chats with, or walks up to or waits for, for that; null when nobody. */
+    public @Nullable RestingPuppet partner() {
+        return partner;
+    }
+
+    /** Chatting now: face to face with the other, both there. */
+    public boolean chatting() {
+        RestingPuppet other = partner;
+        return activity == Activity.TALK && other != null && other.partner == this && other.activity == Activity.TALK;
+    }
+
+    /** Free to be called over for a chat: living its life near the camera, on foot, doing nothing much. */
+    private boolean free() {
+        return lively && near && !far && !riding && partner == null && route == null && path == null
+                && (activity == Activity.IDLE || activity == Activity.SIT || activity == Activity.FACE);
+    }
+
+    /**
+     * To someone free within {@link #TALK_REACH} blocks, to chat: it walks to a spot
+     * {@link #TALK_GAP} blocks from them, who waits, turned to it. Never when another pair
+     * chats within {@link #TALKERS_APART} blocks of them.
+     */
+    private boolean towardsChat(Walkway.Survey map, Collection<RestingPuppet> crowd) {
+        List<RestingPuppet> others = new ArrayList<>(crowd);
+        if (others.size() < 2) return false;
+        int first = random.nextInt(others.size());
+        BlockPos at = feet();
+        for (int i = 0; i < others.size(); i++) {
+            RestingPuppet other = others.get((first + i) % others.size());
+            if (other == this || !other.free() || other.distanceToSqr(this) > TALK_REACH * TALK_REACH) continue;
+            if (chatNear(crowd, other)) continue;
+            BlockPos them = other.feet();
+            Walkway.Step best = null;
+            double bestDistance = Double.MAX_VALUE;
+            for (Walkway.Step step : map.spots()) {
+                if (Math.abs(step.y() - them.getY()) > 1) continue;
+                double apart = Math.hypot(step.x() - them.getX(), step.z() - them.getZ());
+                if (apart < TALK_GAP - 0.5 || apart > TALK_GAP + 0.6) continue;
+                double distance = step.distanceSqr(at.getX(), at.getZ());
+                if (distance < bestDistance) {
+                    best = step;
+                    bestDistance = distance;
+                }
+            }
+            if (best == null || !routeTo(best, Activity.TALK)) continue;
+            partner = other;
+            caller = true;
+            other.calledBy(this);
+            return true;
+        }
+        return false;
+    }
+
+    /** Whether another pair chats, or is about to, within {@link #TALKERS_APART} blocks of {@code them}. */
+    private boolean chatNear(Collection<RestingPuppet> crowd, RestingPuppet them) {
+        for (RestingPuppet other : crowd) {
+            if (other == this || other == them || other.partner == null) continue;
+            if (other.distanceToSqr(them) < TALKERS_APART * TALKERS_APART) return true;
+        }
+        return false;
+    }
+
+    /** Called over for a chat: it stops what it does and waits, turned to the one coming. */
+    private void calledBy(RestingPuppet other) {
+        start(Activity.TALK, TALK_WAIT);
+        partner = other;
+        caller = false;
+    }
+
+    /** The chat over, or never started: the other is free again, and goes back to its life. */
+    private void hangUp() {
+        RestingPuppet other = partner;
+        partner = null;
+        if (other == null || other.partner != this) return;
+        other.partner = null;
+        if (other.activity == Activity.TALK) other.start(Activity.IDLE, 40 + other.random.nextInt(60));
+    }
+
+    /**
+     * A tick of a chat: turned to the other, its head nodding while it speaks, still while it
+     * listens; each speaks in turn. Waiting for the other to come, it watches them come.
+     */
+    private void talk() {
+        RestingPuppet other = partner;
+        if (other == null || other.partner != this || other.far) {
+            start(Activity.IDLE, 20 + random.nextInt(40));
+            return;
+        }
+        boolean both = other.activity == Activity.TALK;
+        if (both && other.distanceToSqr(this) > (TALK_GAP + 2) * (TALK_GAP + 2)) {
+            // Pushed apart or carried off: the chat is over.
+            start(Activity.IDLE, 20 + random.nextInt(40));
+            return;
+        }
+        lookAt(other.getEyePosition(), true);
+        if (!both) return;
+        boolean speaking = (tickCount / TURN_TO_SPEAK) % 2 == (caller ? 0 : 1);
+        float nod = speaking ? (float) Math.sin(tickCount * 0.5) * 7f : (tickCount % 90 < 12 ? 6f : 0f);
+        float sway = speaking ? (float) Math.sin(tickCount * 0.17) * 6f : 0f;
+        yHeadRot += sway;
+        setXRot(headPitch + nod);
     }
 
     // --- Fishing ---------------------------------------------------------------------------
@@ -1404,7 +1550,7 @@ public final class RestingPuppet extends RemotePlayer {
         Puppets.walk(this, 0f, 1f, 1f);
         if (activity == Activity.BED) return;
         if (activity == Activity.WALK || activity == Activity.GUARD || activity == Activity.FLY
-                || activity == Activity.FACE || activity == Activity.FISH) {
+                || activity == Activity.FACE || activity == Activity.FISH || activity == Activity.TALK) {
             calmDownQuietly();
         }
         if (night) {
