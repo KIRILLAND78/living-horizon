@@ -67,6 +67,9 @@ import java.util.concurrent.CompletableFuture;
  * In lava or fire it shows fire resistance, under water water breathing. Where the blocks
  * are not loaded it only stands or sits where it was, standing at night.
  *
+ * <p>When it rains, some of them - six in ten, always the same ones - walk to stand under a
+ * roof or a tree they can reach, and stay there while it rains; the others go on as before.
+ *
  * <p>In the evening it goes to stand in front of a campfire or a furnace it can reach, each
  * on a spot of its own.
  *
@@ -186,6 +189,8 @@ public final class RestingPuppet extends RemotePlayer {
             Blocks.CAMPFIRE, Blocks.SOUL_CAMPFIRE, Blocks.FURNACE, Blocks.BLAST_FURNACE, Blocks.SMOKER);
     /** In the evening, the chance in a hundred that it goes to a fire rather than its usual day. */
     private static final int WARM_CHANCE = 60;
+    /** In ten players, how many take shelter from the rain; and blocks above a spot looked at for a roof. */
+    private static final int SHELTERING = 6, ROOF = 20;
 
     private final RestingPlayers.Spot spot;
     private final PlayerInfo info;
@@ -242,6 +247,10 @@ public final class RestingPuppet extends RemotePlayer {
     private @Nullable CompletableFuture<Area> reading;
     private int surveyAge, retry;
     private List<Sight> sights = List.of(), sleeps = List.of(), hearths = List.of();
+    /** Spots it can walk to with a roof or leaves above. */
+    private List<Walkway.Step> covers = List.of();
+    /** One of those who take shelter from the rain, by its name: always the same ones. */
+    private final boolean sheltering;
     /** The spot in front of a fire it stands on, or walks to: one each. */
     private @Nullable BlockPos warmAt;
     private List<Shore> shores = List.of();
@@ -270,6 +279,7 @@ public final class RestingPuppet extends RemotePlayer {
         this.spot = spot;
         this.info = new PlayerInfo(profile, false);
         this.random = new Random(spot.name().hashCode() * 31L + System.nanoTime());
+        this.sheltering = Math.floorMod(MobMotion.mix(spot.name().toLowerCase(java.util.Locale.ROOT).hashCode(), 17), 10L) < SHELTERING;
         this.blocks = Footing.live(level);
         // Each looks for monsters on a tick of its own, not all of them on the same one.
         this.scan = Math.floorMod(spot.name().hashCode(), 5);
@@ -347,7 +357,7 @@ public final class RestingPuppet extends RemotePlayer {
                 + ", area " + (map == null ? "unread" : map.spots().size() + " spots")
                 + (copying != null || reading != null ? " (reading)" : "")
                 + ", " + sleeps.size() + " beds, " + sights.size() + " things to look at, " + hearths.size()
-                + " places by a fire, " + shores.size() + " places to fish";
+                + " places by a fire, " + shores.size() + " places to fish, " + covers.size() + " under a roof";
     }
 
     /** Thrown through the air by a blast. */
@@ -780,6 +790,11 @@ public final class RestingPuppet extends RemotePlayer {
             default -> {
             }
         }
+        // Rain starting: those who mind it think again at once.
+        if (tickCount % 40 == 0 && sheltering && !covers.isEmpty() && activity != Activity.WALK && route == null
+                && wet(level)) {
+            timer = Math.min(timer, 1);
+        }
         if (gazed <= 0 && activity != Activity.TALK) {
             glance(activity == Activity.FACE || activity == Activity.WARM || activity == Activity.FISH);
         }
@@ -799,9 +814,18 @@ public final class RestingPuppet extends RemotePlayer {
                 return;
             }
             if (towardsBed(level, beds)) return;
+            if (sheltering && wet(level) && towardsCover()) return;
             // No bed it can reach: on its feet, looking around, until one is free.
             start(Activity.IDLE, AWAKE + random.nextInt(AWAKE));
             return;
+        }
+        if (sheltering && level.isRaining()) {
+            if (!wet(level)) {
+                // Dry under a roof or a tree: it stays there while it rains.
+                start(random.nextInt(3) == 0 ? Activity.SIT : Activity.IDLE, 200 + random.nextInt(200));
+                return;
+            }
+            if (towardsCover()) return;
         }
         if (around.evening() && activity != Activity.WARM && random.nextInt(100) < WARM_CHANCE
                 && towardsHearth(around.crowd())) {
@@ -853,6 +877,25 @@ public final class RestingPuppet extends RemotePlayer {
         // Set once on its way: starting the way clears what it looked at before.
         focus = Vec3.atCenterOf(sight.block());
         return true;
+    }
+
+    /** Rained on where it stands. */
+    private boolean wet(ClientLevel level) {
+        return level.isRaining() && level.isRainingAt(BlockPos.containing(getX(), getEyeY(), getZ()));
+    }
+
+    /** One of those who take shelter from the rain. */
+    public boolean sheltering() {
+        return sheltering;
+    }
+
+    /** To a spot it can reach with a roof or leaves above, one of the nearest. */
+    private boolean towardsCover() {
+        if (covers.isEmpty()) return false;
+        BlockPos at = feet();
+        List<Walkway.Step> nearest = new ArrayList<>(covers);
+        nearest.sort(java.util.Comparator.comparingDouble(step -> step.distanceSqr(at.getX(), at.getZ())));
+        return routeTo(nearest.get(random.nextInt(Math.min(4, nearest.size()))), Activity.IDLE);
     }
 
     /**
@@ -948,7 +991,7 @@ public final class RestingPuppet extends RemotePlayer {
 
     /** What it read around its spot: where it can walk, from the copy of the blocks it read, and what is there to go to. */
     private record Area(BlockCopy blocks, Walkway.@Nullable Survey map, List<Sight> sights, List<Sight> sleeps,
-                        List<Sight> hearths, List<Shore> shores) {
+                        List<Sight> hearths, List<Shore> shores, List<Walkway.Step> covers) {
     }
 
     /**
@@ -1000,6 +1043,7 @@ public final class RestingPuppet extends RemotePlayer {
         sleeps = read.sleeps();
         shores = read.shores();
         hearths = read.hearths();
+        covers = read.covers();
         // Idle for want of knowing better (no bed known at night): think again with what it now knows.
         if (activity == Activity.IDLE) timer = Math.min(timer, 20);
     }
@@ -1008,10 +1052,12 @@ public final class RestingPuppet extends RemotePlayer {
     private static Area read(BlockCopy copy, BlockPos at, BlockPos home, int radius, int budget) {
         Walkway.Survey map = Walkway.around((x, y, z) -> Footing.stand(copy, x, y, z), at.getX(), at.getY(), at.getZ(),
                 home.getX(), home.getZ(), radius, budget);
-        if (map == null) return new Area(copy, null, List.of(), List.of(), List.of(), List.of());
+        if (map == null) return new Area(copy, null, List.of(), List.of(), List.of(), List.of(), List.of());
         Map<BlockPos, Sight> sights = new LinkedHashMap<>(), sleeps = new LinkedHashMap<>(), hearths = new LinkedHashMap<>();
         Map<BlockPos, Shore> shores = new LinkedHashMap<>();
+        List<Walkway.Step> covers = new ArrayList<>();
         for (Walkway.Step spot : map.spots()) {
+            if (roofed(copy, spot)) covers.add(spot);
             for (Direction side : Direction.Plane.HORIZONTAL) {
                 BlockPos next = new BlockPos(spot.x() + side.getStepX(), spot.y(), spot.z() + side.getStepZ());
                 BlockState state = copy.state(next);
@@ -1031,7 +1077,15 @@ public final class RestingPuppet extends RemotePlayer {
             }
         }
         return new Area(copy, map, new ArrayList<>(sights.values()), new ArrayList<>(sleeps.values()),
-                new ArrayList<>(hearths.values()), new ArrayList<>(shores.values()));
+                new ArrayList<>(hearths.values()), new ArrayList<>(shores.values()), covers);
+    }
+
+    /** Something over a spot within {@link #ROOF} blocks that keeps the rain off: a roof, leaves. */
+    private static boolean roofed(BlockCopy copy, Walkway.Step spot) {
+        for (int up = 2; up <= ROOF; up++) {
+            if (!MobPaths.passable(copy.state(spot.x(), spot.y() + up, spot.z()))) return true;
+        }
+        return false;
     }
 
     /**

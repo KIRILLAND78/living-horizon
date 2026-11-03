@@ -16,7 +16,8 @@ import java.util.List;
 /**
  * Players who logged off, near the camera, among themselves: three close together, two of them
  * walk up to each other and chat face to face, never the third. In the evening, by a campfire
- * and a furnace, they stand in front of them, each on a spot of its own.
+ * and a furnace, they stand in front of them, each on a spot of its own. In the rain, those who
+ * mind it walk under a roof, and stay there.
  */
 public final class RestingSocialScenario implements Scenario {
     /** The flat world's grass is the block below this one. */
@@ -34,6 +35,8 @@ public final class RestingSocialScenario implements Scenario {
             chat(context, world);
             command(context, "livinghorizon debug offline test clear");
             evening(context, world);
+            command(context, "livinghorizon debug offline test clear");
+            rain(context, world);
             command(context, "livinghorizon debug offline test clear");
         }
     }
@@ -138,6 +141,49 @@ public final class RestingSocialScenario implements Scenario {
         }));
         Scene.screenshot(context, this, "evening");
         Scene.command(world, "time set noon");
+    }
+
+    /** A roof in the open, six of them around it, rain: those who mind it walk under it. */
+    private void rain(ClientGameTestContext context, TestSingleplayerContext world) {
+        Scene.command(world, "fill 78 " + (GROUND + 3) + " -3 84 " + (GROUND + 3) + " 3 oak_planks");
+        for (int i = 0; i < 6; i++) {
+            Scene.command(world, "tp @a " + (72.5 + i * 3) + " " + GROUND + " -9.5 0 0");
+            context.waitTicks(5);
+            command(context, "livinghorizon debug offline test spawn Rain" + i);
+        }
+        Scene.command(world, "tp @a 81.5 " + GROUND + " -20.5 0 10");
+        context.waitTicks(100);
+        Scene.command(world, "weather rain");
+        String dry = null;
+        for (int i = 0; i < 300 && dry == null; i++) {
+            context.waitTicks(10);
+            dry = context.computeOnClient(minecraft -> {
+                if (!minecraft.level.isRaining()) return null;
+                List<String> under = new ArrayList<>();
+                for (RestingPuppet puppet : puppets(minecraft)) {
+                    if (!puppet.getName().getString().startsWith("Rain") || !puppet.sheltering()) continue;
+                    boolean roofed = puppet.getX() > 78 && puppet.getX() < 85 && puppet.getZ() > -3 && puppet.getZ() < 4;
+                    if (roofed && !minecraft.level.isRainingAt(net.minecraft.core.BlockPos.containing(puppet.getEyePosition()))) {
+                        under.add(puppet.getName().getString());
+                    }
+                }
+                return under.isEmpty() ? null : String.join(", ", under);
+            });
+        }
+        String who = context.computeOnClient(minecraft -> {
+            StringBuilder line = new StringBuilder();
+            for (RestingPuppet puppet : puppets(minecraft)) {
+                if (!puppet.getName().getString().startsWith("Rain")) continue;
+                line.append(puppet.getName().getString()).append(puppet.sheltering() ? " (minds the rain) " : " ")
+                        .append(puppet.blockPosition().toShortString()).append("; ");
+            }
+            return line.toString();
+        });
+        Scene.log("restingsocial rain: under the roof " + dry + "; " + who);
+        if (dry == null) throw new AssertionError("restingsocial: nobody took shelter from the rain");
+        context.waitTicks(60);
+        Scene.screenshot(context, this, "rain");
+        Scene.command(world, "weather clear");
     }
 
     /** Degrees between the way {@code a}'s body faces and the way to {@code b}. */

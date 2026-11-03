@@ -10,6 +10,7 @@
 - **Support for Ecstatic's terrain** — Distant mobs now appear on Ecstatic's terrain and walk on its ground, instead of vanishing past the render distance. They hide correctly behind its hills, stay visible in front of them, and blend into its fog. (NeoForge, Minecraft 1.21.1, single player; the fog without shaders.)
 - **Push offline players aside** — You can now push offline players out of your way by walking into them. They never push you back, as they only exist in your game.
 - **Offline players go fishing** — Offline players near water can now stop at the water's edge to fish for a while. Only one fishes at a time along the same stretch of shore.
+- **Offline players take shelter from the rain** — When it rains, some offline players now walk to stand under a roof or a tree they can reach, and wait there until it stops. The others carry on as usual.
 - **Offline players gather by the fire** — In the evening, offline players now go and stand in front of a campfire or a furnace they can reach, each in a spot of their own.
 - **Offline players chat together** — Two offline players close to each other can now walk up to one another and chat for a while, face to face. Never more than two at once, and only one conversation in the same area.
 - **Offline players look back at you** — Offline players now turn to look at you when you look at them. If one is facing you and you crouch, it crouches too.
