@@ -677,7 +677,9 @@ public final class RestingPlayers {
             if (fishing != null) fishers.add(fishing);
         }
         boolean night = !level.isBrightOutside();
-        RestingPuppet.Around around = new RestingPuppet.Around(beds, fishers, puppets.values(), night);
+        // The evening: from late afternoon until dark, when they gather by the fire.
+        boolean evening = !night && Math.floorMod(dayTime(level), 24000L) >= EVENING;
+        RestingPuppet.Around around = new RestingPuppet.Around(beds, fishers, puppets.values(), night, evening);
         // Sections copied per tick by all of them together, to look around. Each tick another
         // goes first, so that the same few never take it all.
         int[] work = {WORK};
@@ -701,6 +703,18 @@ public final class RestingPlayers {
             if (puppet.restFound()) rested.add(spot);
         }
         for (Spot spot : rested) keepRest(spot, puppets.get(spot).rest());
+    }
+
+    /** Ticks into the day when the evening starts: an hour of the game's before sunset. */
+    private static final long EVENING = 11000;
+
+    /** The time of day in this level, in ticks from dawn, counted from the first day. */
+    private static long dayTime(ClientLevel level) {
+        //? if >=26.1 {
+        /*return level.getDefaultClockTime();
+        *///?} else {
+        return level.getDayTime();
+        //?}
     }
 
     /**

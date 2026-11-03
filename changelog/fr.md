@@ -10,6 +10,7 @@
 - **Prise en charge du terrain d'Ecstatic** — Les créatures lointaines apparaissent maintenant sur le terrain d'Ecstatic et marchent sur son sol, au lieu de disparaître au-delà de la distance d'affichage. Elles se cachent correctement derrière ses collines, restent visibles devant elles et se fondent dans son brouillard. (NeoForge, Minecraft 1.21.1, solo ; le brouillard sans shaders.)
 - **Pousser les joueurs déconnectés** — Vous pouvez maintenant écarter un joueur déconnecté de votre chemin en avançant dans lui. Lui ne vous repousse jamais, puisqu'il n'existe que dans votre jeu.
 - **Les joueurs déconnectés vont pêcher** — Les joueurs déconnectés près de l'eau peuvent maintenant s'arrêter au bord pour pêcher un moment. Un seul pêche à la fois sur un même bout de rive.
+- **Les joueurs déconnectés se réunissent près du feu** — Le soir, les joueurs déconnectés vont maintenant se tenir devant un feu de camp ou un four à leur portée, chacun à sa place.
 - **Les joueurs déconnectés discutent entre eux** — Deux joueurs déconnectés proches l'un de l'autre peuvent maintenant se rejoindre et discuter un moment, face à face. Jamais plus de deux à la fois, et une seule conversation dans un même coin.
 - **Les joueurs déconnectés vous regardent** — Les joueurs déconnectés se tournent maintenant vers vous quand vous les regardez. Si l'un d'eux vous fait face et que vous vous accroupissez, il s'accroupit aussi.
 

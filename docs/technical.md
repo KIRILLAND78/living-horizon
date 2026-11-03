@@ -292,6 +292,10 @@ under 48.
   between), they look back for as long as you look and 1.5 seconds more: standing, they turn
   to you, and facing you they crouch while you crouch; walking, seated, fishing or on a
   mount, they turn their head only and never crouch.
+- **In the evening** (from 11000 ticks into the day until dark), at each choice they go, six
+  times in ten, to stand in front of a campfire, a soul campfire, a furnace, a blast furnace or
+  a smoker they can reach, one of the three nearest, on a spot beside it nobody else stands on
+  or walks to, for 15 to 30 seconds.
 - **A chat**: by day one of them may walk up to another within 24 blocks who is idle, seated
   or looking at something, to a spot 2 blocks from them; the other waits, turned to it, then
   both talk face to face for 20 to 40 seconds, each nodding while it speaks, in turn. Never a
