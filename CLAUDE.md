@@ -469,8 +469,12 @@ come back, add it here in the same pull request: this file is what the next sess
   legs; `MobMotion.held` stops its animation's clock. And a puppet's `tickCount` must go on every
   tick: the game plays idle movements at `tickCount` plus the frame's part of a tick, so a stopped
   one replays a tick's worth twenty times a second. Still copies are looked at once in sixteen
-  ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
-  once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
+  ticks only once `MobMotion.settled`, and left untouched in between: their clocks (tick count,
+  legs, the animation's) are made up all at once (`MobMemory.catchUp`, `MobMotion.rest`) before
+  they are drawn as a model or looked at again. Anything else that reads a copy's tick count or
+  legs catches it up first. Until a copy is looked at, the tick reads only the remembered mob's
+  own fields (`settled`, `vehicle`, `aboard`), never the copy: one read of each copy a tick, for
+  thousands of them, was most of the cost. One moved once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
   skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
 - **Distant mobs gone between two distances on another player's server or LAN** (the copies
   hidden as "too close for a copy" past where the real mobs stop being sent, then forgotten): the

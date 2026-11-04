@@ -62,16 +62,22 @@ public final class StillMobsScenario implements Scenario {
 
     /**
      * Over 600 ticks: the blocks the cows covered together, the longest step one made in a tick,
-     * and how many times a cow's tick count did not go on.
+     * and how many times a cow's tick count did not go on. Each copy is read as the renderer draws
+     * a model: its clocks made up first, since a resting copy is left untouched between two looks.
      */
     private static double[] measure(ClientGameTestContext context, String label) {
         Map<MobMemory.Remembered, double[]> last = new IdentityHashMap<>();
         Map<MobMemory.Remembered, Integer> ticks = new IdentityHashMap<>();
-        double[] path = new double[1], longest = new double[1], legs = new double[1], stopped = new double[1];
+        double[] path = new double[1], longest = new double[1], legs = new double[1], stopped = new double[1],
+                madeUp = new double[1];
         for (int tick = 0; tick < 600; tick++) {
             context.runOnClient(minecraft -> {
-                for (MobMemory.Remembered mob : FarPlayerTracker.get().mobs().shown()) {
+                MobMemory memory = FarPlayerTracker.get().mobs();
+                for (MobMemory.Remembered mob : memory.shown()) {
                     if (!(mob.puppet() instanceof LivingEntity puppet)) continue;
+                    int untouched = puppet.tickCount;
+                    memory.catchUp(mob);
+                    if (puppet.tickCount != untouched) madeUp[0]++;
                     double[] at = {puppet.getX(), puppet.getZ()};
                     double[] was = last.put(mob, at);
                     legs[0] = Math.max(legs[0], puppet.walkAnimation.speed());
@@ -87,7 +93,7 @@ public final class StillMobsScenario implements Scenario {
         }
         Scene.log("stillmobs " + label + ": " + last.size() + " cows covered " + String.format("%.1f", path[0])
                 + " blocks, at most " + String.format("%.2f", longest[0]) + " a tick, legs " + String.format("%.2f", legs[0])
-                + ", tick count stopped " + (int) stopped[0] + " times");
+                + ", tick count stopped " + (int) stopped[0] + " times, clocks made up " + (int) madeUp[0] + " times");
         return new double[]{path[0], longest[0], stopped[0]};
     }
 }

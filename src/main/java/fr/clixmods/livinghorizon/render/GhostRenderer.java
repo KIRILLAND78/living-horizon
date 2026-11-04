@@ -643,6 +643,8 @@ public final class GhostRenderer {
             mob.drawn();
             // Held by easter egg 15, its head turned apart from its body: a model, which shows it.
             if (!Herd.holds(puppet) && impostor(minecraft, eye, puppet, partialTick, config)) continue;
+            // A model plays its idle movements and its legs from its clocks: made up first, if it rested untouched.
+            memory.catchUp(mob);
             EntityRenderState body = extract(dispatcher, puppet, partialTick);
             turned(puppet, body, partialTick);
             // A puppet is in no world, so never in water: fish would be drawn flopping on

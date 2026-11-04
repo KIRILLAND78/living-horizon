@@ -766,8 +766,10 @@ below), and other flyers and swimmers get a flat disc at their own height.
 - A still copy standing with nothing left to walk or turn (`MobMotion.settled`) is looked at once
   in sixteen ticks, each on a tick of its own (by its id): with Mob Render Distance at 4000 blocks
   and the land's animals guessed, tens of thousands far off would otherwise be gone through every
-  tick. In between, `MobMotion.rest` only keeps its clocks going, so its idle movements do not
-  snap back. One that moves (the server's, one called back to its spot) is moved every tick:
+  tick. In between it is not touched at all: the ticks it rested are counted, and its clocks
+  (tick count, legs, the animation's) are made up all at once (`MobMemory.catchUp`,
+  `MobMotion.rest`) before it is drawn as a model or looked at again, so its idle movements do
+  not snap back. A simplified image needs neither: it is baked with no age and its legs at rest. One that moves (the server's, one called back to its spot) is moved every tick:
   looked at once in sixteen, it went in jerks.
 - Copies are built (`MobMemory.build`) within 2 ms a tick, those in front of the player first
   (70° either side), each the nearest first. A short saved text (a foreseen mob, one built from
