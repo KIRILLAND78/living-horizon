@@ -8,6 +8,7 @@
 - **Support for Lodistance's terrain** — Distant mobs and players now hide behind Lodistance's far terrain like behind any hill and blend into its fog, and distant mobs walk on its ground, as they do with Voxy and Distant Horizons. (Minecraft 26.3, with OpenGL, without shaders.)
 - **Support for Far View's terrain** — Distant mobs now show and walk on Far View's far terrain and hide behind its hills, instead of being hidden past the render distance. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
 - **Support for Ecstatic's terrain** — Distant mobs now appear on Ecstatic's terrain and walk on its ground, instead of vanishing past the render distance. They hide correctly behind its hills, stay visible in front of them, and blend into its fog. (NeoForge, Minecraft 1.21.1, single player; the fog without shaders.)
+- **Simplified mobs lit by shaders** — With a shader pack that reads normal maps, such as Photon with *Normal Mapping* on, the simplified images of distant mobs are now lit by the pack like their 3D models, one side in the sun and the other in shade, instead of looking flat and darker. These images take twice the video memory; the new *Shader Lighting* setting turns this off. (Minecraft 1.21.6 and later.)
 
 #### Improved
 - **Sharper distant ships** — The simplified images of tall boats and vehicles, such as Shippy Ships' sailing ships, are now sharper. The tallest ones, like the galleon, now get one too, instead of always being drawn as a full model, which is heavier on performance.

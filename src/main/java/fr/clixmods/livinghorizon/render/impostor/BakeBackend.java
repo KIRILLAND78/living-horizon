@@ -27,9 +27,32 @@ interface BakeBackend {
 
         /**
          * The views, bottom row first, {@code render * render} pixels each; null when they
-         * could not be read, with why, or are no longer wanted.
+         * could not be read, with why, or are no longer wanted. With them, while
+         * {@link ImpostorAtlas#relief()}, the depth of each pixel as drawn, in the same order;
+         * null from a backend that does not read it.
          */
-        void done(int @Nullable [][] pictures, @Nullable Throwable error);
+        void done(int @Nullable [][] pictures, float @Nullable [][] depths, @Nullable Throwable error);
+
+        /** The views without their depth. */
+        default void done(int @Nullable [][] pictures, @Nullable Throwable error) {
+            done(pictures, null, error);
+        }
+    }
+
+    /**
+     * Whether this backend reads back the depth of the views too, from which the pictures'
+     * normal maps are made ({@link ImpostorAtlas#relief()}).
+     */
+    default boolean reliefs() {
+        return false;
+    }
+
+    /**
+     * A texture showing what {@code texture} holds without owning it, to hand to Iris, which
+     * closes the textures it is handed when it reloads: closing this one leaves ours whole.
+     */
+    default AbstractTexture borrowed(AbstractTexture texture) {
+        return texture;
     }
 
     /** A new page texture with {@link ImpostorAtlas#MIPS} levels, empty at each. */

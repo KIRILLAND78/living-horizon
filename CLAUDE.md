@@ -414,6 +414,14 @@ come back, add it here in the same pull request: this file is what the next sess
   the wrong side): Iris throws away the normal given to a quad and computes it from its
   corners, counter-clockwise. `ImpostorLean` moves an impostor's corners along their lines of
   sight so that its own plane faces where the light should come from.
+- **Impostors without their normal maps under a pack that reads them** (*Shader Lighting* on,
+  Photon's *Normal Mapping* on, the pictures flat): Iris looks a texture's normal map up by its
+  class, through the loader `compat/IrisNormals` registers, and only for textures it is told
+  are drawn. Check it with the `impostorshading` scenario (Sodium, Iris and Photon in
+  `-Plh.mods` / `-Plh.shaderpack`, a real graphics card): its mobs stand past the game's
+  entity distance, since a mob the game draws itself is never an impostor; closer, the counts
+  stay 0 and say nothing. On 26.3 the game's copy of a depth texture fails ("No color buffer")
+  and blackened the screen: `OverrideBake.readDepth` reads it straight from OpenGL.
 - **Far terrain depth lost under shaders from 26.2** (depth view empty or uniform, nothing
   hidden behind the far terrain, only with a pack on): Iris's shadow pass draws its entities
   through the same `PreparedFrame.executeSolid` / `executeTranslucent` steps as the world,

@@ -305,6 +305,8 @@
   "livinghorizon.options.debugHud": "Debug Panel",
   "livinghorizon.options.impostorPlayers": "Simplified Players",
   "livinghorizon.options.impostorPlayers.tooltip": "Distant players are simplified too, like mobs. OFF: they keep their full model at any distance, so their skin and armor stay in full detail.",
+  "livinghorizon.options.impostorShading": "Shader Lighting",
+  "livinghorizon.options.impostorShading.tooltip": "With a shader pack, simplified mobs keep the shape of their model, so a pack that reads normal maps lights them like the model: one side in the sun, the other in shade (in Photon, turn on Normal Mapping). Their pictures take twice the video memory. OFF: flat pictures, a little lighter. From Minecraft 1.21.6.",
   "livinghorizon.options.impostorMobMemory": "Mob Picture Memory",
   "livinghorizon.options.impostorMobMemory.tooltip": "Video memory the pictures of simplified mobs may take, apart from the players'. Taken only as new looks are met; when it is full, the picture unused for longest makes room.",
   "livinghorizon.options.impostorPlayerMemory": "Player Picture Memory",

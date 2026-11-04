@@ -774,8 +774,8 @@ frame. A boat or a vehicle is pictured from every height, as a phantom or a ghas
     neither a ghost nor fatter than its model.
 
   The page is sampled smoothly when small, by pixels when large.
-- **Light.** Colour only, no normal map: the game's entity shaders have no use for one. The
-  pictures are lit by the game's world light as a model is (turned over, the way the picture
+- **Light.** Colour only, without a shader pack that reads normal maps: the game's entity
+  shaders have no use for one. The pictures are lit by the game's world light as a model is (turned over, the way the picture
   is drawn), and the quad's normal points up, which that light leaves at full brightness.
   Only the light where the figure stands (sky, torches, night) is applied on top. Under a
   shader pack, Iris works out a quad's normal from its corners, so `ImpostorLean` leans the
@@ -784,6 +784,21 @@ frame. A boat or a vehicle is pictured from every height, as a phantom or a ghas
   extract (Immersive Aircraft's, from 26.1), so `GhostRenderer.extract` hands the light over
   then too, through `EntityRendererLightMixin`, and does the same for the models it draws far
   away, where the client may have no light yet.
+- **Normal maps** (`impostorShading`, from 1.21.6). Under a pack that samples normal maps
+  (Iris's `shouldBindPBR`: Photon with *Normal Mapping*, labPBR packs), the pictures are baked
+  lit evenly (two opposite lights far stronger than the cap, `ImpostorAtlas.EVEN_0`) and each
+  page gets a normal map beside it: the bake's depth is read back with the colours, the slope
+  between neighbouring pixels gives each pixel's normal (`ImpostorPixels.normals`, no slope read
+  across a step of more than 3 pixels), turned onto the quad `ImpostorLean` leans back by 45
+  degrees, red along the picture's right, green along its down. Iris is handed them by a loader
+  registered for the page textures' class (`compat/IrisNormals`, its loader registry, not its
+  API), which answers with a texture that only borrows the normal map, since Iris closes what
+  it is handed when it reloads. A sheet then has twice the levels, saved under a fingerprint
+  of its own, and takes twice the memory in the budgets below. A pack that reads no normal map
+  keeps the pictures the game shades: lit evenly, they came out brighter than their models.
+  From 26.3 the game's copy of a depth texture reads a colour buffer that is not there (an
+  OpenGL error, the screen black under a pack), so the depth is read straight from OpenGL there
+  (`OverrideBake.readDepth`); under another renderer the normal maps are flat.
 - **When.** Every figure on hand (distant players, remembered mobs) is queued about once a
   second, near or far, and baked a little each frame (from the GUI pass from 1.21.6; see
   below), 3 ms of it, checked after each sheet, one sheet at least, so it is ready when the
@@ -1529,6 +1544,7 @@ and a slider dragged past its end is released beside it. Sodium's page cannot as
 | `impostors` | Simplified Mobs | `true` | | Far mobs and birds drawn as a flat picture of themselves (see [Impostors](#impostors)) |
 | `impostorEntities` | Simplified Entities | `true` | | Far boats, vehicles and mannequins drawn as pictures too, from every height; set from `impostors` when it came (layout 12) |
 | `impostorPlayers` | Simplified Players | `true` | | Distant players become impostors too; off, they keep their whole model at any distance |
+| `impostorShading` | Shader Lighting | `true` | | Under a shader pack that reads normal maps, the pictures are baked evenly lit with a normal map each, so the pack lights them like the models; twice the video memory. From 1.21.6 |
 | `impostorDistance` | Simplification Distance | `128` blocks | 0 to 2000 | Past this distance an impostor stands in for the model (`0`: the size alone) |
 | `impostorPixels` | Simplification Size | `10` pixels | 0 to 64 | A figure shorter than this on screen is an impostor too, even closer than `impostorDistance` (`0`: the distance alone) |
 | `impostorMobMemory` | Mob Picture Memory | `1024` MB | 64 to 4096 | Video memory the mobs' pictures may take, apart from the players' |

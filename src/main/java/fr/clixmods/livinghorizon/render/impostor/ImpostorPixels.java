@@ -98,7 +98,8 @@ public final class ImpostorPixels {
     public static boolean fits(int[][] levels, int count) {
         if (levels.length != count) return false;
         for (int level = 0; level < count; level++) {
-            int tile = ImpostorViews.TILE >> level;
+            // Past the colours, the normal maps' levels, of the same sizes.
+            int tile = ImpostorViews.TILE >> level % ImpostorAtlas.MIPS;
             if (levels[level] == null || levels[level].length != tile * ImpostorViews.VIEWS * tile) return false;
         }
         return true;
@@ -123,6 +124,130 @@ public final class ImpostorPixels {
             pixels.get(view * read[view].length, read[view]);
         }
         return read;
+    }
+
+    /**
+     * The depth of each view as read back, bottom row first, turned into how far each pixel
+     * stands out towards the camera, in pixels of the picture; {@code NaN} where nothing was drawn.
+     * The views are drawn with an orthographic projection 2000 pixels deep.
+     *
+     * @param reversed whether the depth runs from 1 near to 0 far (from 26.2)
+     */
+    public static float[][] depths(ByteBuffer data, int views, int render, boolean reversed) {
+        float[][] read = new float[views][];
+        java.nio.FloatBuffer floats = data.order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+        for (int view = 0; view < views; view++) {
+            float[] depth = new float[render * render];
+            floats.get(view * depth.length, depth);
+            read[view] = heights(depth, reversed);
+        }
+        return read;
+    }
+
+    /** One view's depth as drawn turned, in place, into how far each pixel stands out: see {@link #depths}. */
+    public static float[] heights(float[] depth, boolean reversed) {
+        for (int i = 0; i < depth.length; i++) {
+            float d = depth[i];
+            boolean empty = reversed ? d <= 0f : d >= 1f;
+            depth[i] = empty ? Float.NaN : (reversed ? d : -d) * DEPTH_RANGE;
+        }
+        return depth;
+    }
+
+    /** A view with no depth known: nothing stands out, its normal map is flat. */
+    public static float[] noDepth(int render) {
+        float[] depth = new float[render * render];
+        java.util.Arrays.fill(depth, Float.NaN);
+        return depth;
+    }
+
+    /** Pixels of the picture between the near and the far plane of the views. */
+    static final float DEPTH_RANGE = 2000f;
+
+    /**
+     * Past this step between two pixels, in pixels of the picture, they are taken for two parts
+     * of the figure, one in front of the other, not one surface: no slope is read across it.
+     */
+    private static final float STEP = 3f;
+
+    /**
+     * How far the quad an impostor is drawn on leans back, from facing the camera, when seen
+     * level: {@link ImpostorLean} turns it half way to facing up. The normal maps are made for
+     * that plane.
+     */
+    static final double LEAN = Math.toRadians(45);
+
+    /**
+     * The normal map of one view, in the packing of the pictures: red the normal's part along
+     * the picture's right, green its part along the picture's down (the texture's v, which a
+     * shader pack takes for its bitangent), both from the quad leant back by {@link #LEAN},
+     * blue full (no ambient occlusion), alpha the picture's. Worked out from the slope of the
+     * depth between neighbouring pixels: where a pixel has no neighbour on the same surface on
+     * one side, the other side's slope is taken.
+     *
+     * @param picture the view's colours, bottom row first
+     * @param height  how far each pixel stands out, from {@link #depths}
+     */
+    public static int[] normals(int[] picture, float[] height, int side) {
+        int[] out = new int[picture.length];
+        double cos = Math.cos(LEAN), sin = Math.sin(LEAN);
+        for (int y = 0; y < side; y++) {
+            for (int x = 0; x < side; x++) {
+                int i = y * side + x;
+                int alpha = picture[i] >>> 24;
+                float h = height[i];
+                if (alpha == 0 || Float.isNaN(h)) {
+                    out[i] = alpha << 24 | FLAT;
+                    continue;
+                }
+                double dx = slope(height, h, x > 0 ? i - 1 : -1, x < side - 1 ? i + 1 : -1);
+                double dy = slope(height, h, y > 0 ? i - side : -1, y < side - 1 ? i + side : -1);
+                // Right, up and towards the camera, as the figure was drawn.
+                double nx = -dx, ny = -dy, nz = 1;
+                double length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                nx /= length;
+                ny /= length;
+                nz /= length;
+                // On the leant quad: its up turned back, its normal turned up.
+                double up = ny * cos - nz * sin, outward = nz * cos + ny * sin;
+                double across = nx;
+                if (outward < 0) {
+                    // Facing away from the quad: as far round as its normal map can say.
+                    double edge = Math.sqrt(across * across + up * up);
+                    if (edge > 1e-6) {
+                        across /= edge;
+                        up /= edge;
+                    }
+                }
+                out[i] = alpha << 24 | 0xFF << 16 | channel(-up) << 8 | channel(across);
+            }
+        }
+        return out;
+    }
+
+    /** A normal map with every pixel straight out of the quad, for a view read back without its depth. */
+    public static int[] flat(int[] picture) {
+        int[] out = new int[picture.length];
+        for (int i = 0; i < picture.length; i++) out[i] = picture[i] & 0xFF000000 | FLAT;
+        return out;
+    }
+
+    /** A normal straight out of the quad, without alpha. */
+    private static final int FLAT = 0xFF << 16 | 128 << 8 | 128;
+
+    /** The slope of the depth through a pixel, from its neighbours {@code before} and {@code after} (-1 for none). */
+    private static double slope(float[] height, float h, int before, int after) {
+        float back = before < 0 ? Float.NaN : h - height[before];
+        float on = after < 0 ? Float.NaN : height[after] - h;
+        boolean b = !Float.isNaN(back) && Math.abs(back) < STEP, a = !Float.isNaN(on) && Math.abs(on) < STEP;
+        if (b && a) return Math.abs(back) < Math.abs(on) ? back : on;
+        if (b) return back;
+        if (a) return on;
+        return 0;
+    }
+
+    private static int channel(double value) {
+        return (int) Math.round(Math.clamp(value, -1.0, 1.0) * 127.5 + 127.5) & 0xFF;
     }
 
     /**

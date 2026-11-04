@@ -305,6 +305,8 @@
   "livinghorizon.options.debugHud": "Painel de depuração",
   "livinghorizon.options.impostorPlayers": "Jogadores simplificados",
   "livinghorizon.options.impostorPlayers.tooltip": "Os jogadores distantes também são simplificados, como as criaturas. Não: mantêm o modelo completo a qualquer distância, com a skin e a armadura em todos os detalhes.",
+  "livinghorizon.options.impostorShading": "Iluminação de shaders",
+  "livinghorizon.options.impostorShading.tooltip": "Com um pacote de shaders, as criaturas simplificadas mantêm a forma do modelo, então um pacote que lê mapas de normais as ilumina como o modelo: um lado ao sol, o outro na sombra (no Photon, ative Normal Mapping). As imagens delas ocupam o dobro de memória de vídeo. Não: imagens planas, um pouco mais leves. A partir do Minecraft 1.21.6.",
   "livinghorizon.options.impostorMobMemory": "Memória de imagens de criaturas",
   "livinghorizon.options.impostorMobMemory.tooltip": "Memória de vídeo que as imagens das criaturas simplificadas podem ocupar, separada da dos jogadores. Só é ocupada conforme aparecem novas aparências; quando cheia, a imagem sem uso há mais tempo cede o lugar.",
   "livinghorizon.options.impostorPlayerMemory": "Memória de imagens de jogadores",

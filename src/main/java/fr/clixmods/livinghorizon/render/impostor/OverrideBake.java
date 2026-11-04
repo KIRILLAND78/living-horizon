@@ -57,6 +57,24 @@ final class OverrideBake implements BakeBackend {
     private static final TextureFormat COLOR = TextureFormat.RGBA8, DEPTH = TextureFormat.DEPTH32;
     //?}
 
+    /**
+     * Whether the depth of a view is read straight from OpenGL as it is drawn, not copied out
+     * through the game's encoder: from 26.3 its copy of a depth texture reads a colour buffer
+     * that is not there, an OpenGL error that left the screen black under a shader pack.
+     */
+    //? if >=26.3 {
+    /*private static final boolean DIRECT_DEPTH = true;
+    *///?} else {
+    private static final boolean DIRECT_DEPTH = false;
+    //?}
+
+    /** Whether the depth runs from 1 near to 0 far, as it does from 26.2. */
+    //? if >=26.2 {
+    /*private static final boolean REVERSED = true;
+    *///?} else {
+    private static final boolean REVERSED = false;
+    //?}
+
     /** The target one view is drawn in before it is read back. */
     private static final class Target {
         GpuTexture color, depth;
@@ -121,8 +139,10 @@ final class OverrideBake implements BakeBackend {
                         | GpuTexture.USAGE_RENDER_ATTACHMENT,
                 COLOR, render, render, 1, 1);
         created.colorView = device.createTextureView(created.color);
+        // Copied out too: the pictures' normal maps are made from it (ImpostorAtlas.relief).
         created.depth = device.createTexture("living horizon impostor depth",
-                GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_RENDER_ATTACHMENT, DEPTH, render, render, 1, 1);
+                GpuTexture.USAGE_COPY_SRC | GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_RENDER_ATTACHMENT,
+                DEPTH, render, render, 1, 1);
         created.depthView = device.createTextureView(created.depth);
         //? if >=26.1 {
         /*created.projection = new ProjectionMatrixBuffer("living horizon impostor");
@@ -134,11 +154,42 @@ final class OverrideBake implements BakeBackend {
     }
 
     private Lighting lighting() {
-        if (lighting == null) {
-            lighting = new Lighting();
-            lighting.updateBuffer(Lighting.Entry.LEVEL, ImpostorAtlas.LIGHT_0, ImpostorAtlas.LIGHT_1);
+        boolean even = ImpostorAtlas.relief();
+        if (lighting == null || evenLighting != even) {
+            if (lighting == null) lighting = new Lighting();
+            evenLighting = even;
+            lighting.updateBuffer(Lighting.Entry.LEVEL, even ? ImpostorAtlas.EVEN_0 : ImpostorAtlas.LIGHT_0,
+                    even ? ImpostorAtlas.EVEN_1 : ImpostorAtlas.LIGHT_1);
         }
         return lighting;
+    }
+
+    /** Whether {@link #lighting} holds the even light of pictures a shader pack lights. */
+    private boolean evenLighting;
+
+    @Override
+    public boolean reliefs() {
+        return true;
+    }
+
+    @Override
+    public AbstractTexture borrowed(AbstractTexture texture) {
+        return new Borrowed(texture);
+    }
+
+    /** Another texture's picture, which closing does not free. */
+    private static final class Borrowed extends AbstractTexture {
+        Borrowed(AbstractTexture of) {
+            texture = of.getTexture();
+            textureView = of.getTextureView();
+            //? if >=1.21.11
+            sampler = of.getSampler();
+        }
+
+        @Override
+        public void close() {
+            // Not ours: the page's normal map is closed with its page.
+        }
     }
 
     @Override
@@ -148,6 +199,12 @@ final class OverrideBake implements BakeBackend {
         int bytes = render * render * ImpostorAtlas.PIXEL_BYTES;
         GpuBuffer buffer = device.createBuffer(() -> "living horizon impostor read back",
                 GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_READ, /*? if >=1.21.11 {*/ (long) /*?} else {*/ /*(int) *//*?}*/ bytes * ImpostorViews.VIEWS);
+        // The depth, one float a pixel, for the normal maps.
+        int depthBytes = render * render * Float.BYTES;
+        GpuBuffer depths = !ImpostorAtlas.relief() || DIRECT_DEPTH ? null : device.createBuffer(() -> "living horizon impostor depth read back",
+                GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_READ, /*? if >=1.21.11 {*/ (long) /*?} else {*/ /*(int) *//*?}*/ depthBytes * ImpostorViews.VIEWS);
+        // Read straight from OpenGL, view by view (DIRECT_DEPTH).
+        float[][] direct = ImpostorAtlas.relief() && DIRECT_DEPTH ? new float[ImpostorViews.VIEWS][] : null;
         boolean sent = false;
         try {
             Target target = target();
@@ -197,9 +254,16 @@ final class OverrideBake implements BakeBackend {
                 /*ImpostorAtlas.draw(minecraft, request, view, pose, buffers);
                 buffers.endBatch();
                 *///?}
+                if (direct != null) direct[view] = readDepth(target.depth, render);
                 boolean last = view == ImpostorViews.VIEWS - 1;
+                // Before the colour: done by the time the last colour copy says it is.
+                if (depths != null) {
+                    encoder.copyTextureToBuffer(target.depth, depths, /*? if >=1.21.11 {*/ (long) /*?} else {*/ /*(int) *//*?}*/ depthBytes * view,
+                            () -> {
+                            }, 0);
+                }
                 encoder.copyTextureToBuffer(target.color, buffer, /*? if >=1.21.11 {*/ (long) /*?} else {*/ /*(int) *//*?}*/ bytes * view,
-                        last ? () -> readBack(request, buffer, readBack) : () -> {
+                        last ? () -> readBack(request, buffer, depths, direct, readBack) : () -> {
                         }, 0);
             }
             sent = true;
@@ -210,13 +274,52 @@ final class OverrideBake implements BakeBackend {
             //?}
             // What the GUI pass draws next expects the game's own light.
             minecraft.gameRenderer.getLighting().setupFor(Lighting.Entry.ITEMS_3D);
-            if (!sent) buffer.close();
+            if (!sent) {
+                buffer.close();
+                if (depths != null) depths.close();
+            }
         }
     }
 
+    /**
+     * The depth of a view just drawn, bottom row first, straight from OpenGL; null under
+     * another renderer. The pack state OpenGL reads it with is put back as it was found.
+     */
+    private static float @Nullable [] readDepth(GpuTexture depth, int render) {
+        //? if >=26.3 {
+        /*if (!(depth instanceof com.mojang.blaze3d.opengl.GlTexture gl)) return null;
+        float[] out = new float[render * render];
+        int pack = org.lwjgl.opengl.GL11C.glGetInteger(org.lwjgl.opengl.GL21C.GL_PIXEL_PACK_BUFFER_BINDING);
+        int alignment = org.lwjgl.opengl.GL11C.glGetInteger(org.lwjgl.opengl.GL11C.GL_PACK_ALIGNMENT);
+        int rowLength = org.lwjgl.opengl.GL11C.glGetInteger(org.lwjgl.opengl.GL11C.GL_PACK_ROW_LENGTH);
+        int skipPixels = org.lwjgl.opengl.GL11C.glGetInteger(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_PIXELS);
+        int skipRows = org.lwjgl.opengl.GL11C.glGetInteger(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_ROWS);
+        try {
+            org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_PACK_BUFFER, 0);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ALIGNMENT, 4);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ROW_LENGTH, 0);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_PIXELS, 0);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_ROWS, 0);
+            org.lwjgl.opengl.GL45C.glGetTextureImage(gl.glId(), 0, org.lwjgl.opengl.GL11C.GL_DEPTH_COMPONENT,
+                    org.lwjgl.opengl.GL11C.GL_FLOAT, out);
+        } finally {
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ALIGNMENT, alignment);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ROW_LENGTH, rowLength);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_PIXELS, skipPixels);
+            org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_ROWS, skipRows);
+            org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_PACK_BUFFER, pack);
+        }
+        return out;
+        *///?} else {
+        return null;
+        //?}
+    }
+
     /** The views are read back: their pixels go on to {@code readBack}. */
-    private static void readBack(ImpostorAtlas.Request request, GpuBuffer buffer, ReadBack readBack) {
+    private static void readBack(ImpostorAtlas.Request request, GpuBuffer buffer, @Nullable GpuBuffer depthBuffer,
+                                 float @Nullable [][] direct, ReadBack readBack) {
         int[][] pictures = null;
+        float[][] depths = null;
         Throwable failure = null;
         long started = Profile.begin(Profile.Section.BAKE_READ_BACK);
         try {
@@ -228,14 +331,31 @@ final class OverrideBake implements BakeBackend {
                 //?}
                     pictures = ImpostorPixels.views(mapped.data(), ImpostorViews.VIEWS, request.render());
                 }
+                if (depthBuffer != null) {
+                    //? if >=26.2 {
+                    /*try (GpuBufferSlice.MappedView mapped = depthBuffer.map(true, false)) {
+                    *///?} else {
+                    try (GpuBuffer.MappedView mapped = RenderSystem.getDevice().createCommandEncoder().mapBuffer(depthBuffer, true, false)) {
+                    //?}
+                        depths = ImpostorPixels.depths(mapped.data(), ImpostorViews.VIEWS, request.render(), REVERSED);
+                    }
+                } else if (direct != null) {
+                    depths = new float[direct.length][];
+                    for (int view = 0; view < direct.length; view++) {
+                        // A view whose depth could not be read is lit as a flat picture.
+                        depths[view] = direct[view] == null ? ImpostorPixels.noDepth(request.render())
+                                : ImpostorPixels.heights(direct[view], REVERSED);
+                    }
+                }
             }
         } catch (RuntimeException | LinkageError error) {
             failure = error;
         } finally {
             buffer.close();
+            if (depthBuffer != null) depthBuffer.close();
             Profile.end(Profile.Section.BAKE_READ_BACK, started);
         }
-        readBack.done(pictures, failure);
+        readBack.done(pictures, depths, failure);
     }
 
     @Override

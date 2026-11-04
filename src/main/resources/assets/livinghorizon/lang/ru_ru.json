@@ -305,6 +305,8 @@
   "livinghorizon.options.debugHud": "Панель отладки",
   "livinghorizon.options.impostorPlayers": "Упрощённые игроки",
   "livinghorizon.options.impostorPlayers.tooltip": "Далёкие игроки тоже упрощаются, как мобы. Выключено: у них на любом расстоянии полная модель, так что скин и броня видны во всех деталях.",
+  "livinghorizon.options.impostorShading": "Освещение шейдеров",
+  "livinghorizon.options.impostorShading.tooltip": "С пакетом шейдеров упрощённые мобы сохраняют форму своей модели, и пакет, читающий карты нормалей, освещает их как модель: одна сторона на солнце, другая в тени (в Photon включите Normal Mapping). Их изображения занимают вдвое больше видеопамяти. Выключено: плоские изображения, чуть легче. С Minecraft 1.21.6.",
   "livinghorizon.options.impostorMobMemory": "Память картинок мобов",
   "livinghorizon.options.impostorMobMemory.tooltip": "Видеопамять, которую могут занять картинки упрощённых мобов, отдельно от памяти игроков. Занимается постепенно, по мере появления новых обликов; когда она заполнена, картинка, не используемая дольше всех, уступает место.",
   "livinghorizon.options.impostorPlayerMemory": "Память картинок игроков",
