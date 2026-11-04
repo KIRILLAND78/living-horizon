@@ -1168,10 +1168,10 @@ public final class GhostRenderer {
                              double distance, double apparent, double size, FarConfig config) {
         double share = ImpostorThreshold.approach(distance, apparent, config.impostorDistance, config.impostorPixels);
         ImpostorAtlas.Sheet sheet = share <= 0 || !(shown instanceof LivingEntity) ? null : ImpostorAtlas.sheet(key);
-        double boost = Apparent.boost(Apparent.extent(size), distance, pixelsPerRadian, config.minApparentPixels);
         // A figure too large for its picture stays a model: never turned in steps.
-        if (sheet == null || ImpostorThreshold.enlarged(sheet.worldSize() * boost / distance * pixelsPerRadian,
-                sheet.tile(), false)) {
+        if (sheet == null || ImpostorThreshold.enlarged(sheet.worldSize()
+                * Apparent.boost(Apparent.extent(size), distance, pixelsPerRadian, config.minApparentPixels)
+                / distance * pixelsPerRadian, sheet.tile(), false)) {
             TURNS.remove(shown);
             return;
         }
