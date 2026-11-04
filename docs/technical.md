@@ -645,7 +645,8 @@ them. Its answer is applied to the mobs it found, and to those it moved the time
   distance) are followed by their copies, at its pace and facing the way they face, with no
   animation of their own.
 - A pet sits or stands as it does there, which the client is never told once it is far.
-- One that dies there is forgotten.
+- One that dies there is forgotten, and what the server shared of it before is set aside until
+  it says something new: read again, it brought the copy back for a few seconds.
 
 Without this, the copy would stand where the mob was last seen while the real one wandered
 off, then run or jump to it once it was sent again.

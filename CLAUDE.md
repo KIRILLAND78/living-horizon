@@ -464,6 +464,11 @@ come back, add it here in the same pull request: this file is what the next sess
   simulation distance, a square of chunks that reaches farther on its diagonals. In single
   player `ServerMobs` asks the server where those are and the copies follow; on a server only
   the mod on the server closes that gap.
+- **A mob's copy back for a few seconds after it died far away** (single player; the `followed`
+  scenario failing now and then with "The cow died and its copy stays"): the single player
+  server says it died (`ServerMobs`, `gone`), but the positions it shared before, every 7.5 s,
+  were read again (`MobMemory.sync`) and made a new copy where they had it. A copy forgotten for
+  something the server's last word does not know yet sets that word aside (`MobMemory.setAside`).
 - **Distant mobs gliding to and fro, legs still, or trembling** (past *Animation Distance* or
   under *Min. Animated Size*): a still mob must stand, not play its animation's path without its
   legs; `MobMotion.held` stops its animation's clock. And a puppet's `tickCount` must go on every

@@ -673,8 +673,7 @@ public final class MobMemory {
         mob.saved = null;
         mob.ground = null;
         mob.failed = false;
-        SharedPositions.MobReport report = lastPack == null ? null : lastPack.readMob(id);
-        if (report != null) dismissed.put(id, report.x() + report.y() * 31 + report.z() * 961);
+        setAside(id);
         dirty = true;
         chooseSoon = true;
     }
@@ -684,6 +683,15 @@ public final class MobMemory {
         forget(id);
         takenAway.add(id);
         // What the server last said of it is older than that: not taken back until it says something new.
+        setAside(id);
+    }
+
+    /**
+     * What the server last shared of a mob is older than what this client knows of it now (it got
+     * off a mount, rode away, died): not taken back from it ({@link #sync}) until the server says
+     * something new, or the copy would come back where that old word had it.
+     */
+    private void setAside(UUID id) {
         SharedPositions.MobReport report = lastPack == null ? null : lastPack.readMob(id);
         if (report != null) dismissed.put(id, report.x() + report.y() * 31 + report.z() * 961);
     }
@@ -1496,7 +1504,10 @@ public final class MobMemory {
                 if (!where.simulated()) mob.coast = null;
             }
             for (UUID id : answer.gone()) {
-                if (!live.containsKey(id)) forget(id);
+                if (live.containsKey(id)) continue;
+                // Died there: the positions the server shared before, read again, would bring its copy back.
+                forget(id);
+                setAside(id);
             }
         }
         if (clock % ServerMobs.EVERY != 0 || !serverMobs.idle()) return;
