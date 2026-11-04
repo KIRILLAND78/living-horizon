@@ -556,8 +556,11 @@ come back, add it here in the same pull request: this file is what the next sess
   a kind that cannot be saved is never remembered. The log says so once per kind ("is not drawn
   far away: its save failed", or "its copy could not be made"). The galleon's: a chest boat's hold
   is 27 slots until a load sizes it, which never happens on the client, and the galleon writes
-  its 504 one by one. `EntityNbt.fitHold` sizes it there first. The `ships` scenario checks it
-  (`run.sh ships --with shippy-ships --with ingeniumapi`).
+  its 504 one by one. `EntityNbt.fitHold` sizes it there first. Then "does not fit its picture":
+  a boat or vehicle is pictured round the middle of its box, low in the hull, and the masts reach
+  40 blocks up. A figure pictured round its middle and cut off is moved to the middle of its tiles
+  before it grows (`ImpostorPixels.centred`; the sheet keeps where, on disk too). The `ships`
+  scenario checks both (`run.sh ships --with shippy-ships --with ingeniumapi`).
 - **Another mod's figure drawn black far away, its rider lit** (Immersive Aircraft's planes as
   you travel towards them, from 26.1): its renderer keeps its own copy of the light, read as it
   extracts (`getPackedLightCoords`), and ignores the `lightCoords` the mod sets after. In a chunk

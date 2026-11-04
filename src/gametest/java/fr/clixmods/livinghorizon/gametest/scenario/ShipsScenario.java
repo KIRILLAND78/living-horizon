@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.gametest.scenario;
 
 import fr.clixmods.livinghorizon.gametest.Scenario;
 import fr.clixmods.livinghorizon.gametest.Scene;
+import fr.clixmods.livinghorizon.render.impostor.ImpostorAtlas;
 import fr.clixmods.livinghorizon.track.EntityNbt;
 import fr.clixmods.livinghorizon.track.FarPlayerTracker;
 import fr.clixmods.livinghorizon.track.MobMemory;
@@ -11,11 +12,17 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 
+import java.util.List;
+
 /**
  * Shippy Ships' ships left on a lake ({@code run.sh ships --with shippy-ships --with ingeniumapi}):
  * once the server no longer sends them, each one has a copy where it was, the galleon, its
  * largest, included. The galleon writes its hold its own way, slot by slot out of a list the
  * client holds smaller: saving it on the client failed, and it was never remembered.
+ *
+ * <p>Each one is pictured too, with Simplified Entities. Ships are pictured round the middle of
+ * their box, low in the hull: the galleon's masts reach eight times higher, and with half of its
+ * pictures empty below it, it was cut off even at their largest and stayed a model.
  * Without Shippy Ships, nothing is checked.
  */
 public final class ShipsScenario implements Scenario {
@@ -84,9 +91,25 @@ public final class ShipsScenario implements Scenario {
                 return missing.toString();
             });
             Scene.screenshot(context, this, "remembered");
+            // Their pictures, baked from where the copies are seen: one sheet at least per ship.
+            String pictured = context.computeOnClient(minecraft -> {
+                StringBuilder missing = new StringBuilder();
+                for (String id : SHIPS) {
+                    List<ImpostorAtlas.Baked> sheets = ImpostorAtlas.baked().stream()
+                            .filter(baked -> baked.key().type().equals(id)).toList();
+                    for (ImpostorAtlas.Baked baked : sheets) {
+                        Scene.log("ships: " + id + " pictured " + Math.round(baked.sheet().worldSize()) + " blocks across, its middle "
+                                + Math.round(baked.sheet().feet() * 100) + "% down");
+                    }
+                    if (sheets.isEmpty()) missing.append(' ').append(id);
+                }
+                return missing.toString();
+            });
+            Scene.screenshotAtlas(context, this);
             Scene.configure(context, config -> config.impostorEntities = false);
             Scene.screenshot(context, this, "remembered-models");
             if (!built.isEmpty()) throw new AssertionError("ships: no copy of" + built);
+            if (!pictured.isEmpty()) throw new AssertionError("ships: no pictures of" + pictured);
         }
     }
 

@@ -57,9 +57,11 @@ public final class ImpostorDisk {
     private static final int BAKE = 2;
     /**
      * Bumped whenever the file holds something else. 3 added when and where a sheet was baked;
-     * a file of 2 is still read, its date unknown.
+     * a file of 2 is still read, its date unknown. 4 added how far down its tiles the figure's
+     * origin is, which a figure pictured round its middle may have moved; one of 3 has it where
+     * the kind of figure puts it.
      */
-    private static final int FORMAT = 3;
+    private static final int FORMAT = 4;
     private static final int MAGIC = 0x4C484953;
     /** Sheet files kept per fingerprint: the ones read or written longest ago go first. */
     private static final int KEEP = 4096;
@@ -74,9 +76,10 @@ public final class ImpostorDisk {
 
     /**
      * A sheet as read from disk: its size in blocks, the rows of each mip level, when it was baked
-     * (milliseconds since 1970, 0 when not known) and in which world (empty when not known).
+     * (milliseconds since 1970, 0 when not known), in which world (empty when not known) and how
+     * far down its tiles the figure's origin is (NaN when not known: where its kind puts it).
      */
-    public record Stored(double worldSize, int[][] levels, long bakedAt, String world) {
+    public record Stored(double worldSize, int[][] levels, long bakedAt, String world, float feet) {
     }
 
     private static final ExecutorService IO = Executors.newSingleThreadExecutor(task -> {
@@ -179,7 +182,7 @@ public final class ImpostorDisk {
     }
 
     /** Saves a mob's sheet just baked, when and where, and what has been learnt to leave out of keys. */
-    public static void write(ImpostorKey key, double worldSize, int[][] levels, long bakedAt, String world) {
+    public static void write(ImpostorKey key, double worldSize, float feet, int[][] levels, long bakedAt, String world) {
         SAVED.add(key);
         Map<String, Map<Integer, Long>> restless = null;
         if (ImpostorKey.learnt() != savedLearnt) {
@@ -195,7 +198,7 @@ public final class ImpostorDisk {
                 Files.createDirectories(file.getParent());
                 Path part = file.resolveSibling(file.getFileName() + ".part");
                 try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(part))))) {
-                    encode(out, worldSize, SCALE, levels, bakedAt, world);
+                    encode(out, worldSize, feet, SCALE, levels, bakedAt, world);
                 }
                 Files.move(part, file, StandardCopyOption.REPLACE_EXISTING);
                 if (learnt != null) writeRestless(root, learnt);
@@ -206,13 +209,14 @@ public final class ImpostorDisk {
     }
 
     /** A sheet as {@link #decode} reads it back, its tiles {@code scale} times larger: {@link #SCALE}. */
-    static void encode(DataOutputStream out, double worldSize, int scale, int[][] levels, long bakedAt, String world)
-            throws IOException {
+    static void encode(DataOutputStream out, double worldSize, float feet, int scale, int[][] levels, long bakedAt,
+                       String world) throws IOException {
         out.writeInt(MAGIC);
         out.writeInt(FORMAT);
         out.writeLong(bakedAt);
         out.writeUTF(world);
         out.writeDouble(worldSize);
+        out.writeFloat(feet);
         out.writeInt(scale);
         out.writeInt(levels.length);
         for (int[] level : levels) {
@@ -229,10 +233,12 @@ public final class ImpostorDisk {
     static @Nullable Stored decode(DataInputStream in) throws IOException {
         if (in.readInt() != MAGIC) return null;
         int format = in.readInt();
-        if (format != FORMAT && format != 2) return null;
+        if (format < 2 || format > FORMAT) return null;
         long bakedAt = format >= 3 ? in.readLong() : 0;
         String world = format >= 3 ? in.readUTF() : "";
         double worldSize = in.readDouble();
+        float feet = format >= 4 ? in.readFloat() : Float.NaN;
+        if (!Float.isNaN(feet) && (feet <= 0 || feet >= 1)) throw new IOException("origin " + feet + " down its tiles");
         int scale = in.readInt();
         if (scale != SCALE) throw new IOException("tiles " + scale + " times larger");
         int count = in.readInt();
@@ -246,7 +252,7 @@ public final class ImpostorDisk {
             levels[level] = new int[length];
             for (int i = 0; i < length; i++) levels[level][i] = in.readInt();
         }
-        return new Stored(worldSize, levels, bakedAt, world);
+        return new Stored(worldSize, levels, bakedAt, world, feet);
     }
 
     /**

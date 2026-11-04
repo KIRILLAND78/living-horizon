@@ -9,6 +9,9 @@
 - **Prise en charge du terrain de Far View** — Les créatures lointaines s'affichent et marchent maintenant sur le terrain lointain de Far View et se cachent derrière ses collines, au lieu d'être masquées au-delà de la distance d'affichage. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
 - **Prise en charge du terrain d'Ecstatic** — Les créatures lointaines apparaissent maintenant sur le terrain d'Ecstatic et marchent sur son sol, au lieu de disparaître au-delà de la distance d'affichage. Elles se cachent correctement derrière ses collines, restent visibles devant elles et se fondent dans son brouillard. (NeoForge, Minecraft 1.21.1, solo ; le brouillard sans shaders.)
 
+#### Améliorations
+- **Navires lointains plus nets** — Les images simplifiées des bateaux et véhicules élevés, comme les voiliers de Shippy Ships, sont maintenant plus nettes. Les plus grands, comme le galion, en ont maintenant une aussi, au lieu d'être toujours affichés en modèle complet, plus coûteux en performances.
+
 #### Corrections
 - **Créatures affichées une seule fois avec Far View** — Les créatures que Far View dessine en boîtes entre 128 blocs et la distance d'affichage ne sont maintenant affichées qu'une fois, au lieu de deux fois l'une sur l'autre. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
 - **Nom des joueurs déconnectés affiché sur Forge** — Viser un joueur déconnecté affiche maintenant son nom et quand il a été vu pour la dernière fois, au lieu de ne rien afficher. (Forge, Minecraft 1.20.1 à 1.20.4.)

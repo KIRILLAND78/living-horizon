@@ -4,6 +4,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Turns one rendered picture of a figure into the mip levels of its tile, on the CPU.
  *
@@ -131,6 +133,28 @@ public final class ImpostorPixels {
      * at least {@code beyond}.
      */
     public static double growth(int[] picture, int size, int margin, double feet, double beyond) {
+        int[] box = bounds(picture, size);
+        return box == null ? 1 : growth(box, 0, size, margin, feet, beyond);
+    }
+
+    /**
+     * {@link #growth} of a figure whose {@code box} ({@link #bounds}) is {@code shift} rows
+     * higher in its picture, its feet too: whether it reaches the very edge is the box's own.
+     */
+    private static double growth(int[] box, int shift, int size, int margin, double feet, double beyond) {
+        int left = box[0], right = box[1], bottom = box[2] + shift, top = box[3] + shift;
+        feet += shift;
+        // One pixel to spare: drawn larger, the figure's edge may round outwards.
+        double centre = size / 2.0, across = centre - margin - 1;
+        double growth = Math.max(1, Math.max(centre - left, right + 1 - centre) / across);
+        growth = Math.max(growth, (top + 1 - feet) / (size - margin - 1 - feet));
+        if (bottom < feet) growth = Math.max(growth, (feet - bottom) / Math.max(1, feet - margin - 1));
+        if (box[0] == 0 || box[2] == 0 || box[1] == size - 1 || box[3] == size - 1) growth = Math.max(growth, beyond);
+        return growth;
+    }
+
+    /** Left, right, bottom and top of the figure in a picture, in pixels; null when it shows nowhere. */
+    private static int @Nullable [] bounds(int[] picture, int size) {
         int left = size, right = -1, bottom = size, top = -1;
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
@@ -141,14 +165,39 @@ public final class ImpostorPixels {
                 top = Math.max(top, y);
             }
         }
-        if (right < 0) return 1;
-        // One pixel to spare: drawn larger, the figure's edge may round outwards.
-        double centre = size / 2.0, across = centre - margin - 1;
-        double growth = Math.max(1, Math.max(centre - left, right + 1 - centre) / across);
-        growth = Math.max(growth, (top + 1 - feet) / (size - margin - 1 - feet));
-        if (bottom < feet) growth = Math.max(growth, (feet - bottom) / Math.max(1, feet - margin - 1));
-        if (left == 0 || bottom == 0 || right == size - 1 || top == size - 1) growth = Math.max(growth, beyond);
-        return growth;
+        return right < 0 ? null : new int[]{left, right, bottom, top};
+    }
+
+    /**
+     * Where the point a figure turns round stands in its pictures, and how much larger they
+     * must be: {@code feet} pixels up from the bottom row, and {@link #growth} at that height.
+     */
+    public record Fit(int feet, double growth) {
+    }
+
+    /**
+     * A figure pictured round a point that is not its middle, a ship round the middle of its
+     * hull with its masts reaching far above: the point moved so that the figure, all its views
+     * together, stands in the middle of its pictures, between {@code lowest} and {@code highest}
+     * pixels up from the bottom row, and how much larger the pictures must then be. The point is
+     * at {@code feet} now; it stays there when the figure shows nowhere.
+     */
+    public static Fit centred(int[][] pictures, int size, int margin, int feet, int lowest, int highest, double beyond) {
+        int bottom = size, top = -1;
+        int[][] boxes = new int[pictures.length][];
+        for (int view = 0; view < pictures.length; view++) {
+            boxes[view] = bounds(pictures[view], size);
+            if (boxes[view] == null) continue;
+            bottom = Math.min(bottom, boxes[view][2]);
+            top = Math.max(top, boxes[view][3]);
+        }
+        if (top < 0) return new Fit(feet, 1);
+        int moved = Math.clamp(feet + Math.round((size - 1 - top - bottom) / 2f), lowest, highest);
+        double growth = 1;
+        for (int[] box : boxes) {
+            if (box != null) growth = Math.max(growth, growth(box, moved - feet, size, margin, feet, beyond));
+        }
+        return new Fit(moved, growth);
     }
 
     /** A level as it is stored: coloured round the figure, its alpha a ramp through the cut. */

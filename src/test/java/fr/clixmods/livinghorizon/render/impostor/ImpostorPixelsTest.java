@@ -91,6 +91,40 @@ class ImpostorPixelsTest {
         assertEquals(11 / 9.0, ImpostorPixels.growth(picture, 16, 2, 4, 1.3), 1e-9);
     }
 
+    /** A 16 by 16 picture with the figure in column 8, from row {@code from} to row {@code to}. */
+    private static int[] column(int from, int to) {
+        int[] picture = new int[16 * 16];
+        for (int y = from; y <= to; y++) picture[y * 16 + 8] = RED;
+        return picture;
+    }
+
+    @Test
+    void aFigureAboveItsMiddleIsMovedDownItsPicturesUntilItFits() {
+        // A mast from row 9 to row 14, round a middle at row 8: row 14 is in the hidden strip.
+        int[][] pictures = {column(9, 14), column(10, 12)};
+        assertTrue(ImpostorPixels.growth(pictures[0], 16, 2, 8, 1.3) > 1);
+        ImpostorPixels.Fit fit = ImpostorPixels.centred(pictures, 16, 2, 8, 2, 14, 1.3);
+        // Rows 5 to 10 once moved four down: within the shown rows, nothing larger.
+        assertEquals(4, fit.feet());
+        assertEquals(1.0, fit.growth(), 1e-9);
+    }
+
+    @Test
+    void aFigureInTheMiddleOfItsPicturesStaysThere() {
+        ImpostorPixels.Fit fit = ImpostorPixels.centred(new int[][]{column(6, 9)}, 16, 2, 8, 2, 14, 1.3);
+        assertEquals(8, fit.feet());
+        assertEquals(1.0, fit.growth(), 1e-9);
+        assertEquals(8, ImpostorPixels.centred(new int[][]{new int[16 * 16]}, 16, 2, 8, 2, 14, 1.3).feet());
+    }
+
+    @Test
+    void aFigureIsMovedNoFurtherThanItsLimitAndStillGrowsWhereItWasCut() {
+        // Reaching the very top: how far it goes on is not known, so it still grows by the step.
+        ImpostorPixels.Fit fit = ImpostorPixels.centred(new int[][]{column(12, 15)}, 16, 2, 8, 5, 14, 1.3);
+        assertEquals(5, fit.feet());
+        assertEquals(1.3, fit.growth(), 1e-9);
+    }
+
     @Test
     void aFigureCutByTheVeryEdgeGrowsAtLeastByTheGivenStep() {
         int[] picture = new int[16 * 16];

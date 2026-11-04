@@ -879,8 +879,9 @@ that a mob met in an earlier game is read back rather than baked.
   again finds its sheets. Its text is kept beside the sheets (`fingerprint.txt`), and the log says
   which lines changed when an older folder is thrown away ("the saved mob pictures of ... are
   thrown away").
-- Each file holds when and in which world or server its sheet was baked (file `FORMAT` 3; a
-  file of 2 still reads, its date unknown). The impostor screen shows it under each name, with
+- Each file holds when and in which world or server its sheet was baked, and how far down its
+  tiles the figure's origin stands (file `FORMAT` 4; a file of 3 still reads, its origin where
+  its kind puts it, and one of 2, its date unknown). The impostor screen shows it under each name, with
   where the pictures come from (`ImpostorAtlas.Origin`): *Shared*, read back from disk; *New*,
   baked in this game and saved; *Not saved* (players, riders, birds).
 - A sheet read back is checked against the size of a sheet (`ImpostorDisk.decode`) before
@@ -912,6 +913,12 @@ that a mob met in an earlier game is read back rather than baked.
   nearer than that middle (an aircraft's nose, the wheels under it) farther along the line of
   sight, under the ground the figure stands on when seen from above: `GhostRenderer.picture`
   moves it nearer by half its size and makes it as much smaller, the same on screen.
+  The middle is the box's, which is not always the figure's: Shippy Ships' galleon has a box
+  9 blocks high and masts 40 blocks up, so half of its pictures stayed empty below the hull and
+  its masts were cut off even five times larger. One cut off is first moved down or up its tiles
+  until it stands in their middle (`ImpostorPixels.centred`, between `FEET` from the top and as
+  far from the bottom), then grown if it still needs room; how far down its tiles its middle
+  stands is kept with the sheet, on disk too.
 - **Players who logged off** are impostors in every posture: standing, seated on the ground,
   lying down or in a bed. A posture other than standing is part of the key
   (`ImpostorKey.posture`), and the picture is baked in it:

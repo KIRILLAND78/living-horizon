@@ -244,21 +244,22 @@ public final class ImpostorAtlas {
     /**
      * A figure to bake, its picture covering {@code grow} times what {@link #size} gives: a
      * figure longer than its box (a horse's muzzle, a sniffer) is baked again with more round
-     * it, drawn smaller in a tile of the same pixels.
+     * it, drawn smaller in a tile of the same pixels. A figure pictured round its middle stands
+     * {@code centred} down its tiles once moved there ({@link #CENTRED}), NaN until then.
      */
     record Request(ImpostorKey key, @Nullable Entity puppet, @Nullable ImpostorFigure figure, double grow,
-                   @Nullable Rider rider) {
+                   @Nullable Rider rider, float centred) {
         static Request of(ImpostorKey key, Entity puppet, double grow) {
             return of(key, puppet, grow, null);
         }
 
         static Request of(ImpostorKey key, Entity puppet, double grow, @Nullable Rider rider) {
-            return new Request(key, puppet, null, grow, rider);
+            return new Request(key, puppet, null, grow, rider, CENTRED.getOrDefault(key, Float.NaN));
         }
 
         /** One of the mod's own figures: its tile is the size it asks for, never grown. */
         static Request of(ImpostorKey key, ImpostorFigure figure) {
-            return new Request(key, null, figure, 1.0, null);
+            return new Request(key, null, figure, 1.0, null, Float.NaN);
         }
 
         /** The same figure, baked again with its picture covering {@code grow} times its box. */
@@ -276,7 +277,8 @@ public final class ImpostorAtlas {
 
         /** How far down a tile its origin is. */
         float feet() {
-            return figure != null ? figure.feet() : ImpostorAtlas.feet(key);
+            if (figure != null) return figure.feet();
+            return Float.isNaN(centred) ? ImpostorAtlas.feet(key) : centred;
         }
 
         /** Degrees the camera looks down on it from: 0 for a figure pictured level with it. */
@@ -349,6 +351,11 @@ public final class ImpostorAtlas {
 
     /** How much larger each figure was last baked: asked for again, it starts there. */
     private static final Map<ImpostorKey, Double> GROWN = new HashMap<>();
+    /**
+     * How far down its tiles each figure pictured round its middle was last moved to, to stand
+     * in the middle of them: a ship's middle is low, its masts reach far above it.
+     */
+    private static final Map<ImpostorKey, Float> CENTRED = new HashMap<>();
     /** Figures the pages had no room for, and when: not asked for again for a while. */
     private static final Map<ImpostorKey, Long> REFUSED = new HashMap<>();
     /**
@@ -585,6 +592,7 @@ public final class ImpostorAtlas {
         BAKING.clear();
         LOADED.clear();
         GROWN.clear();
+        CENTRED.clear();
         REFUSED.clear();
         UNDRAWABLE.clear();
         ImpostorKey.forgetAll();
@@ -644,7 +652,8 @@ public final class ImpostorAtlas {
                 continue;
             }
             try {
-                place(loaded.key, index, loaded.stored.worldSize(), feet(loaded.key), loaded.stored.levels());
+                float feet = Float.isNaN(loaded.stored.feet()) ? feet(loaded.key) : loaded.stored.feet();
+                place(loaded.key, index, loaded.stored.worldSize(), feet, loaded.stored.levels());
                 if (ALLOCATOR.contains(loaded.key)) {
                     ORIGINS.put(loaded.key, new Origin(Source.DISK, loaded.stored.bakedAt(), loaded.stored.world()));
                 }
@@ -897,6 +906,21 @@ public final class ImpostorAtlas {
         try {
             if (generation != ImpostorAtlas.generation || pictures == null) return;
             double growth = request.figure != null ? 1 : growth(pictures, request.render(), request.feet());
+            if (growth > 1.01 && turns(request)) {
+                // Pictured round its middle and cut off: moved to the middle of its pictures first,
+                // which may be all it needs. Its tile cannot grow past MAX_GROW, but it can still move.
+                ImpostorPixels.Fit fit = centred(pictures, request.render(), request.feet());
+                float feet = 1 - fit.feet() / (float) request.render();
+                if (Math.abs(feet - request.feet()) * request.render() >= 2) {
+                    CENTRED.put(key, feet);
+                    growth = fit.growth();
+                    if (growth <= 1.01 || request.grow >= MAX_GROW) {
+                        QUEUE.add(request.grown(request.grow));
+                        again = true;
+                        return;
+                    }
+                }
+            }
             if (growth > 1.01 && request.grow < MAX_GROW) {
                 double grow = Math.min(MAX_GROW, request.grow * growth);
                 GROWN.put(key, grow);
@@ -922,7 +946,7 @@ public final class ImpostorAtlas {
             long now = System.currentTimeMillis();
             String world = world();
             if (ALLOCATOR.contains(key)) ORIGINS.put(key, new Origin(kept ? Source.SAVED : Source.TEMPORARY, now, world));
-            if (kept) ImpostorDisk.write(key, size, levels, now, world);
+            if (kept) ImpostorDisk.write(key, size, request.feet(), levels, now, world);
         } catch (RuntimeException | LinkageError error) {
             if (generation == ImpostorAtlas.generation) fail(error);
         } finally {
@@ -956,6 +980,22 @@ public final class ImpostorAtlas {
         }
         ALLOCATOR.put(key, index, size, feet);
         return true;
+    }
+
+    /** Whether a figure is pictured round its middle, from a height: a flyer, a boat, a vehicle. */
+    private static boolean turns(Request request) {
+        return request.puppet != null && !Float.isNaN(ImpostorKey.elevation(request.key));
+    }
+
+    /**
+     * Where a figure pictured round its middle would stand in the middle of its pictures, and how
+     * much larger they would then be. Its middle stays no lower down its tiles than a standing
+     * figure's feet ({@link #FEET}), and as far from their top.
+     */
+    private static ImpostorPixels.Fit centred(int[][] pictures, int render, float feet) {
+        int hidden = (int) Math.ceil(ImpostorRenderer.INSET * render);
+        return ImpostorPixels.centred(pictures, render, hidden, Math.round(render * (1 - feet)),
+                Math.round(render * (1 - FEET)), Math.round(render * FEET), GROW);
     }
 
     /** How much larger the views must be drawn to stay within what their tiles show. */
