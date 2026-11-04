@@ -25,6 +25,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.ImpostorLongMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorScreenScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorSharingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorSizeScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.ImpostorTurnScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LanShareScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MannequinsScenario;
@@ -84,6 +85,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new ImpostorEdgesScenario(),
             new ImpostorLongMobsScenario(),
             new ImpostorScreenScenario(),
+            new ImpostorTurnScenario(),
             new LightingScenario(),
             new FarFogScenario(),
             new DhFogScenario(),

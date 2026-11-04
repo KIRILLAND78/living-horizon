@@ -1138,8 +1138,8 @@ public final class GhostRenderer {
             pull *= Math.max(0.1, 1 - sheet.worldSize() * boost * 0.5 / distance);
         }
         // Its first picture is the one its model had turned to.
-        Turn turned = TURNS.remove(shown);
-        int previous = last != null ? last.view : turned != null && frame - turned.frame <= 1 ? turned.view : -1;
+        Turn turning = TURNS.remove(shown);
+        int previous = last != null ? last.view : turning != null && frame - turning.frame <= 1 ? turning.view : -1;
         int view = ImpostorViews.view(yaw, -ax, -az, previous);
         if (last == null) SHOWN.put(shown, last = new Shown());
         last.key = key;
