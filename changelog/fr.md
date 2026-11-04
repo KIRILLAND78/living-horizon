@@ -13,6 +13,7 @@
 - **Créatures affichées une seule fois avec Far View** — Les créatures que Far View dessine en boîtes entre 128 blocs et la distance d'affichage ne sont maintenant affichées qu'une fois, au lieu de deux fois l'une sur l'autre. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
 - **Nom des joueurs déconnectés affiché sur Forge** — Viser un joueur déconnecté affiche maintenant son nom et quand il a été vu pour la dernière fois, au lieu de ne rien afficher. (Forge, Minecraft 1.20.1 à 1.20.4.)
 - **Meilleure intégration avec Bobby** — Les créatures lointaines restent maintenant visibles juste au-delà de la distance jusqu'où le serveur les envoie, sur le terrain que Bobby conserve, au lieu de disparaître. Les joueurs lointains ne s'arrêtent plus net non plus en sortant de cette distance.
+- **Galion de Shippy Ships visible au loin** — Le galion de Shippy Ships reste maintenant visible au loin, là où vous l'avez laissé, comme les autres navires du mod, au lieu de disparaître dès qu'il sort de la distance d'affichage.
 
 ## 0.15.0 — 2026-10-31
 

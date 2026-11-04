@@ -430,6 +430,12 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   stands where it was left, as a boat does: no animation, and only this client remembers it.
   So a kind that is not alive, a boat included, is only *Shown* or *Hidden* there, never
   *Roaming* or *Still*.
+- **A save that fails.** On the client a chest boat or minecart has the game's own hold, 27
+  slots, sized again only when it is loaded from a save, which the client never does: another
+  mod's larger one that writes its slots one by one (Shippy Ships' galleon, 504) threw as the
+  client saved it, and was never remembered. `EntityNbt.save` first makes the client's hold
+  again, empty, at its size; the client never knows what is in it anyway. A kind whose save
+  or copy still fails is not drawn far away, and the log says why, once per kind.
 - **Mannequins** (from 1.21.9) are shown too, standing still: Distant Friends uses them as its fake
   players. Mobs in `stillMobTypes` (happy ghast, mannequin) stand still instead of walking
   their loop. A copy wears its mannequin's skin, from a player's name or a texture of a

@@ -730,8 +730,21 @@ public final class MobMemory {
         try {
             return EntityNbt.save(mob, level);
         } catch (RuntimeException e) {
+            unkept(mob.getType(), "its save failed", e);
             return null;
         }
+    }
+
+    /** The kinds a save or a copy failed for, said once each in the log. Render thread only. */
+    private static final Set<EntityType<?>> UNKEPT = new HashSet<>();
+
+    /**
+     * A kind of mob or entity the mod could not keep far away. Said once: dropped without a
+     * word, Shippy Ships' galleon just vanished past the render distance.
+     */
+    private static void unkept(@Nullable EntityType<?> type, String why, Exception error) {
+        if (type == null || !UNKEPT.add(type)) return;
+        LivingHorizonClient.LOGGER.warn("Living Horizon: {} is not drawn far away: {}", EntityType.getKey(type), why, error);
     }
 
     // --- Every tick --------------------------------------------------------------------
@@ -1410,6 +1423,7 @@ public final class MobMemory {
             entity.setOldPosAndRot();
             mob.puppet = entity;
         } catch (Exception e) {
+            unkept(type(mob), "its copy could not be made", e);
             mob.failed = true;
         }
     }

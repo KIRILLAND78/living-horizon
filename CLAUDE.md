@@ -551,6 +551,13 @@ come back, add it here in the same pull request: this file is what the next sess
   up to *Entity Render Distance*, not the mobs' (`GhostRenderer.creature`). Check the mod's classes
   with `javap` on its jar; the `vehicles` scenario checks Immersive Aircraft
   (`run.sh vehicles --with immersive-aircraft`).
+- **One of a mod's entities vanishing far away while its others stay** (Shippy Ships' galleon,
+  issue #320; listed and *Shown*, yet no copy and no picture): its save threw on the client, and
+  a kind that cannot be saved is never remembered. The log says so once per kind ("is not drawn
+  far away: its save failed", or "its copy could not be made"). The galleon's: a chest boat's hold
+  is 27 slots until a load sizes it, which never happens on the client, and the galleon writes
+  its 504 one by one. `EntityNbt.fitHold` sizes it there first. The `ships` scenario checks it
+  (`run.sh ships --with shippy-ships --with ingeniumapi`).
 - **Another mod's figure drawn black far away, its rider lit** (Immersive Aircraft's planes as
   you travel towards them, from 26.1): its renderer keeps its own copy of the light, read as it
   extracts (`getPackedLightCoords`), and ignores the `lightCoords` the mod sets after. In a chunk
