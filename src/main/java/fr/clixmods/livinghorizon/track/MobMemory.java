@@ -165,6 +165,8 @@ public final class MobMemory {
         transient boolean still;
         /** The last choice that drew it ({@code MobMemory.choose}). */
         transient int chosenIn;
+        /** The last round of guessed mobs that still wanted it ({@code MobMemory.foreseen}). */
+        transient int wantedIn;
         /** When it was last drawn, in nanoseconds; 0 if never. */
         transient long drawnAt;
         /** A minecart still rolling along its rails, where the server keeps moving it; null once it stands. */
@@ -321,6 +323,10 @@ public final class MobMemory {
     private long builtNow;
     /** In a single player world, where the server has the remembered mobs. */
     private final ServerMobs serverMobs = new ServerMobs();
+    /** Rounds of guessed mobs taken in, to mark those still wanted ({@link Remembered#wantedIn}). */
+    private int foreseenRounds;
+    /** The copies the server moved at its last answer ({@link Remembered#simulated}). */
+    private final List<Remembered> followed = new ArrayList<>();
     /** The first animals of the land nobody explored, foreseen by this client. */
     private final Foresight foresight = new Foresight();
     private boolean scoping;
@@ -559,6 +565,7 @@ public final class MobMemory {
         bound = null;
         selfKnown = false;
         serverMobs.reset();
+        followed.clear();
     }
 
     /** Puppets belong to one level. */
@@ -574,6 +581,7 @@ public final class MobMemory {
         stranded.clear();
         showNone();
         serverMobs.reset();
+        followed.clear();
     }
 
     // --- What the server sends and stops sending ----------------------------------------
@@ -1018,6 +1026,9 @@ public final class MobMemory {
         }
         lastBuilds = builds;
         lastCandidates = unbuilt;
+        // Moving them is the whole of this loop but what is building and reading the ground: the
+        // copies resting between two looks included, thousands of them far off.
+        long loopStarted = System.nanoTime(), loopBuild = 0;
         List<Remembered> seated = new ArrayList<>();
         for (Remembered mob : shown()) {
             if (mob.gone || mob.handover != null) continue;
@@ -1028,7 +1039,9 @@ public final class MobMemory {
                 if (parsed != null && parsed.isDone() && !background) {
                     long building = System.nanoTime();
                     build(mob, level);
-                    buildNanos += System.nanoTime() - building;
+                    long built = System.nanoTime() - building;
+                    buildNanos += built;
+                    loopBuild += built;
                 }
             }
             if (mob.puppet == null) continue;
@@ -1098,8 +1111,7 @@ public final class MobMemory {
                     mob.ground = choice.ground().save();
                     dirty = true;
                 }
-                long moving = System.nanoTime();
-                groundNanos += moving - grounding;
+                groundNanos += System.nanoTime() - grounding;
                 mob.still = isStill(living, mob, config, pixelsPerRadian);
                 boolean tiny = mob.still;
                 double handover = Math.max(24, Math.min(sent(type(mob)), renderDistanceBlocks));
@@ -1110,15 +1122,13 @@ public final class MobMemory {
                 } else {
                     motion(mob).tick(living, mob, choice, clock, roam, tiny, home);
                 }
-                motionNanos += System.nanoTime() - moving;
             } else {
-                long holding = System.nanoTime();
                 if (mob.coast != null) roll(level, mob);
                 hold(mob.puppet, mob);
-                motionNanos += System.nanoTime() - holding;
             }
         }
         for (Remembered mob : seated) ride(mob);
+        motionNanos += System.nanoTime() - loopStarted - loopBuild - groundNanos;
         Profile.record(Profile.Section.TICK_MOBS_BUILD, buildNanos);
         Profile.record(Profile.Section.TICK_MOBS_GROUND, groundNanos);
         Profile.record(Profile.Section.TICK_MOBS_MOTION, motionNanos);
@@ -1289,11 +1299,16 @@ public final class MobMemory {
      * as it says.
      */
     private void foreseen(List<PositionsMessage.Mob> wanted, String dimension) {
-        Set<UUID> kept = new HashSet<>();
+        // Those still wanted are marked with this round's number: no set of thousands to fill and look through.
+        int round = ++foreseenRounds;
         for (PositionsMessage.Mob found : wanted) {
             UUID id = found.id();
-            kept.add(id);
-            if (mobs.containsKey(id) || live.containsKey(id) || dismissed.containsKey(id)) continue;
+            Remembered known = mobs.get(id);
+            if (known != null) {
+                known.wantedIn = round;
+                continue;
+            }
+            if (live.containsKey(id) || dismissed.containsKey(id)) continue;
             String type = MobKinds.type(found.kind());
             if (type == null) continue;
             SharedPositions.MobReport report = new SharedPositions.MobReport(id, found.x(), found.y(), found.z(),
@@ -1311,6 +1326,7 @@ public final class MobMemory {
             mob.y = found.y();
             mob.z = found.z();
             mob.foreseenHere = true;
+            mob.wantedIn = round;
             mobs.put(id, mob);
             // Where the spyglass looks, drawn at once; otherwise at the next choice, within a second,
             // not a choice through thousands of mobs at every batch found.
@@ -1318,7 +1334,7 @@ public final class MobMemory {
         }
         List<UUID> dropped = new ArrayList<>();
         for (Remembered mob : mobs.values()) {
-            if (mob.foreseenHere && !mob.fromPack && !kept.contains(mob.id)) dropped.add(mob.id);
+            if (mob.foreseenHere && !mob.fromPack && mob.wantedIn != round) dropped.add(mob.id);
         }
         dropped.forEach(this::forget);
     }
@@ -1402,14 +1418,19 @@ public final class MobMemory {
     private void followServer(ClientLevel level, String dimension) {
         ServerMobs.Answer answer = serverMobs.answer();
         if (answer != null) {
-            for (Remembered mob : mobs.values()) {
-                ServerMobs.Where where = answer.found().get(mob.id);
-                if (where == null || !mob.dimension.equals(dimension) || !isHere(mob)
+            // Those the server moved at its last answer: their own animation again, unless it still moves them.
+            // Only they and those it found are looked at, never the thousands of others.
+            for (Remembered mob : followed) mob.simulated = false;
+            followed.clear();
+            for (Map.Entry<UUID, ServerMobs.Where> found : answer.found().entrySet()) {
+                Remembered mob = mobs.get(found.getKey());
+                if (mob == null || !mob.dimension.equals(dimension) || !isHere(mob)
                         || live.containsKey(mob.id) || mob.handover != null) {
-                    mob.simulated = false;
                     continue;
                 }
+                ServerMobs.Where where = found.getValue();
                 mob.simulated = where.simulated();
+                if (mob.simulated) followed.add(mob);
                 double moved = Math.abs(where.x() - mob.x) + Math.abs(where.y() - mob.y) + Math.abs(where.z() - mob.z);
                 if (moved > 0) {
                     mob.x = where.x();
@@ -1441,7 +1462,9 @@ public final class MobMemory {
         if (local == null) return;
         List<ServerMobs.Asked> asked = new ArrayList<>();
         for (Remembered mob : mobs.values()) {
-            if (mob.dimension.equals(dimension) && isHere(mob) && !live.containsKey(mob.id) && mob.handover == null) {
+            // A mob guessed from the seed is none of the server's: never found, never asked about.
+            if (mob.dimension.equals(dimension) && isHere(mob) && !SeedDraws.foreseen(mob.id) && !live.containsKey(mob.id)
+                    && mob.handover == null) {
                 asked.add(new ServerMobs.Asked(mob.id, mob.x, mob.y, mob.z, mob.simulated));
             }
         }
@@ -1688,13 +1711,7 @@ public final class MobMemory {
             // All of them drawn and no spyglass: no order to put them in. Otherwise the nearest,
             // where the spyglass looks first, however far: the player is looking for them there.
             if (most < here.size() || scoping) {
-                for (Remembered mob : here) {
-                    if (foresight.inScope(mob.x, mob.y + 0.5, mob.z)) mob.distance -= 1e9;
-                }
-                here.sort(Comparator.comparingDouble(mob -> mob.distance));
-                for (Remembered mob : here) {
-                    if (mob.distance < 0) mob.distance += 1e9;
-                }
+                ByDistance.sort(here, mob -> foresight.inScope(mob.x, mob.y + 0.5, mob.z) ? mob.distance : mob.distance + 1e9);
             }
             chosen.addAll(most < here.size() ? here.subList(0, most) : here);
         }

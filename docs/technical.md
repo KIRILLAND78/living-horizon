@@ -638,7 +638,8 @@ remembers them at once, with no need to walk there. Single player only.
 ### Following the server in single player
 
 In single player the server runs in the game itself. Four times a second it is asked where
-the remembered mobs are (`track/ServerMobs`).
+the remembered mobs are (`track/ServerMobs`), the guessed ones left out: the server never has
+them. Its answer is applied to the mobs it found, and to those it moved the time before.
 
 - The ones it still moves (past the distance it sends them at, but inside the simulation
   distance) are followed by their copies, at its pace and facing the way they face, with no
@@ -936,6 +937,13 @@ textures, draws and reads back the views, and writes a sheet into its page. Ever
   every world and every game (variants by name, records by parts).
 - Two looks of the same kind whose pictures come out the same (their full-size pixels hash
   the same) share one sheet too.
+- **Worked out again every five to nine seconds** per figure, each at a moment of its own
+  (`ImpostorKey.look`): worked out for the whole crowd in one frame, it made the frame rate drop
+  every few seconds. The figures not asked about for a while are forgotten, never all of them
+  at once, which had thousands worked out again every second.
+- **Asked for ahead**: once a second, the pictures of the figures on hand are asked for, near or
+  far, so that they are baked before a figure walks past `impostorDistance`; past 1024 copies,
+  a share of them each second (`GhostRenderer.prewarm`).
 
 ### No blinking
 
@@ -1463,7 +1471,7 @@ debug options. `/livinghorizon debug` turns the panel and the boxes on or off to
 | Tool | Switch | What it shows |
 |---|---|---|
 | Panel | `debugHud` | Top left: cost per tick and frame, what became of every distant mob in the last frame, far terrain reads and depth, how far this server sends mobs, which optimisations are on |
-| Cost per section | `debugHud` | A second column of the panel, and `/livinghorizon`: for each part of the mod the last time, a smoothed average and the worst of the last 5 seconds, which an average alone hides (a save of 100 ms once a minute). Sections: the client tick (following the server's mobs, choosing, building copies, reading the ground, motion, resting players, birds, hidden mobs), the frame (extraction, each step of the far terrain's depth, the occlusion queries, baking and storing the flat pictures, submitting birds and flat pictures), the saves with their size in bytes, and the server's publication. Over 2 ms shows yellow, over 8 ms red. With OpenGL the GPU's time is shown too for the depth steps, the occlusion boxes and the baking (`GL_TIME_ELAPSED` queries read a few frames later, never waited for), and so is what the game's thread allocates per tick; both are measured only while the panel or the command was asked for in the last 10 seconds. Each section is named `livinghorizon:<section>` in the game's profiler (F3 pie chart, spark). Code: `Profile`, `debug/ProfileHook`, `debug/GpuTimer` |
+| Cost per section | `debugHud` | A second column of the panel, and `/livinghorizon`: for each part of the mod the last time, a smoothed average and the worst of the last 5 seconds, which an average alone hides (a save of 100 ms once a minute). A time is that of one call: choosing runs once a second (guessed mobs included, nested in it), so its time is spread over twenty ticks, while the other parts of the tick run every tick and those of the frame every frame. Sections: the client tick (following the server's mobs, choosing, building copies, reading the ground, motion, the copies resting between two looks included, resting players, birds, hidden mobs), the frame (extraction, each step of the far terrain's depth, the occlusion queries, baking and storing the flat pictures, submitting birds and flat pictures), the saves with their size in bytes, and the server's publication. Over 2 ms shows yellow, over 8 ms red. With OpenGL the GPU's time is shown too for the depth steps, the occlusion boxes and the baking (`GL_TIME_ELAPSED` queries read a few frames later, never waited for), and so is what the game's thread allocates per tick; both are measured only while the panel or the command was asked for in the last 10 seconds. Each section is named `livinghorizon:<section>` in the game's profiler (F3 pie chart, spark). Code: `Profile`, `debug/ProfileHook`, `debug/GpuTimer` |
 | Panel in F3 | `living_horizon` in the game's debug options (F3 + F6, from 1.21.9) | The panel's lines in the F3 screen. `/livinghorizon debug` turns it on too |
 | Polygons in F3 | `fake_entities` in the game's debug options (F3 + F6, from 1.21.9) | The polygons of the mod's own entities (distant players and mobs, never the game's), split into full models and impostors (one quad each), and a line of impostor sheets baked and waiting |
 | Boxes (from 1.21.11) | `debugBoxes` | A box around every distant mob and player, seen through terrain, coloured by what became of it (below). A dot in the middle keeps it visible when the box is smaller than its lines |

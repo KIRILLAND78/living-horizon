@@ -805,6 +805,17 @@ come back, add it here in the same pull request: this file is what the next sess
   spyglass is up, and the guessed mobs are worked out again only when what they depend on
   changed (`Foresight.wantedIfChanged`). The `seedcrowd` scenario measures it all; the
   *Statistics...* screen counts what is kept.
+- **The debug panel's costs compared** (*Tick: choosing mobs* and *Frame: extraction* the
+  largest): each time is per call. Choosing runs once a second, the guessed mobs nested in it;
+  the tick's other parts every tick, the frame's every frame. Compare them per second, or
+  profile the `seedcrowd` and `perf` scenarios with JFR (`-XX:StartFlightRecording` in
+  `JAVA_TOOL_OPTIONS`, then `jfr print --events jdk.ExecutionSample`). *Frame: extraction*
+  with a worst far above its average, every few seconds: something done for every copy at
+  once. A figure's picture key (`ImpostorKey.look`) is worked out again every 5 to 9 s, each
+  at its own moment; worked out for the whole crowd in one frame, or the cache cleared whole
+  past 4096 figures, it was a spike. `GhostRenderer.prewarm` looks at 1024 copies a second at
+  most. With thousands of copies the loops are memory-bound: a map lookup per copy (a UUID's
+  hash) costs more than the arithmetic, so mark copies with a round number, never a set.
 - **Nothing drawn in the world while a distance setting is hovered** (the distance preview,
   `render/DistancePreview`): an entity's render type is fogged like an entity, and the game's
   fog had faded a 128-block fence out completely at the default render distance. From 1.21.11

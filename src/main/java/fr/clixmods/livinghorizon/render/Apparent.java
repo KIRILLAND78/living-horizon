@@ -49,4 +49,18 @@ final class Apparent {
         double reach = far * REACH;
         return distance > reach ? reach / distance : 1.0;
     }
+
+    /**
+     * Whether a figure is outside the view. Its middle makes an angle with where the camera looks
+     * whose cosine is {@code cosine}; the view reaches an angle whose cosine and sine are
+     * {@code viewCos} and {@code viewSin}; the figure is {@code across} of its distance wide, and
+     * reaches past its middle by the angle that spans. The same as
+     * {@code acos(cosine) > view + asin(min(1, across))}, without a trigonometric call per figure.
+     */
+    static boolean outsideView(double cosine, double across, double viewCos, double viewSin) {
+        double s = Math.min(1, across), c = Math.sqrt(1 - s * s);
+        // The edge of the view widened by the figure: past half a turn, nothing is outside it.
+        if (viewSin * c + viewCos * s < 0) return false;
+        return cosine < viewCos * c - viewSin * s;
+    }
 }

@@ -65,6 +65,12 @@ final class MobMotion {
     /** Blocks a tick in this hop, and above the ground at this tick. */
     private double hopPace, lift;
     private boolean tookOff, landed, climbing;
+    /**
+     * The copy {@link #rest} last kept going, by its id, and how fast its legs go: a baby's
+     * faster. Read once per copy, not from its synched data every tick for thousands of them.
+     */
+    private int restedId = Integer.MIN_VALUE;
+    private float restedScale;
 
     /** {@code flight}: how it flies, null for a mob that walks, hops or swims. */
     MobMotion(long seed, @Nullable MobFlight flight) {
@@ -92,7 +98,11 @@ final class MobMotion {
         puppet.setOldPosAndRot();
         puppet.yBodyRotO = puppet.yBodyRot;
         puppet.yHeadRotO = puppet.yHeadRot;
-        Puppets.walk(puppet, 0f, 0.4f, puppet.isBaby() ? 3f : 1f);
+        if (puppet.getId() != restedId) {
+            restedId = puppet.getId();
+            restedScale = puppet.isBaby() ? 3f : 1f;
+        }
+        Puppets.walk(puppet, 0f, 0.4f, restedScale);
         puppet.tickCount++;
     }
 

@@ -579,23 +579,7 @@ public final class Foresight {
 
     /** Sorts mobs nearest first across the ground, each distance worked out once. */
     private static void nearest(List<PositionsMessage.Mob> mobs, double x, double z) {
-        int n = mobs.size();
-        if (n > 0xFFFFF) {
-            mobs.sort(java.util.Comparator.comparingDouble(mob -> (mob.x() - x) * (mob.x() - x) + (mob.z() - z) * (mob.z() - z)));
-            return;
-        }
-        long[] order = new long[n];
-        for (int i = 0; i < n; i++) {
-            PositionsMessage.Mob mob = mobs.get(i);
-            double dx = mob.x() - x, dz = mob.z() - z;
-            // A positive double sorts as its bits do: the squared distance above, the place below.
-            order[i] = (Double.doubleToRawLongBits(dx * dx + dz * dz) & ~0xFFFFFL) | i;
-        }
-        java.util.Arrays.sort(order);
-        List<PositionsMessage.Mob> sorted = new ArrayList<>(n);
-        for (long entry : order) sorted.add(mobs.get((int) (entry & 0xFFFFF)));
-        mobs.clear();
-        mobs.addAll(sorted);
+        ByDistance.sort(mobs, mob -> (mob.x() - x) * (mob.x() - x) + (mob.z() - z) * (mob.z() - z));
     }
 
     private void pick(long[] mobs, double x, double y, double z, double reachSquared, @Nullable Scope seen,
