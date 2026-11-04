@@ -430,6 +430,12 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   stands where it was left, as a boat does: no animation, and only this client remembers it.
   So a kind that is not alive, a boat included, is only *Shown* or *Hidden* there, never
   *Roaming* or *Still*.
+- **A save that fails.** On the client a chest boat or minecart has the game's own hold, 27
+  slots, sized again only when it is loaded from a save, which the client never does: another
+  mod's larger one that writes its slots one by one (Shippy Ships' galleon, 504) threw as the
+  client saved it, and was never remembered. `EntityNbt.save` first makes the client's hold
+  again, empty, at its size; the client never knows what is in it anyway. A kind whose save
+  or copy still fails is not drawn far away, and the log says why, once per kind.
 - **Mannequins** (from 1.21.9) are shown too, standing still: Distant Friends uses them as its fake
   players. Mobs in `stillMobTypes` (happy ghast, mannequin) stand still instead of walking
   their loop. A copy wears its mannequin's skin, from a player's name or a texture of a
@@ -873,8 +879,9 @@ that a mob met in an earlier game is read back rather than baked.
   again finds its sheets. Its text is kept beside the sheets (`fingerprint.txt`), and the log says
   which lines changed when an older folder is thrown away ("the saved mob pictures of ... are
   thrown away").
-- Each file holds when and in which world or server its sheet was baked (file `FORMAT` 3; a
-  file of 2 still reads, its date unknown). The impostor screen shows it under each name, with
+- Each file holds when and in which world or server its sheet was baked, and how far down its
+  tiles the figure's origin stands (file `FORMAT` 4; a file of 3 still reads, its origin where
+  its kind puts it, and one of 2, its date unknown). The impostor screen shows it under each name, with
   where the pictures come from (`ImpostorAtlas.Origin`): *Shared*, read back from disk; *New*,
   baked in this game and saved; *Not saved* (players, riders, birds).
 - A sheet read back is checked against the size of a sheet (`ImpostorDisk.decode`) before
@@ -906,6 +913,12 @@ that a mob met in an earlier game is read back rather than baked.
   nearer than that middle (an aircraft's nose, the wheels under it) farther along the line of
   sight, under the ground the figure stands on when seen from above: `GhostRenderer.picture`
   moves it nearer by half its size and makes it as much smaller, the same on screen.
+  The middle is the box's, which is not always the figure's: Shippy Ships' galleon has a box
+  9 blocks high and masts 40 blocks up, so half of its pictures stayed empty below the hull and
+  its masts were cut off even five times larger. One cut off is first moved down or up its tiles
+  until it stands in their middle (`ImpostorPixels.centred`, between `FEET` from the top and as
+  far from the bottom), then grown if it still needs room; how far down its tiles its middle
+  stands is kept with the sheet, on disk too.
 - **Players who logged off** are impostors in every posture: standing, seated on the ground,
   lying down or in a bed. A posture other than standing is part of the key
   (`ImpostorKey.posture`), and the picture is baked in it:

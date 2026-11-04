@@ -9,10 +9,14 @@
 - **Support for Far View's terrain** — Distant mobs now show and walk on Far View's far terrain and hide behind its hills, instead of being hidden past the render distance. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
 - **Support for Ecstatic's terrain** — Distant mobs now appear on Ecstatic's terrain and walk on its ground, instead of vanishing past the render distance. They hide correctly behind its hills, stay visible in front of them, and blend into its fog. (NeoForge, Minecraft 1.21.1, single player; the fog without shaders.)
 
+#### Improved
+- **Sharper distant ships** — The simplified images of tall boats and vehicles, such as Shippy Ships' sailing ships, are now sharper. The tallest ones, like the galleon, now get one too, instead of always being drawn as a full model, which is heavier on performance.
+
 #### Fixed
 - **Mobs shown only once with Far View** — Mobs that Far View draws as boxes between 128 blocks and the render distance are now shown only once, instead of twice on top of each other. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
 - **Offline players' names shown on Forge** — Aiming at an offline player now shows their name and when they were last seen, instead of nothing at all. (Forge, Minecraft 1.20.1 to 1.20.4.)
 - **Better integration with Bobby** — Distant mobs now stay visible just past the distance the server sends them, over the terrain Bobby keeps, instead of disappearing. Distant players also no longer stop short as they walk out of that distance.
+- **Shippy Ships' galleon visible from afar** — The galleon from Shippy Ships now stays visible in the distance where you left it, like the mod's other ships, instead of vanishing as soon as it leaves the render distance.
 
 ## 0.15.0 — 2026-10-31
 
