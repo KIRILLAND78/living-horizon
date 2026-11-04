@@ -10,10 +10,16 @@ package fr.clixmods.livinghorizon.render.impostor;
  *
  * <p>A picture is never blown up far past the pixels it holds: a huge mob just past the
  * distance (an Ice and Fire dragon twenty blocks long) keeps its model until it is small enough.
+ *
+ * <p>A model nearing its picture turns to the way the picture will show it ({@link #approach}),
+ * so that the picture takes over from a figure already standing as it does.
  */
 public final class ImpostorThreshold {
     /** How far inside a threshold a pictured figure must come to get its model back. */
     public static final double RETURN = 0.95;
+
+    /** Where a model starts turning to its picture, as a share of the thresholds. */
+    public static final double TURN_FROM = 0.80;
 
     /** How many times larger than its pixels a picture may be shown. */
     public static final double MAX_ENLARGED = 2;
@@ -44,5 +50,29 @@ public final class ImpostorThreshold {
         if (distance < 1e-3) return false;
         if (fromDistance > 0 && distance > (pictured ? fromDistance * RETURN : fromDistance)) return true;
         return belowPixels > 0 && pixels < (pictured ? belowPixels / RETURN : belowPixels);
+    }
+
+    /**
+     * How far a model has come towards its picture, 0 to 1: 0 until it is past a fifth of the way
+     * inside the distance or the size ({@link #TURN_FROM}), 1 from where a picture would come back
+     * to its model ({@link #RETURN}) on, so that neither switch moves it. In between, eased.
+     *
+     * @param distance     blocks from the eye to the figure
+     * @param pixels       the figure's height (or width, the larger) on screen, in pixels
+     * @param fromDistance blocks past which a figure is a picture; 0 for none
+     * @param belowPixels  pixels under which a figure is a picture; 0 for none
+     */
+    public static double approach(double distance, double pixels, int fromDistance, int belowPixels) {
+        if (distance < 1e-3) return 0;
+        double near = 0;
+        if (fromDistance > 0) near = ease(distance, fromDistance * TURN_FROM, fromDistance * RETURN);
+        if (belowPixels > 0) near = Math.max(near, ease(-pixels, -belowPixels / TURN_FROM, -belowPixels / RETURN));
+        return near;
+    }
+
+    /** 0 at {@code from}, 1 at {@code to}, a smooth step in between. */
+    private static double ease(double value, double from, double to) {
+        double t = Math.min(1, Math.max(0, (value - from) / (to - from)));
+        return t * t * (3 - 2 * t);
     }
 }
