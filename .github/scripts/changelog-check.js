@@ -9,6 +9,7 @@
  *   "### Client" (Serveur, Client), each with "#### New", "#### Improved", "#### Fixed"
  *   (Nouveautés, Améliorations, Corrections). Released versions written before the
  *   split keep their flat "### New" headings;
+ * - each heading appears once per area of a version;
  * - en.md and fr.md have the same sections, headings and number of entries.
  *
  *   node .github/scripts/changelog-check.js <base-ref>
@@ -84,6 +85,12 @@ for (const lang of ['en', 'fr']) {
       } else if (k.flat && !r.version) {
         errors.push(name + ': "### ' + k.heading + '" under "' + r.title + '" must sit under "### ' + AREAS[lang].join('" or "### ') + '": only released versions keep the flat layout.');
       }
+    }
+    const kindsSeen = new Set();
+    for (const k of r.kinds) {
+      const key = (k.area || '') + '/' + k.heading;
+      if (kindsSeen.has(key)) errors.push(name + ': "' + (k.flat ? '### ' : '#### ') + k.heading + '" appears twice' + (k.area ? ' under "### ' + k.area + '"' : '') + ' of "' + r.title + '": merge its entries into the first one.');
+      kindsSeen.add(key);
     }
     if (!r.version) continue;
     const old = before.find(o => o.version === r.version);
