@@ -36,6 +36,41 @@ class DepthMathTest {
                 .rotateY((float) Math.toRadians(-0.7));
     }
 
+    /**
+     * Lodistance's depth with Sodium, written as its vertex shader does ({@code z = A * w + 0.5 *
+     * m32}): read back with its terms it is the right distance, it lies behind the game's depth
+     * for the same distance in 26.3's layout, and the game's depth for that distance is what a point
+     * there stores.
+     */
+    @Test
+    void lodistanceDepthToTheGamesInEveryLayout() {
+        float[] distances = {150f, 260f, 700f, 1000f};
+        for (boolean reversed : BOTH) {
+            for (boolean zeroToOne : BOTH) {
+                Matrix4f projection = perspective(NEAR, FAR, reversed, zeroToOne);
+                float[] game = DepthMath.fromProjection(projection);
+                float[] lod = DepthMath.lodistance(projection.m32());
+                String layout = (reversed ? "reversed " : "") + (zeroToOne ? "0..1" : "-1..1");
+                assertNotNull(game, layout);
+                for (float w : distances) {
+                    float ndc = ((reversed ? 0f : 1f) * w + 0.5f * projection.m32()) / w;
+                    float written = zeroToOne ? ndc : ndc * 0.5f + 0.5f;
+                    float distance = DepthMath.distance(lod[0], lod[1], zeroToOne, written);
+                    // A float holds little near 1, or near 0.5 for a reversed -1..1: 26.3's layout loses least.
+                    assertEquals(w, distance, w * (reversed && zeroToOne ? 1e-3f : 1e-2f), layout + " at " + w);
+                    float real = DepthMath.depth(game[0], game[1], zeroToOne, distance);
+                    // Reversed and 0..1, as on 26.3 where it runs, its depth lies behind the game's
+                    // for the same point up to half the far plane, in front past it (FarDepth's
+                    // LOD_MERGE moves it both ways). Its formula does not expect the other layouts.
+                    if (reversed && zeroToOne) {
+                        assertTrue(w < FAR / 2 ? written < real : written > real, layout + " at " + w);
+                    }
+                    assertEquals(stored(projection, 0f, 0f, -w, zeroToOne), real, 1e-5f, layout + " at " + w);
+                }
+            }
+        }
+    }
+
     @Test
     void distanceToDepthAndBackInEveryLayout() {
         float[] distances = {0.05f, 0.3f, 2f, 17f, 64f, 250f, 700f, 1024f};
@@ -60,6 +95,25 @@ class DepthMathTest {
                 assertEquals(FAR, planes[1], FAR * 1e-3f, layout + ": far");
             }
         }
+    }
+
+    /**
+     * Ecstatic draws its terrain after the entities, tested against the game's depth, with the
+     * game's near plane and a far plane of its own. With the game's plane nearer, a hill well
+     * behind a distant mob passes the test and is painted over it; with the same plane, only a
+     * hill in front of it does.
+     */
+    @Test
+    void ecstaticsTerrainStaysBehindAMobOnlyWithTheSameFarPlane() {
+        float mob = 300f, behind = 400f, inFront = 295f;
+        float[] game = DepthMath.terms(NEAR, 1100f, false, false);
+        float[] ecstatic = DepthMath.terms(NEAR, 16800f * 1.05f, false, false);
+        float mobDepth = DepthMath.depth(game[0], game[1], false, mob);
+        assertTrue(DepthMath.depth(ecstatic[0], ecstatic[1], false, behind) <= mobDepth, "the hill behind wins");
+
+        float matched = DepthMath.depth(ecstatic[0], ecstatic[1], false, mob);
+        assertTrue(DepthMath.depth(ecstatic[0], ecstatic[1], false, behind) > matched, "the hill behind loses");
+        assertTrue(DepthMath.depth(ecstatic[0], ecstatic[1], false, inFront) <= matched, "the hill in front wins");
     }
 
     @Test

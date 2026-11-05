@@ -67,6 +67,16 @@ public final class DepthMath {
         return new float[]{a, b};
     }
 
+    /**
+     * {@code {a, b}} of the depth Lodistance writes for its terrain with Sodium, from the
+     * {@code m32} of the projection it was given: its vertex shader replaces the depth by
+     * {@code A + 0.5 * m32 / w}, A 0 when the projection is reversed ({@code m32 > 0}) and 1
+     * otherwise. Half the game's {@code b}: each point lies at twice its distance.
+     */
+    public static float[] lodistance(float m32) {
+        return new float[]{m32 > 0f ? 0f : -1f, 0.5f * m32};
+    }
+
     /** The depth stored for a point {@code distance} in front of the camera, by a projection with these terms. */
     public static float depth(float a, float b, boolean zeroToOne, float distance) {
         float ndc = b / distance - a;

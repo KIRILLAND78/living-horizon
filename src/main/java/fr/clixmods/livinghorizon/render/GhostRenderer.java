@@ -5,9 +5,12 @@ import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.ambient.Ambience;
+import fr.clixmods.livinghorizon.ambient.Herd;
 import fr.clixmods.livinghorizon.compat.DrawnGround;
+import fr.clixmods.livinghorizon.compat.EcstaticLink;
 import fr.clixmods.livinghorizon.compat.EntityCulling;
 import fr.clixmods.livinghorizon.compat.FarDepth;
+import fr.clixmods.livinghorizon.compat.FarViewLink;
 import fr.clixmods.livinghorizon.compat.IceAndFire;
 import fr.clixmods.livinghorizon.compat.OcclusionQueries;
 import fr.clixmods.livinghorizon.debug.DebugMarks;
@@ -245,11 +248,15 @@ public final class GhostRenderer {
 
     /**
      * The far plane this frame needs: the projection is built before the entities are
-     * extracted, so it covers the players of the frame before, with room to spare.
+     * extracted, so it covers the players of the frame before, with room to spare. While
+     * Ecstatic draws its terrain, its own far plane: it tests its terrain against the game's
+     * depth with that plane, and the two depths only agree with the same one.
      */
     public static float farPlane(float vanilla) {
         FarConfig config = FarConfig.get();
         if (!config.anyDistant() || !config.extendFarPlane) return vanilla;
+        float ecstatic = EcstaticLink.farPlane();
+        if (ecstatic > 0f) return ecstatic;
         return Math.max(vanilla, neededFar);
     }
 
@@ -488,6 +495,7 @@ public final class GhostRenderer {
                     continue;
                 }
                 EntityRenderState body = extract(dispatcher, live, partialTick);
+                if (mount == live) turned(live, body, partialTick);
                 EntityRenderState mountState = mount != live && !EXTRACTED.contains(mount)
                         ? extract(dispatcher, mount, partialTick) : null;
                 add(frame, minecraft, eye, body, mountState, false, Mark.PLAYER, config, live.getUUID());
@@ -502,6 +510,7 @@ public final class GhostRenderer {
                     continue;
                 }
                 EntityRenderState body = extract(dispatcher, puppet, partialTick);
+                if (mount == null) turned(puppet, body, partialTick);
                 EntityRenderState mountState = mount == null ? null : extract(dispatcher, mount, partialTick);
                 if (mountState != null) Posture.seat(body);
                 add(frame, minecraft, eye, body, mountState, true, Mark.PLAYER, config, player.id());
@@ -527,7 +536,7 @@ public final class GhostRenderer {
         if (debug) DebugMarks.end();
     }
 
-    /** The figures of the easter eggs that are the game's own: the cow taken, the watcher. */
+    /** The figures of the easter eggs that are the game's own: the cow taken, the watcher, those from 9 on. */
     private static void eggs(List<EntityRenderState> frame, Minecraft minecraft, EntityRenderDispatcher dispatcher,
                              Vec3 eye, float partialTick, FarConfig config) {
         Ambience ambience = FarPlayerTracker.get().ambience();
@@ -535,6 +544,11 @@ public final class GhostRenderer {
         if (cow != null) add(frame, minecraft, eye, extract(dispatcher, cow, partialTick), null, true, Mark.FAKE, config, null);
         LivingEntity watcher = ambience.herobrine().figure();
         if (watcher != null) add(frame, minecraft, eye, extract(dispatcher, watcher, partialTick), null, true, Mark.FAKE, config, null);
+        for (fr.clixmods.livinghorizon.ambient.Egg egg : ambience.more()) {
+            for (Entity figure : egg.figures()) {
+                add(frame, minecraft, eye, extract(dispatcher, figure, partialTick), null, true, Mark.FAKE, config, null);
+            }
+        }
     }
 
     /**
@@ -589,8 +603,10 @@ public final class GhostRenderer {
             Mark copy = SeedDraws.foreseen(mob.id()) ? Mark.FORESEEN : Mark.FAKE;
             if (debug) DebugMarks.mark(puppet, copy);
             mob.drawn();
-            if (impostor(minecraft, eye, puppet, partialTick, config)) continue;
+            // Held by easter egg 15, its head turned apart from its body: a model, which shows it.
+            if (!Herd.holds(puppet) && impostor(minecraft, eye, puppet, partialTick, config)) continue;
             EntityRenderState body = extract(dispatcher, puppet, partialTick);
+            turned(puppet, body, partialTick);
             // A puppet is in no world, so never in water: fish would be drawn flopping on
             // their side, as on land. Water mobs were in water when last seen.
             if (body instanceof LivingEntityRenderState living && livesInWater(puppet)) living.isInWater = true;
@@ -688,14 +704,17 @@ public final class GhostRenderer {
             // Close by, the game leaves a mob out only when the terrain hides it.
             if (entity.distanceToSqr(eye) < 24 * 24) continue;
             if (tooFar(entity, eye, maxDistance(entity, config))) continue;
+            // Far View draws it as a box of its own in place of the game's model: once is enough.
+            if (FarViewLink.drawsMob(entity, eye)) continue;
             if (overVoid(minecraft, eye, entity.getUUID(), entity, config)) continue;
             if (skipped(entity, true)) continue;
             if (occluded(entity.getUUID(), entity, config)) continue;
             EntityCulling.drawn(entity);
             if (debug) DebugMarks.mark(entity, Mark.LIVE);
             if (impostor(minecraft, eye, entity, partialTick, config)) continue;
-            add(frame, minecraft, eye, extract(dispatcher, entity, partialTick), null, false, Mark.LIVE, config,
-                    entity.getUUID());
+            EntityRenderState body = extract(dispatcher, entity, partialTick);
+            turned(entity, body, partialTick);
+            add(frame, minecraft, eye, body, null, false, Mark.LIVE, config, entity.getUUID());
         }
         DrawnGround.ask();
     }
@@ -711,7 +730,7 @@ public final class GhostRenderer {
 
     /**
      * Players who logged off: standing, walking or on guard as the game would draw any
-     * player, or seated, lying on the ground or asleep in a bed.
+     * player, or seated on the ground or asleep in a bed.
      */
     private static void rest(List<EntityRenderState> frame, Minecraft minecraft, EntityRenderDispatcher dispatcher,
                              Vec3 eye, float partialTick, FarConfig config) {
@@ -739,6 +758,8 @@ public final class GhostRenderer {
             if (config.impostorPlayers && restingImpostor(minecraft, eye, puppet, mount, look, partialTick, config)) continue;
             EntityRenderState body = extract(dispatcher, puppet, partialTick);
             if (body == null) continue;
+            // In a bed, laid along it.
+            if (look != RestingPuppet.Look.BED) turned(puppet, body, partialTick);
             EntityRenderState mountState = mount == null ? null : extract(dispatcher, mount, partialTick);
             if (mountState != null) Posture.seat(body);
             if (look != RestingPuppet.Look.STAND && look != RestingPuppet.Look.RIDE
@@ -749,9 +770,6 @@ public final class GhostRenderer {
             }
             if (look == RestingPuppet.Look.BED) {
                 Posture.lie(body, true);
-            } else if (look == RestingPuppet.Look.LIE && Posture.lie(body, false)) {
-                // On the ground the game lays a sleeper a little lower than on a mattress.
-                body.y += Posture.LIE_LIFT;
             } else if (look == RestingPuppet.Look.SIT && Posture.seat(body)) {
                 // The riding pose, without a mount: legs out in front, on the ground.
                 body.y -= Posture.SEAT_DROP;
@@ -759,14 +777,16 @@ public final class GhostRenderer {
             // Their name, marked offline, where the game would show it: close by, as for anyone.
             Component name = config.offlineNames ? body.nameTag : null;
             //? if >=1.21.2 {
-            if (name != null && (look == RestingPuppet.Look.BED || look == RestingPuppet.Look.LIE)
-                    && body.nameTagAttachment != null) {
+            if (name != null && look == RestingPuppet.Look.BED && body.nameTagAttachment != null) {
                 // Lying down: just above the body, as the game puts a sleeper's name (the tag adds half a block).
                 body.nameTagAttachment = new Vec3(0, 0.3, 0);
             }
             //?}
             add(frame, minecraft, eye, body, mountState, true, Mark.PLAYER, config, spot.name());
             body.nameTag = name;
+            // Fishing: its bobber on the water, the line drawn from the rod by the game.
+            Entity hook = puppet.hook();
+            if (hook != null) add(frame, minecraft, eye, extract(dispatcher, hook, partialTick), null, true, Mark.PLAYER, config, null);
         }
     }
 
@@ -963,6 +983,19 @@ public final class GhostRenderer {
     private static long frame;
 
     /**
+     * A model nearing its picture, turned this frame part of the way ({@code share}) to how the
+     * picture will show it ({@code yaw}, picture {@code view}): no jump as the picture takes over.
+     */
+    private static final class Turn {
+        int view;
+        float yaw;
+        float share;
+        long frame;
+    }
+
+    private static final Map<Entity, Turn> TURNS = new IdentityHashMap<>();
+
+    /**
      * Draws a flat picture of a figure in place of its model, when it is past the impostor
      * distance or smaller on screen than the impostor size ({@link ImpostorThreshold}), and its
      * pictures are baked (they are asked for otherwise, and the model is drawn meanwhile).
@@ -1069,6 +1102,7 @@ public final class GhostRenderer {
         double apparent = distance < 1e-3 ? Double.MAX_VALUE : size / distance * pixelsPerRadian;
         if (!ImpostorThreshold.pictured(distance, apparent, last != null, config.impostorDistance, config.impostorPixels)) {
             if (last != null) SHOWN.remove(shown);
+            if (seat == null && config.impostorTurn) turn(shown, key, last, yaw, ax, az, distance, apparent, size, config);
             return false;
         }
         // A rider is pictured with its mount, at the mount's place.
@@ -1102,7 +1136,10 @@ public final class GhostRenderer {
             // and made as much smaller, it looks the same and stands in front of that ground.
             pull *= Math.max(0.1, 1 - sheet.worldSize() * boost * 0.5 / distance);
         }
-        int view = ImpostorViews.view(yaw, -ax, -az, last == null ? -1 : last.view);
+        // Its first picture is the one its model had turned to.
+        Turn turning = TURNS.remove(shown);
+        int previous = last != null ? last.view : turning != null && frame - turning.frame <= 1 ? turning.view : -1;
+        int view = ImpostorViews.view(yaw, -ax, -az, previous);
         if (last == null) SHOWN.put(shown, last = new Shown());
         last.key = key;
         last.view = view;
@@ -1122,20 +1159,64 @@ public final class GhostRenderer {
     }
 
     /**
+     * Notes how far a model nearing its picture turns to it this frame ({@link #turned}), and
+     * to which picture: the one it had turned to, or showed until now, unless it has clearly
+     * turned to another. Only a mob or a player whose picture is baked and would be shown.
+     */
+    private static void turn(Entity shown, ImpostorKey key, @Nullable Shown last, float yaw, double ax, double az,
+                             double distance, double apparent, double size, FarConfig config) {
+        double share = ImpostorThreshold.approach(distance, apparent, config.impostorDistance, config.impostorPixels);
+        ImpostorAtlas.Sheet sheet = share <= 0 || !(shown instanceof LivingEntity) ? null : ImpostorAtlas.sheet(key);
+        // A figure too large for its picture stays a model: never turned in steps.
+        if (sheet == null || ImpostorThreshold.enlarged(sheet.worldSize()
+                * Apparent.boost(Apparent.extent(size), distance, pixelsPerRadian, config.minApparentPixels)
+                / distance * pixelsPerRadian, sheet.tile(), false)) {
+            TURNS.remove(shown);
+            return;
+        }
+        Turn turn = TURNS.get(shown);
+        int previous = last != null ? last.view : turn != null && frame - turn.frame <= 1 ? turn.view : -1;
+        if (turn == null) TURNS.put(shown, turn = new Turn());
+        turn.view = ImpostorViews.view(yaw, -ax, -az, previous);
+        turn.yaw = ImpostorViews.yaw(turn.view, -ax, -az);
+        turn.share = (float) share;
+        turn.frame = frame;
+    }
+
+    /**
+     * Turns a model nearing its picture the share of the way {@link #turn} noted: its body to the
+     * way the picture shows it, its head straight ahead and level, as it is pictured.
+     */
+    private static void turned(Entity entity, @Nullable EntityRenderState state, float partialTick) {
+        Turn turn = TURNS.get(entity);
+        if (turn == null || turn.frame != frame || !(state instanceof LivingEntityRenderState living)
+                || !(entity instanceof LivingEntity mob)) {
+            return;
+        }
+        // Before 1.21.2 an angle the state leaves as NaN is the entity's.
+        float body = Float.isNaN(living.bodyRot) ? Mth.rotLerp(partialTick, mob.yBodyRotO, mob.yBodyRot) : living.bodyRot;
+        float head = Float.isNaN(living.yRot)
+                ? Mth.wrapDegrees(Mth.rotLerp(partialTick, mob.yHeadRotO, mob.yHeadRot) - body) : living.yRot;
+        float pitch = Float.isNaN(living.xRot) ? Mth.lerp(partialTick, mob.xRotO, mob.getXRot()) : living.xRot;
+        float rest = 1 - turn.share;
+        living.bodyRot = Mth.rotLerp(turn.share, body, turn.yaw);
+        living.yRot = head * rest;
+        living.xRot = pitch * rest;
+    }
+
+    /**
      * A player who logged off as a picture, in its posture: standing, seated on the ground,
-     * lying on it or in a bed (laid along the bed, as the game lays a sleeper), or on its mount.
+     * in a bed (laid along the bed, as the game lays a sleeper), or on its mount.
      */
     private static boolean restingImpostor(Minecraft minecraft, Vec3 eye, RestingPuppet puppet, @Nullable Entity mount,
                                            RestingPuppet.Look look, float partialTick, FarConfig config) {
         return switch (look) {
             case STAND -> impostor(minecraft, eye, puppet, partialTick, config);
             case SIT -> impostor(minecraft, eye, puppet, partialTick, config, 0, -Posture.SEAT_DROP, 0, Float.NaN);
-            // Lying pictures are baked raised (Posture.BAKED_LIFT): lowered back here.
-            case LIE -> impostor(minecraft, eye, puppet, partialTick, config, 0, Posture.LIE_LIFT - Posture.BAKED_LIFT, 0,
-                    Float.NaN);
             case BED -> {
                 Direction bed = puppet.getBedOrientation();
                 if (bed == null) {
+                    // Lying pictures are baked raised (Posture.BAKED_LIFT): lowered back here.
                     yield impostor(minecraft, eye, puppet, partialTick, config, 0, Posture.LIE_LIFT - Posture.BAKED_LIFT, 0,
                             Float.NaN);
                 }
@@ -1167,7 +1248,10 @@ public final class GhostRenderer {
     /** Forgets the figures not drawn as impostors for a while: puppets come and go. */
     private static void forgetShown() {
         frame++;
-        if (frame % 600 == 0) SHOWN.values().removeIf(shown -> frame - shown.frame > 600);
+        if (frame % 600 == 0) {
+            SHOWN.values().removeIf(shown -> frame - shown.frame > 600);
+            TURNS.values().removeIf(turn -> frame - turn.frame > 600);
+        }
     }
 
     /** Whether an entity the server sends should be drawn whatever its distance. */

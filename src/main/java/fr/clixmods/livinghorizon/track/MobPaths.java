@@ -23,7 +23,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>The ground around the mob is read once, when it is remembered: in every column
  * within {@link #RADIUS} blocks, the floor nearest the mob's own height with room above
- * it, from the chunks loaded here or else from the far world (Voxy or Distant Horizons).
+ * it, from the chunks loaded here or else from the far world (Voxy, Distant Horizons or Lodistance).
  * Both are read off the game's thread, the loaded chunks from a copy made as it is asked.
  * What has no collision - grass, flowers, crops, snow, torches - is air to a mob, and a
  * path dug with a shovel is ground like any other. Water, leaves and what stands too tall to step on (a fence, a
@@ -155,11 +155,34 @@ public final class MobPaths {
      * and one of them by the seed so that a herd does not all do the same.
      */
     static Choice choose(Ground ground, double width, long seed) {
+        return choose(ground, width, seed, MobAnimations.ALL);
+    }
+
+    /**
+     * For a player who logged off: the choice made, or, where none of the animations fits, one
+     * of the {@link MobAnimations#CRAMPED} ones, a step or two on the same ground.
+     */
+    static Choice orCramped(Choice choice, double width, long seed) {
+        if (choice.animation() != null) return choice;
+        return choose(choice.ground(), width, seed, MobAnimations.CRAMPED);
+    }
+
+    /**
+     * The choice made, kept within {@code radius} blocks of ({@code cx}, {@code cz}): where some of
+     * its ground lies past that, chosen again with that part left out. For a player who logged
+     * off, who never goes farther from where they logged off than they roam.
+     */
+    static Choice within(Choice choice, double cx, double cz, double radius, double width, long seed) {
+        Ground inside = choice.ground().within(cx, cz, radius);
+        return inside == choice.ground() ? choice : choose(inside, width, seed);
+    }
+
+    private static Choice choose(Ground ground, double width, long seed, List<MobAnimations.Animation> animations) {
         int bias = (int) Math.floorMod(seed, 8L);
         boolean mirrorFirst = ((seed >> 7) & 1) == 1;
         List<Choice> fit = new ArrayList<>();
         double widest = 0;
-        for (MobAnimations.Animation animation : MobAnimations.ALL) {
+        for (MobAnimations.Animation animation : animations) {
             search:
             for (int k = 0; k < 8; k++) {
                 for (int m = 0; m < 2; m++) {
@@ -292,6 +315,24 @@ public final class MobPaths {
             for (int i = 0; i < SIZE; i++) height[i] = ground[i].clone();
             double own = height[RADIUS][RADIUS];
             if (Double.isNaN(own) || Math.abs(own - y) > LEVEL) height[RADIUS][RADIUS] = y;
+        }
+
+        /**
+         * This ground with every column whose middle is farther than {@code radius} blocks from
+         * ({@code cx}, {@code cz}) left out, as if nothing could stand there; itself when none is.
+         */
+        Ground within(double cx, double cz, double radius) {
+            double[][] kept = new double[SIZE][SIZE];
+            boolean cut = false;
+            for (int i = 0; i < SIZE; i++) {
+                for (int j = 0; j < SIZE; j++) {
+                    double dx = bx + i - RADIUS + 0.5 - cx, dz = bz + j - RADIUS + 0.5 - cz;
+                    boolean out = dx * dx + dz * dz > radius * radius;
+                    cut |= out && !Double.isNaN(height[i][j]);
+                    kept[i][j] = out ? Double.NaN : height[i][j];
+                }
+            }
+            return cut ? new Ground(kept, x, y, z, complete) : this;
         }
 
         /** Where nothing could stand, in a saved ground. */

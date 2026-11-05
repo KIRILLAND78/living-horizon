@@ -32,6 +32,7 @@
   },
   "suggests": {
     "voxy": "*",
-    "distanthorizons": "*"
+    "distanthorizons": "*",
+    "lodistance": "*"
   }
 }

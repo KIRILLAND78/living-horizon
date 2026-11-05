@@ -117,6 +117,16 @@ public final class MobAnimations {
             new Animation("a few steps",
                     new Step(0, 1.5, 80, true), new Step(0, 0, 100, false)));
 
+    /**
+     * For a player who logged off where none of {@link #ALL} fits - indoors, on a roof, a
+     * balcony: a step or two and back, still something to see from afar.
+     */
+    static final List<Animation> CRAMPED = List.of(
+            new Animation("pacing",
+                    new Step(0, 1, 90, true), new Step(0, 0, 120, false)),
+            new Animation("a step aside",
+                    new Step(0.7, 0.7, 110, false), new Step(0, 0, 130, true)));
+
     private MobAnimations() {
     }
 

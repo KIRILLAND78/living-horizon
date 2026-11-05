@@ -33,7 +33,7 @@ public final class DebugScreen extends SideOptionsScreen {
 
         header(Component.translatable(KEY + "debug.view"));
         list.addSmall(bool("debugHud", c.debugHud, v -> c.debugHud = v));
-        list.addBig(choice("debugDepthView", List.of("0", "1", "2", "3"), String.valueOf(c.debugDepthView),
+        list.addBig(choice("debugDepthView", List.of("0", "1", "2", "3", "4"), String.valueOf(c.debugDepthView),
                 v -> c.debugDepthView = Integer.parseInt(v)));
         list.addSmall(
                 Button.builder(Component.translatable(KEY + "boxes.open"), b -> minecraft.setScreen(new BoxesScreen(this)))
@@ -48,7 +48,8 @@ public final class DebugScreen extends SideOptionsScreen {
         list.addSmall(
                 bool("extendFarPlane", c.extendFarPlane, v -> c.extendFarPlane = v),
                 unit("minApparentPixels", "pixels", 0, 32, (int) c.minApparentPixels, v -> c.minApparentPixels = v),
-                bool("renderTrackedVehiclesFar", c.renderTrackedVehiclesFar, v -> c.renderTrackedVehiclesFar = v));
+                bool("renderTrackedVehiclesFar", c.renderTrackedVehiclesFar, v -> c.renderTrackedVehiclesFar = v),
+                bool("impostorTurn", c.impostorTurn, v -> c.impostorTurn = v));
 
         header(Component.translatable(KEY + "debug.optimisations"));
         list.addSmall(

@@ -7,7 +7,9 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,9 +24,10 @@ final class Columns {
     /**
      * One column: the height to stand at, whether that is water, its biome; NaN where
      * nothing is known. {@code canopy}: the far world's top is leaves, the ground under them
-     * unknown (a loaded column gives the ground under its trees).
+     * unknown (a loaded column gives the ground under its trees). {@code block}: the block on
+     * top, null where nothing says.
      */
-    record Column(double x, double z, double y, boolean water, String biome, boolean canopy) {
+    record Column(double x, double z, double y, boolean water, String biome, boolean canopy, @Nullable BlockState block) {
         boolean known() {
             return !Double.isNaN(y);
         }
@@ -73,7 +76,7 @@ final class Columns {
         for (int i = 0; i < xs.length; i++) {
             int bx = Mth.floor(xs[i]), bz = Mth.floor(zs[i]);
             if (self == null || !drawn(level, self, xs[i], zs[i])) {
-                found[i] = new Column(xs[i], zs[i], Double.NaN, false, "", false);
+                found[i] = new Column(xs[i], zs[i], Double.NaN, false, "", false, null);
                 continue;
             }
             if (Math.hypot(xs[i] - self.getX(), zs[i] - self.getZ()) > edge) {
@@ -84,7 +87,8 @@ final class Columns {
             int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
             BlockPos under = new BlockPos(bx, top - 1, bz);
             String biome = level.getBiome(under).unwrapKey().map(key -> key.identifier().toString()).orElse("");
-            found[i] = new Column(xs[i], zs[i], top, !level.getFluidState(under).isEmpty(), biome, false);
+            found[i] = new Column(xs[i], zs[i], top, !level.getFluidState(under).isEmpty(), biome, false,
+                    level.getBlockState(under));
         }
         if (far.isEmpty()) return CompletableFuture.completedFuture(found);
         int bottom = level.getMinY();
@@ -99,9 +103,9 @@ final class Columns {
             for (int k = 0; k < far.size(); k++) {
                 int i = far.get(k);
                 LodWorld.Surface surface = surfaces == null ? null : surfaces[k];
-                found[i] = surface == null || surface.y() <= bottom ? new Column(xs[i], zs[i], Double.NaN, false, "", false)
+                found[i] = surface == null || surface.y() <= bottom ? new Column(xs[i], zs[i], Double.NaN, false, "", false, null)
                         : new Column(xs[i], zs[i], surface.y() + 1, surface.water(), surface.biome(),
-                        surface.block() != null && surface.block().is(BlockTags.LEAVES));
+                        surface.block() != null && surface.block().is(BlockTags.LEAVES), surface.block());
             }
             return found;
         });

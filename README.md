@@ -115,8 +115,8 @@ each other as usual. What a player's game saw on its own stays in its memory.
 
 ## Getting started
 
-1. Install the file for your game version and loader (see *Requirements*). Voxy and Distant
-   Horizons are optional.
+1. Install the file for your game version and loader (see *Requirements*). Voxy, Distant
+   Horizons, Lodistance and Ecstatic are optional.
 2. Keep the default settings. *Restore Defaults* puts them back.
 
 Open the settings from the Options screen, Mod Menu, Sodium's *Video Settings* (Sodium 0.8
@@ -133,7 +133,7 @@ and later) or `/livinghorizon config`.
 
 - Minecraft 1.20 to 1.21.11 and 26.1 to 26.3.
 - Fabric or Quilt (with [Fabric API](https://modrinth.com/mod/fabric-api)), NeoForge or Forge.
-- [Voxy](https://modrinth.com/mod/voxy) or [Distant Horizons](https://modrinth.com/mod/distanthorizons): optional.
+- [Voxy](https://modrinth.com/mod/voxy), [Distant Horizons](https://modrinth.com/mod/distanthorizons), [Lodistance](https://www.curseforge.com/minecraft/mc-mods/lodistance) or [Ecstatic](https://modrinth.com/mod/ecstatic): optional.
 - [Mod Menu](https://modrinth.com/mod/modmenu): optional, on Fabric and Quilt.
 
 Download from the [releases](https://github.com/MC-Skin-Creator/living-horizon/releases)
@@ -160,6 +160,9 @@ page, one file per game version and loader:
 |---|---|
 | [Voxy](https://modrinth.com/mod/voxy) | Mobs and players are visible on its terrain. |
 | [Distant Horizons](https://modrinth.com/mod/distanthorizons) | From 2.3 on. Mobs and players are visible on its terrain. |
+| [Lodistance](https://www.curseforge.com/minecraft/mc-mods/lodistance) | Fabric, 26.3. Mobs and players are visible on its terrain, with OpenGL and without shaders. |
+| [Ecstatic](https://modrinth.com/mod/ecstatic) | NeoForge, 1.21.1, single player. Mobs are visible on its terrain, without shaders. |
+| [Bobby](https://modrinth.com/mod/bobby) | Mobs and players are visible on the terrain it keeps past the server's view distance. |
 | [Iris](https://modrinth.com/mod/iris) | Shader packs work, such as the two below. |
 | [Photon](https://modrinth.com/shader/photon-shader) | Shader pack. Checked: it works. |
 | [Complementary Unbound](https://modrinth.com/shader/complementary-unbound) | Shader pack. Checked: it works. |
@@ -215,7 +218,7 @@ can limit. A mob only shows once your game or the server has seen it.
 <details>
 <summary>Does it work with my mod?</summary>
 
-Most likely. Voxy, Distant Horizons, Sodium, Iris and shader packs work with it (see
+Most likely. Voxy, Distant Horizons, Lodistance, Ecstatic, Bobby, Sodium, Iris and shader packs work with it (see
 *Compatibility*). Living Horizon only adds its own figures: it does not change how other
 mods draw the world. Mods not tested yet are listed under the
 [`mod compatibility`](https://github.com/MC-Skin-Creator/living-horizon/labels/mod%20compatibility)
@@ -236,7 +239,7 @@ differently, ask me to add support for it, in an
 </details>
 
 <details>
-<summary>Do I need Voxy or Distant Horizons?</summary>
+<summary>Do I need Voxy, Distant Horizons, Lodistance or Ecstatic?</summary>
 
 No. Without them, distant mobs and players show on the game's own terrain, out to your
 render distance. With one of them, they also show on its far terrain.

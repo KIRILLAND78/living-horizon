@@ -158,8 +158,9 @@ public final class FarPlayerTracker {
         }
 
         // The server stops sending a player at the edge of its view distance. Lost well
-        // inside it, the player was removed rather than left behind.
-        double vanishRadius = Math.max(16, minecraft.options.getEffectiveRenderDistance() * 16 - 40);
+        // inside it, the player was removed rather than left behind. The server's, not the
+        // render distance: Bobby draws terrain past it, with nobody on it.
+        double vanishRadius = Math.max(16, ServerView.chunks(minecraft.options) * 16 - 40);
 
         shared.update();
         // Ten seconds after joining a server, no sharing at all: say so once, in the log, and in
@@ -271,7 +272,7 @@ public final class FarPlayerTracker {
         lastCarried = carried;
         lastCarriedYaw = carriedYaw;
         mobs.carried(carried.keySet());
-        mobs.tick(current, self, minecraft.options.getEffectiveRenderDistance() * 16, config,
+        mobs.tick(current, self, ServerView.chunks(minecraft.options) * 16, config,
                 shared.active() ? shared : null);
     }
 

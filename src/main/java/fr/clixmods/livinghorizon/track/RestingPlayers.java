@@ -23,6 +23,7 @@ import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -55,7 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 /**
- * Players who logged off, left where they were last, asleep or sitting.
+ * Players who logged off, left where they were last.
  *
  * <p>Remembered per server, across sessions, in
  * {@code config/livinghorizon/resting/<server>.json}: a friend who logged off yesterday
@@ -641,7 +642,7 @@ public final class RestingPlayers {
             double height = switch (puppet.look()) {
                 case STAND, RIDE -> 1.9;
                 case SIT -> 1.3;
-                case LIE, BED -> 0.5;
+                case BED -> 0.5;
             };
             // A sleeper is 1.8 blocks long, whichever way it lies.
             double half = height < 1 ? 1.0 : 0.4;
@@ -668,14 +669,26 @@ public final class RestingPlayers {
     void tick(ClientLevel level, FarConfig config) {
         choose(level, config);
         Set<BlockPos> beds = new HashSet<>();
+        // Where they fish, or walk to fish: one on a stretch of shore.
+        List<Vec3> fishers = new ArrayList<>();
         for (RestingPuppet puppet : puppets.values()) {
             if (puppet.bed() != null) beds.add(puppet.bed());
+            Vec3 fishing = puppet.fishing();
+            if (fishing != null) fishers.add(fishing);
         }
         boolean night = !level.isBrightOutside();
+        // The evening: from late afternoon until dark, when they gather by the fire.
+        boolean evening = !night && Math.floorMod(dayTime(level), 24000L) >= EVENING;
+        RestingPuppet.Around around = new RestingPuppet.Around(beds, fishers, puppets.values(), night, evening);
         // Sections copied per tick by all of them together, to look around. Each tick another
         // goes first, so that the same few never take it all.
         int[] work = {WORK};
-        Entity camera = Minecraft.getInstance().getCameraEntity();
+        Minecraft minecraft = Minecraft.getInstance();
+        Entity camera = minecraft.getCameraEntity();
+        // The one you look at looks back.
+        Player you = minecraft.player;
+        RestingPuppet gazed = gazed(level, you);
+        if (gazed != null) gazed.lookedAt(you.getEyePosition(), you.isShiftKeyDown() || you.isCrouching());
         List<Spot> order = new ArrayList<>(puppets.keySet());
         List<Spot> rested = new ArrayList<>();
         int count = order.size();
@@ -685,10 +698,23 @@ public final class RestingPlayers {
             RestingPuppet puppet = puppets.get(spot);
             // Near the camera they live their life; away from it, they play a loop.
             if (camera != null) puppet.near(camera.getEyePosition());
-            puppet.tick(level, config, beds, night, work);
+            // You may shove them out of your way; they never push you.
+            puppet.tick(level, config, around, work, minecraft.player);
             if (puppet.restFound()) rested.add(spot);
         }
         for (Spot spot : rested) keepRest(spot, puppets.get(spot).rest());
+    }
+
+    /** Ticks into the day when the evening starts: an hour of the game's before sunset. */
+    private static final long EVENING = 11000;
+
+    /** The time of day in this level, in ticks from dawn, counted from the first day. */
+    private static long dayTime(ClientLevel level) {
+        //? if >=26.1 {
+        /*return level.getDefaultClockTime();
+        *///?} else {
+        return level.getDayTime();
+        //?}
     }
 
     /**
@@ -705,6 +731,42 @@ public final class RestingPlayers {
         if (lookedAt == spot) lookedAt = kept;
         shownStale = true;
         if (!fakes.contains(key)) dirty = true;
+    }
+
+    /** Blocks within which one notices you looking at it: close by, as someone would. */
+    private static final double GAZE = 6;
+
+    /**
+     * The nearest of them under your crosshair, within {@link #GAZE} blocks, living its life
+     * near you, unless a block is in the way; null when none.
+     */
+    private @Nullable RestingPuppet gazed(ClientLevel level, @Nullable Player you) {
+        if (you == null || you.isSpectator()) return null;
+        Vec3 eye = you.getEyePosition();
+        Vec3 end = eye.add(you.getViewVector(1.0f).scale(GAZE));
+        RestingPuppet nearest = null;
+        double best = Double.MAX_VALUE;
+        for (RestingPuppet puppet : puppets.values()) {
+            if (puppet.away() || puppet.level() != level) continue;
+            double height = switch (puppet.look()) {
+                case STAND, RIDE -> 1.9;
+                case SIT -> 1.3;
+                case BED -> 0.6;
+            };
+            // A little wider than it is: a glance its way is enough.
+            AABB box = new AABB(puppet.getX() - 0.5, puppet.getY(), puppet.getZ() - 0.5,
+                    puppet.getX() + 0.5, puppet.getY() + height, puppet.getZ() + 0.5);
+            Optional<Vec3> hit = box.clip(eye, end);
+            if (hit.isEmpty()) continue;
+            double distance = eye.distanceToSqr(hit.get());
+            if (distance >= best) continue;
+            BlockHitResult wall = level.clip(new ClipContext(eye, hit.get(), ClipContext.Block.VISUAL,
+                    ClipContext.Fluid.NONE, you));
+            if (wall.getType() != HitResult.Type.MISS) continue;
+            best = distance;
+            nearest = puppet;
+        }
+        return nearest;
     }
 
     // --- File --------------------------------------------------------------------------

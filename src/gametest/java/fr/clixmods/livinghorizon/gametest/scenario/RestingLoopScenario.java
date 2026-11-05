@@ -16,8 +16,8 @@ import java.util.function.Function;
 /**
  * Players who logged off, away from the camera, play a loop instead of living their life: a
  * test player on foot and one on a horse, the camera 100 blocks off. Each walks the loop
- * around its spot, never farther than the widest animation goes, never jumping, and comes
- * back to its life once the camera is near again.
+ * around where it was when the camera left, never back to its spot, never farther than the
+ * widest animation goes, never jumping, and comes back to its life once the camera is near again.
  */
 public final class RestingLoopScenario implements Scenario {
     /** The flat world's grass is the block below this one. */
@@ -76,14 +76,15 @@ public final class RestingLoopScenario implements Scenario {
 
     /**
      * Fails the run unless the test player plays its loop: away, moving, never more than a
-     * walk's worth in 10 ticks, and in the end within {@link #LOOP} blocks of ({@code x}, {@code z}).
+     * walk's worth in 10 ticks, and within {@link #LOOP} blocks of where it was when it went away.
+     * ({@code x}, {@code z}) is its spot, for the log.
      */
     private static void loops(ClientGameTestContext context, String name, double x, double z, boolean mounted) {
         Function<RestingPuppet, Vec3> where = p -> {
             Entity mount = p.mount();
             return mounted && mount != null ? mount.position() : p.position();
         };
-        Vec3 last = read(context, name, where);
+        Vec3 last = read(context, name, where), start = last;
         double travelled = 0, farthest = 0;
         for (int i = 0; i < 60; i++) {
             context.waitTicks(10);
@@ -93,13 +94,15 @@ public final class RestingLoopScenario implements Scenario {
             double across = Math.hypot(now.x - last.x, now.z - last.z);
             if (across > 1.6) throw new AssertionError("restingloop " + name + ": moved " + across + " blocks in 10 ticks");
             travelled += across;
-            if (i >= 30) farthest = Math.max(farthest, Math.hypot(now.x - x, now.z - z));
+            // Around where it was when you went away, never back to its spot.
+            farthest = Math.max(farthest, Math.hypot(now.x - start.x, now.z - start.z));
             last = now;
             if (i % 10 == 0) Scene.log("restingloop " + name + " " + now + " " + read(context, name, RestingPuppet::state));
         }
-        Scene.log("restingloop " + name + ": walked " + travelled + " blocks, at most " + farthest + " from its spot");
+        Scene.log("restingloop " + name + ": walked " + travelled + " blocks, at most " + farthest
+                + " from where it was, " + Math.hypot(last.x - x, last.z - z) + " from its spot");
         if (travelled < 2) throw new AssertionError("restingloop " + name + ": walked only " + travelled + " blocks");
-        if (farthest > LOOP) throw new AssertionError("restingloop " + name + ": " + farthest + " blocks from its spot");
+        if (farthest > LOOP) throw new AssertionError("restingloop " + name + ": " + farthest + " blocks from where it was");
     }
 
     private static void command(ClientGameTestContext context, String command) {

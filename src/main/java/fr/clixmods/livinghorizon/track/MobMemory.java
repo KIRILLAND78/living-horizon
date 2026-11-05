@@ -8,6 +8,7 @@ import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.JsonStore;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Profile;
+import fr.clixmods.livinghorizon.ambient.Herd;
 import fr.clixmods.livinghorizon.platform.Platform;
 import fr.clixmods.livinghorizon.render.DepthFar;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -157,6 +158,10 @@ public final class MobMemory {
         public double z() { return z; }
         public String type() { return type; }
         public boolean fromPack() { return fromPack; }
+        /** Its saved data, as text. */
+        public String nbt() { return nbt; }
+        /** When this client last had it loaded (or the server last said where it is), in milliseconds since the epoch. */
+        public long seenAt() { return seenAt; }
     }
 
     private static final Gson GSON = new GsonBuilder().create();
@@ -183,7 +188,7 @@ public final class MobMemory {
     private static final int REPLAN_FIRST = 40, REPLAN_MAX = 1200;
 
     private final Map<UUID, Remembered> mobs = new LinkedHashMap<>();
-    /** The render distance, in blocks, as of the last tick. */
+    /** How far the server sends entities, in blocks, as of the last tick ({@link ServerView}). */
     private int renderBlocks;
     /** Mobs the server sends right now: never drawn twice. */
     private final Map<UUID, Entity> live = new HashMap<>();
@@ -725,8 +730,21 @@ public final class MobMemory {
         try {
             return EntityNbt.save(mob, level);
         } catch (RuntimeException e) {
+            unkept(mob.getType(), "its save failed", e);
             return null;
         }
+    }
+
+    /** The kinds a save or a copy failed for, said once each in the log. Render thread only. */
+    private static final Set<EntityType<?>> UNKEPT = new HashSet<>();
+
+    /**
+     * A kind of mob or entity the mod could not keep far away. Said once: dropped without a
+     * word, Shippy Ships' galleon just vanished past the render distance.
+     */
+    private static void unkept(@Nullable EntityType<?> type, String why, Exception error) {
+        if (type == null || !UNKEPT.add(type)) return;
+        LivingHorizonClient.LOGGER.warn("Living Horizon: {} is not drawn far away: {}", EntityType.getKey(type), why, error);
     }
 
     // --- Every tick --------------------------------------------------------------------
@@ -851,15 +869,18 @@ public final class MobMemory {
             // looked at again once in sixteen ticks, each on a tick of its own, and only kept going
             // meanwhile. Thousands far off cost little then. One that moves (the server's, one
             // called back to its spot) is moved every tick: once in sixteen, it went in jerks.
+            // One held by easter egg 15 turns every tick, small on screen or not.
             if (mob.still && mob.motion != null && mob.motion.settled() && !mob.simulated && mob.handover == null
-                    && mob.puppet instanceof LivingEntity resting && ((clock + mob.id.hashCode()) & 15) != 0) {
+                    && mob.puppet instanceof LivingEntity resting && !Herd.holds(resting)
+                    && ((clock + mob.id.hashCode()) & 15) != 0) {
                 mob.motion.rest(resting);
                 continue;
             }
             if (mob.puppet instanceof LivingEntity living) {
                 // Not drawn for a moment: it keeps its place, as a position and nothing more.
+                // Held by easter egg 15 it turns all the same, out of view too.
                 if (config.optFreezeHidden && mob.motion != null && mob.motion.placed()
-                        && System.nanoTime() - mob.drawnAt > FREEZE_AFTER) {
+                        && System.nanoTime() - mob.drawnAt > FREEZE_AFTER && !Herd.holds(living)) {
                     // Moved by the server meanwhile: there when it shows again, not running there.
                     if (mob.simulated) mob.motion.jump(living, mob);
                     continue;
@@ -910,7 +931,12 @@ public final class MobMemory {
                 boolean tiny = mob.still;
                 double handover = Math.max(24, Math.min(sent(type(mob)), renderDistanceBlocks));
                 float home = MobMotion.home(Math.hypot(mob.x - selfX, mob.z - selfZ), handover);
-                motion(mob).tick(living, mob, choice, clock, roam, tiny, home);
+                // Easter egg 15 holds a few copies still, turned to the player: their loop waits.
+                if (Herd.turn(living)) {
+                    motion(mob).held(living, mob);
+                } else {
+                    motion(mob).tick(living, mob, choice, clock, roam, tiny, home);
+                }
                 motionNanos += System.nanoTime() - moving;
             } else {
                 long holding = System.nanoTime();
@@ -1194,7 +1220,8 @@ public final class MobMemory {
      * How close to the player a copy of this kind of mob cannot be: where the real mob would be
      * sent, and so drawn by the game or by the mod, were it still there. That is how far the
      * server sends this kind (which follows the "Entity Distance" slider in a single player
-     * world, and the view distance), within the render distance, less a margin. The simulation
+     * world), within the server's view distance ({@link ServerView}: never Bobby's render
+     * distance, whose far chunks hold no mobs), less a margin. The simulation
      * distance does not shrink it: mobs past it still stand in the loaded chunks and are sent.
      */
     public double nearRange(Remembered mob) {
@@ -1396,6 +1423,7 @@ public final class MobMemory {
             entity.setOldPosAndRot();
             mob.puppet = entity;
         } catch (Exception e) {
+            unkept(type(mob), "its copy could not be made", e);
             mob.failed = true;
         }
     }

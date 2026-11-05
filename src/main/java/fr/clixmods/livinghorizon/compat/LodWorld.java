@@ -16,8 +16,8 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * Reads the world past the render distance, from whichever mod keeps it - Voxy or Distant
- * Horizons, neither required: the ground and biome of a column - for the birds to find
+ * Reads the world past the render distance, from whichever mod keeps it - Voxy, Distant
+ * Horizons, Lodistance, Far View or Ecstatic, none required: the ground and biome of a column - for the birds to find
  * coasts, fields and lakes, and for the mobs to find where they may walk - and the first
  * block along a line, for the line of sight and {@code /livinghorizon lod}.
  *
@@ -123,9 +123,17 @@ public final class LodWorld {
      */
     private static volatile ConcurrentHashMap<Long, Known> memory = new ConcurrentHashMap<>();
 
-    private static final LodSource[] SOURCES = {new VoxySource(), new DhSource()};
+    private static final LodSource[] SOURCES = {new VoxySource(), new DhSource(), new LodistanceSource(),
+            new FarViewSource(), new EcstaticSource()};
 
     private LodWorld() {
+    }
+
+    /** Every client tick with a level, on the game's thread: each source installed does its part. */
+    public static void tick() {
+        for (LodSource source : SOURCES) {
+            if (source.loaded()) source.tick();
+        }
     }
 
     /** Another world: every section held is let go, every column read forgotten. */
@@ -168,14 +176,14 @@ public final class LodWorld {
 
     /**
      * Blocks across to which the far world's terrain is drawn and still clear of its fog, on
-     * the game's thread; 0 without Voxy or Distant Horizons, or when it cannot say.
+     * the game's thread; 0 without Voxy, Distant Horizons or Lodistance, or when it cannot say.
      */
     public static double clearDistance() {
         LodSource source = source();
         return source == null ? 0 : source.clearDistance();
     }
 
-    /** Whether Voxy or Distant Horizons is installed, answering or not. */
+    /** Whether a far-terrain mod is installed (Voxy, Distant Horizons, Lodistance or Far View), answering or not. */
     public static boolean installed() {
         for (LodSource source : SOURCES) {
             if (source.loaded()) return true;
@@ -183,14 +191,14 @@ public final class LodWorld {
         return false;
     }
 
-    /** Whether Voxy or Distant Horizons is installed and answering: there is a far world to read. */
+    /** Whether a far-terrain mod is installed (Voxy, Distant Horizons, Lodistance or Far View) and answering: there is a far world to read. */
     public static boolean present() {
         return source() != null;
     }
 
     /**
      * Blocks across to which the far world's terrain is drawn at all, fog or not, on the game's
-     * thread; 0 without Voxy or Distant Horizons, or when it cannot say.
+     * thread; 0 without Voxy, Distant Horizons or Lodistance, or when it cannot say.
      */
     public static double drawnDistance() {
         LodSource source = source();
@@ -227,7 +235,7 @@ public final class LodWorld {
         if (source == null) {
             String failure = status().failure();
             result.completeExceptionally(new IllegalStateException(failure != null ? failure
-                    : "neither Voxy nor Distant Horizons is loaded"));
+                    : "no far-terrain mod is loaded (Voxy, Distant Horizons, Lodistance, Far View or Ecstatic)"));
             return result;
         }
         run(source, () -> {
@@ -252,7 +260,7 @@ public final class LodWorld {
 
     /**
      * The highest block the far world holds at a column, and its biome, read off the thread;
-     * empty where it has nothing, or without Voxy or Distant Horizons.
+     * empty where it has nothing, or without Voxy, Distant Horizons or Lodistance.
      */
     public static CompletableFuture<Optional<Surface>> surface(int x, int z) {
         return surfaces(new int[]{x}, new int[]{z}).thenApply(found -> Optional.ofNullable(found[0]));

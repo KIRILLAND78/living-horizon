@@ -19,7 +19,7 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Players who logged off, far away, are pictures like players online: test players 150
  * blocks off, past the impostor distance. One on foot gets a picture of its own seated
- * ({@code offlineLife} off), standing (on its loop) and lying down (at night); one on a horse,
+ * ({@code offlineLife} off) and standing (on its loop, by day and still at night); one on a horse,
  * one in a boat and one in a minecart a picture each of both together, the last two from the
  * heights their vehicle is pictured from. The impostor page is shown last, to see every posture.
  */
@@ -73,10 +73,11 @@ public final class RestingImpostorsScenario implements Scenario {
             if (standing != null) throw new AssertionError("restingimpostors standing: " + standing);
             Scene.screenshot(context, this, "standing");
 
-            // At night, lying down where it is: a lying picture.
+            // At night, with no bed: still on its feet, never lying on the ground.
             Scene.command(world, "time set midnight");
-            String lying = pictured(context, NAME, RestingPuppet.Look.LIE, ImpostorKey.LYING);
-            if (lying != null) throw new AssertionError("restingimpostors lying: " + lying);
+            context.waitTicks(20);
+            String awake = pictured(context, NAME, RestingPuppet.Look.STAND, ImpostorKey.STANDING);
+            if (awake != null) throw new AssertionError("restingimpostors night: " + awake);
 
             // The riders and what carries them: one picture each, of both together.
             for (String rider : new String[]{RIDER, ROWER, CARTER}) {

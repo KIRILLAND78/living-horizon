@@ -5,6 +5,7 @@ import net.minecraft.world.entity.Entity;
 //? if >=1.21.2
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.vehicle.ContainerEntity;
 import net.minecraft.world.level.Level;
 //? if >=1.21.6 {
 import net.minecraft.util.ProblemReporter;
@@ -24,6 +25,7 @@ public final class EntityNbt {
 
     /** The entity as the game saves it, without its type. */
     public static CompoundTag save(Entity entity, Level level) {
+        fitHold(entity, level);
         //? if >=1.21.6 {
         TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, level.registryAccess());
         entity.saveWithoutId(output);
@@ -31,6 +33,21 @@ public final class EntityNbt {
         //?} else {
         /*return entity.saveWithoutId(new CompoundTag());
         *///?}
+    }
+
+    /**
+     * A chest boat or minecart has the game's own hold, 27 slots, until it is loaded from a
+     * save, which sizes it again to what it says it holds. On the client it never is: another
+     * mod's larger one keeps 27. Shippy Ships' galleon writes its 504 slots one by one from
+     * that list, and threw at the 28th: never remembered, it vanished past the render
+     * distance. The client never knows what a hold has in it (only an open menu does), so
+     * there it is made again, empty, at its size. Never on a server, where it holds items.
+     */
+    private static void fitHold(Entity entity, Level level) {
+        if (level.isClientSide() && entity instanceof ContainerEntity hold
+                && hold.getItemStacks().size() < hold.getContainerSize()) {
+            hold.clearItemStacks();
+        }
     }
 
     /**

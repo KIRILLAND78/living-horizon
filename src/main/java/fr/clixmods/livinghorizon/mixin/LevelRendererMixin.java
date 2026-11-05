@@ -73,6 +73,19 @@ abstract class LevelRendererMixin {
     }
     //?}
 
+    /** The world is drawn, a far terrain drawn after the entities (Ecstatic) included: the depth view's last picture. */
+    //? if >=26.2 {
+    /*@Inject(method = "render", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+    *///?} else {
+    @Inject(method = "renderLevel", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+    //?}
+
     //? if >=26.3 {
     /*// With Vulkan, what Distant Horizons' depth merge needs is written before the world's pass
     // opens: nothing may be written to a buffer while a pass is open.
@@ -198,6 +211,12 @@ abstract class LevelRendererMixin {
         FarDepth.noteView(modelView, projection);
     }
 
+    /^* The world is drawn, a far terrain drawn after the entities (Ecstatic) included: the depth view's last picture. ^/
+    @Inject(method = "renderLevel", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+
     @Inject(method = "collectVisibleEntities", at = @At("HEAD"))
     private void livinghorizon$beginFrame(Camera camera, Frustum frustum, List<Entity> entities,
                                          CallbackInfoReturnable<Boolean> cir) {
@@ -277,6 +296,12 @@ abstract class LevelRendererMixin {
         FarDepth.noteView(pose.last().pose(), projection);
     }
     ^///?}
+
+    /^* The world is drawn, Ecstatic's terrain included, drawn after the entities: the depth view's last picture. ^/
+    @Inject(method = "renderLevel", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE_STRING",
             target = "Lnet/minecraft/util/profiling/ProfilerFiller;popPush(Ljava/lang/String;)V", args = "ldc=entities"))

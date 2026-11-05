@@ -27,8 +27,11 @@ import java.nio.file.Path;
  * easter egg by its command is none of its business.
  */
 public final class EggCalendar {
-    /** The first day each easter egg may come by chance, by number; the daily ones' (3, 4, 5) are drawn per world. */
-    private static final int[] FIRST = {0, 3, 5, 0, 0, 0, 6, 8};
+    /**
+     * The first day each easter egg may come by chance, by number; the daily ones' (3, 4, 5)
+     * are drawn per world, 14 and 20 are no more, and 21 keeps to dates of its own.
+     */
+    private static final int[] FIRST = {0, 3, 5, 0, 0, 0, 6, 8, 4, 5, 4, 3, 2, 6, 3, 2, 7, 3, 2, 3, 5, 0};
     /** The daily easter eggs, by number. */
     private static final int[] DAILY = {3, 4, 5};
 

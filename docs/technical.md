@@ -48,7 +48,7 @@ never added to a level (`track/Puppets`).
 | root | `LivingHorizonCommon` (entry point on both sides, opens the network channel), `LivingHorizonClient` (client entry point), `FarConfig` (the settings file), `QualityPreset`, `Stats` |
 | `track/` | What is followed and remembered: online players (`FarPlayer`, `FarPlayerTracker`), players who logged off (`RestingPlayers`, `RestingPuppet`, `RestingLoop`, `RestingMount`, `Walkway`, `Footing`), mobs (`MobMemory`, `MobPaths`, `MobAnimations`, `MobMotion`, `MobGait`, `MobScan`, `ServerMobs`, `SeedDraws`, `SeedMobs`, `Foresight`), what the server shares (`PositionPublisher`, `PositionsMessage`, `SharedPositions`, `WorldPlayers`) |
 | `render/` | Adding the puppets to the frame (`GhostRenderer`, `Sink`), the far plane (`DepthFar`) and the depth arithmetic (`DepthMath`), `Occlusion`, the distance settings drawn in the world (`DistancePreview`); `impostor/` for the impostors; `state/` for the render state stand-ins used before 1.21.2 |
-| `compat/` | Voxy and Distant Horizons: reading their world (`LodWorld`, `VoxySource`, `DhSource`, `DrawnGround`) and their depth (`FarDepth`, `FarDepthGpu`, `DhDepth`, `OcclusionQueries`), through one link per mod (`VoxyLink`, `DhLink`, `IrisLink`); Entity Culling, told which entities the mod draws (`EntityCulling`) |
+| `compat/` | Voxy, Distant Horizons, Lodistance and Far View: reading their world (`LodWorld`, `VoxySource`, `DhSource`, `LodistanceSource`, `FarViewSource`, `DrawnGround`) and their depth (`FarDepth`, `FarDepthGpu`, `DhDepth`, `OcclusionQueries`), through one link per mod (`VoxyLink`, `DhLink`, `LodistanceLink`, `FarViewLink`, `IrisLink`); Entity Culling, told which entities the mod draws (`EntityCulling`) |
 | `ambient/` | The birds (`Ambience`, `BirdModels`, `BirdFigure`, `AmbientRenderer`) and the easter eggs |
 | `platform/` | What differs between loaders: events, network, config folder |
 | `ui/` | The settings screens (`FarConfigScreen` and its sub-screens, `SodiumOptions`), the impostor screen, the text under the crosshair (`OfflineHud`) |
@@ -268,8 +268,9 @@ under 48.
 
 - **By day** they stand and look around, sit down, stroll, or stand in front of a chest, a
   crafting table or a villager's workstation and look at it.
-- **At night** they walk to a free bed they can reach and sleep in it, or lie down where
-  they are. In the morning they get up. Night is whenever the sky is dark: a thunderstorm
+- **At night** they walk to a free bed they can reach and sleep in it. With none, they stay
+  on their feet, looking around, and look for one again every 10 to 20 seconds: they never
+  lie on the ground. In the morning they get up. Night is whenever the sky is dark: a thunderstorm
   too, and always in the Nether and the End.
 - **Walking** (`track/Walkway`) only where a player could: one block up, two down, no corner
   cut, nothing walked through but doors and fence gates, which they cannot open. It is worked
@@ -287,22 +288,57 @@ under 48.
 - **A creeper** blowing up within 7 blocks, in sight, throws them, shield up, and they walk
   back.
 - **Hit by you**, they raise their shield.
+- **Looked at** by you (the nearest under your crosshair, within 6 blocks, nothing in
+  between), they look back for as long as you look and 1.5 seconds more: standing, they turn
+  to you, and facing you they crouch while you crouch; walking, seated, fishing or on a
+  mount, they turn their head only and never crouch.
+- **In the rain**, six players in ten (by their name, always the same ones) walk to a spot
+  they can reach with a roof or leaves within 20 blocks above, one of the four nearest, as soon
+  as the rain reaches them, and stay there, standing or seated, while it rains; at night, after
+  looking for a bed. The others carry on.
+- **In the evening** (from 11000 ticks into the day until dark), at each choice they go, six
+  times in ten, to stand in front of a campfire, a soul campfire, a furnace, a blast furnace or
+  a smoker they can reach, one of the three nearest, on a spot beside it nobody else stands on
+  or walks to, for 15 to 30 seconds.
+- **A chat**: by day one of them may walk up to another within 24 blocks who is idle, seated
+  or looking at something, to a spot 2 blocks from them; the other waits, turned to it, then
+  both talk face to face for 20 to 40 seconds, each nodding while it speaks, in turn. Never a
+  third, and never another pair within 16 blocks. Night, a monster, a hit or a push of more
+  than a few blocks ends it.
+- **At the water's edge**, where open water runs 3 blocks out from a spot they can reach, they
+  may fish for a minute or so: a rod in hand, the bobber on the water with the game's line,
+  a fish's wake now and then, a bite that pulls the bobber under, the line reeled in and cast
+  again. Nothing is caught. Never two within 16 blocks of each other at once, those walking
+  to the water included; at night they leave it for a bed.
+- **Walked into** by you or what you ride, they are shoved out of your way (a quarter of a
+  block per tick at most, never into a wall), getting up if they sat; never out of a bed. A
+  walk that runs into you for two seconds in a row is given up.
+  They never push you: nothing of them exists on the server.
 - **In lava or fire** they show the swirls of fire resistance; **under water**, those of
   water breathing.
 
-Where the blocks are not loaded, they only stand, sit or sleep where they are. With
+Where the blocks are not loaded, they only stand or sit where they are, standing at night. With
 `offlineLife` off, they sit on their spot.
 
 ### Far from the camera
 
 Past 64 blocks they have no life of their own (`track/RestingLoop`): nothing is decided,
 but once a second they are still kept out of water (below). They play one of the animations
-distant mobs play (`track/MobAnimations`) in a loop around their spot, on the ground read
-around it (`track/MobPaths`, read again every 30 seconds while some of it is missing),
-sitting in some of its pauses and lying down at night, in their bed if they are in one.
+distant mobs play (`track/MobAnimations`) in a loop around where they stand, on the ground
+read there (`track/MobPaths`, read again every 30 seconds while some of it is missing),
+sitting in some of its pauses by day. At night they stand in those pauses, or stay in their
+bed until the morning if they are in one.
 
-- From wherever their life left them, they stroll back to the loop, stopping now and then to
-  look around, and start it once there.
+- Where none of the mobs' animations fits (indoors, on a roof, a balcony), they play a
+  cramped one (`MobAnimations.CRAMPED`: a step or two and back). Where not even that fits,
+  or while the ground is not read, they turn on their spot every 8 seconds, as mobs do, and
+  sit in one stance out of three: never a statue.
+- The loop starts wherever their life left them (beside the bed in the morning): they never
+  walk back to their spot. Their spot stays the middle of where they may go: ground farther
+  than `offlineRoam` from it is left out when the animation is chosen (`MobPaths.within`).
+  Mounts do the same.
+- Only a figure left standing in water when its rest place is found (`forgetShore`), or one
+  that logged off flying and is put on the ground under it, is moved there.
 - When the camera comes near again, their life goes on from where the loop left them.
 
 ### Ground and water
@@ -430,6 +466,12 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   stands where it was left, as a boat does: no animation, and only this client remembers it.
   So a kind that is not alive, a boat included, is only *Shown* or *Hidden* there, never
   *Roaming* or *Still*.
+- **A save that fails.** On the client a chest boat or minecart has the game's own hold, 27
+  slots, sized again only when it is loaded from a save, which the client never does: another
+  mod's larger one that writes its slots one by one (Shippy Ships' galleon, 504) threw as the
+  client saved it, and was never remembered. `EntityNbt.save` first makes the client's hold
+  again, empty, at its size; the client never knows what is in it anyway. A kind whose save
+  or copy still fails is not drawn far away, and the log says why, once per kind.
 - **Mannequins** (from 1.21.9) are shown too, standing still: Distant Friends uses them as its fake
   players. Mobs in `stillMobTypes` (happy ghast, mannequin) stand still instead of walking
   their loop. A copy wears its mannequin's skin, from a player's name or a texture of a
@@ -564,7 +606,7 @@ off, then run or jump to it once it was sent again.
 
 Once its copy is drawn, the blocks within 8 blocks of a mob (a square of 17 by 17 columns,
 `track/MobPaths`) are read, a few mobs per tick, from loaded chunks or from the far world
-(Voxy or Distant Horizons): the loaded sections are copied on the game's thread
+(Voxy, Distant Horizons, Lodistance, Far View or Ecstatic): the loaded sections are copied on the game's thread
 (`track/BlockCopy`) and the ground and animation worked out on `track/GroundWork`'s threads,
 so the answer comes a tick or so later. They are read again when the mob moves, and later and later while
 columns are missing; a ground read whole is saved with the mob and used at once next time.
@@ -574,7 +616,9 @@ below), and other flyers and swimmers get a flat disc at their own height.
 - **The ground**: in each column, the floor nearest the mob's height with room above it.
   Grass, flowers, crops and snow layers count as air; a path dug with a shovel counts as
   ground; water, leaves, fences and walls are not ground. Voxy gives every block of the
-  column, Distant Horizons only its top one.
+  column, Distant Horizons only its top one, Lodistance up to three runs of blocks, Far View its
+  top one and, under trees, the ground and where the leaves start, Ecstatic only the height of
+  its ground.
 - **Choosing an animation**: every animation is laid on that ground, turned eight ways and
   mirrored. It fits when it never leaves the ground and never climbs or drops more than a
   block at a time: never off a cliff, never over a fence. Those at least 0.6 times as wide as
@@ -600,10 +644,16 @@ below), and other flyers and swimmers get a flat disc at their own height.
 
 - **The near zone.** A copy is never drawn where the real mob would be sent
   (`MobMemory.nearRange`): the smaller of how far the server sends that kind (the *Entity
-  Distance* slider in a single player world) and the render distance, less 16 blocks, never
-  under 24. There the copy would stand where the real mob is not, close enough to walk up to.
-  The simulation distance does not shrink that zone. With the debug boxes on, it shows as
-  "too close for a copy".
+  Distance* slider in a single player world) and the server's view distance, less 16 blocks,
+  never under 24. There the copy would stand where the real mob is not, close enough to walk
+  up to. The simulation distance does not shrink that zone. With the debug boxes on, it shows
+  as "too close for a copy".
+- **The server's view distance, not the render distance** (`track/ServerView`). The game's
+  effective render distance is both in the game alone. Bobby makes it the client's whole
+  setting, since it draws the chunks it saved past the server's; those hold no entities. What
+  is about terrain (far depth, the ground under a mob, birds) reads the render distance; what
+  is about entities the server sends (this zone, a far player lost inside it) reads
+  `ServerView`, the render distance cut to the view distance the server announced.
 - **Coming back.** Coming up to the distance where the server starts sending a mob
   (`MobMotion.home`), its copy is drawn back from its animation to where it was last seen:
   the pull starts 48 blocks before that distance and is whole 8 blocks before it. When the
@@ -760,8 +810,8 @@ frame. A boat or a vehicle is pictured from every height, as a phantom or a ghas
     neither a ghost nor fatter than its model.
 
   The page is sampled smoothly when small, by pixels when large.
-- **Light.** Colour only, no normal map: the game's entity shaders have no use for one. The
-  pictures are lit by the game's world light as a model is (turned over, the way the picture
+- **Light.** Colour only, without a shader pack that reads normal maps: the game's entity
+  shaders have no use for one. The pictures are lit by the game's world light as a model is (turned over, the way the picture
   is drawn), and the quad's normal points up, which that light leaves at full brightness.
   Only the light where the figure stands (sky, torches, night) is applied on top. Under a
   shader pack, Iris works out a quad's normal from its corners, so `ImpostorLean` leans the
@@ -770,6 +820,21 @@ frame. A boat or a vehicle is pictured from every height, as a phantom or a ghas
   extract (Immersive Aircraft's, from 26.1), so `GhostRenderer.extract` hands the light over
   then too, through `EntityRendererLightMixin`, and does the same for the models it draws far
   away, where the client may have no light yet.
+- **Normal maps** (`impostorShading`, from 1.21.6). Under a pack that samples normal maps
+  (Iris's `shouldBindPBR`: Photon with *Normal Mapping*, labPBR packs), the pictures are baked
+  lit evenly (two opposite lights far stronger than the cap, `ImpostorAtlas.EVEN_0`) and each
+  page gets a normal map beside it: the bake's depth is read back with the colours, the slope
+  between neighbouring pixels gives each pixel's normal (`ImpostorPixels.normals`, no slope read
+  across a step of more than 3 pixels), turned onto the quad `ImpostorLean` leans back by 45
+  degrees, red along the picture's right, green along its down. Iris is handed them by a loader
+  registered for the page textures' class (`compat/IrisNormals`, its loader registry, not its
+  API), which answers with a texture that only borrows the normal map, since Iris closes what
+  it is handed when it reloads. A sheet then has twice the levels, saved under a fingerprint
+  of its own, and takes twice the memory in the budgets below. A pack that reads no normal map
+  keeps the pictures the game shades: lit evenly, they came out brighter than their models.
+  From 26.3 the game's copy of a depth texture reads a colour buffer that is not there (an
+  OpenGL error, the screen black under a pack), so the depth is read straight from OpenGL there
+  (`OverrideBake.readDepth`); under another renderer the normal maps are flat.
 - **When.** Every figure on hand (distant players, remembered mobs) is queued about once a
   second, near or far, and baked a little each frame (from the GUI pass from 1.21.6; see
   below), 3 ms of it, checked after each sheet, one sheet at least, so it is ready when the
@@ -826,6 +891,13 @@ textures, draws and reads back the views, and writes a sheet into its page. Ever
   (a dragon twenty blocks long just past the distance), and a picture kept stays one until 5%
   past that.
 - It keeps a picture until it has turned 8 degrees past the edge between it and the next one.
+- A mob or player model nearing its picture turns to it: from 80% of either threshold to the
+  point a picture would come back (95%), its body is eased to the yaw the picture will show it at
+  (`ImpostorViews.yaw`, the same 8-degree stickiness), head straight and level
+  (`ImpostorThreshold.approach`, `GhostRenderer.turn` / `turned`). Only once its sheet is baked
+  and not too large to be shown; never on a mount or in a bed. The picture then starts on the
+  view the model had turned to. *Smooth Simplification* in the debug screen (`impostorTurn`)
+  turns it off.
 - When its look changes, a player or a mob keeps its old picture until the new one is baked;
   a 3D bird is drawn as a model meanwhile.
 
@@ -865,8 +937,9 @@ that a mob met in an earlier game is read back rather than baked.
   again finds its sheets. Its text is kept beside the sheets (`fingerprint.txt`), and the log says
   which lines changed when an older folder is thrown away ("the saved mob pictures of ... are
   thrown away").
-- Each file holds when and in which world or server its sheet was baked (file `FORMAT` 3; a
-  file of 2 still reads, its date unknown). The impostor screen shows it under each name, with
+- Each file holds when and in which world or server its sheet was baked, and how far down its
+  tiles the figure's origin stands (file `FORMAT` 4; a file of 3 still reads, its origin where
+  its kind puts it, and one of 2, its date unknown). The impostor screen shows it under each name, with
   where the pictures come from (`ImpostorAtlas.Origin`): *Shared*, read back from disk; *New*,
   baked in this game and saved; *Not saved* (players, riders, birds).
 - A sheet read back is checked against the size of a sheet (`ImpostorDisk.decode`) before
@@ -898,12 +971,18 @@ that a mob met in an earlier game is read back rather than baked.
   nearer than that middle (an aircraft's nose, the wheels under it) farther along the line of
   sight, under the ground the figure stands on when seen from above: `GhostRenderer.picture`
   moves it nearer by half its size and makes it as much smaller, the same on screen.
+  The middle is the box's, which is not always the figure's: Shippy Ships' galleon has a box
+  9 blocks high and masts 40 blocks up, so half of its pictures stayed empty below the hull and
+  its masts were cut off even five times larger. One cut off is first moved down or up its tiles
+  until it stands in their middle (`ImpostorPixels.centred`, between `FEET` from the top and as
+  far from the bottom), then grown if it still needs room; how far down its tiles its middle
+  stands is kept with the sheet, on disk too.
 - **Players who logged off** are impostors in every posture: standing, seated on the ground,
-  lying down or in a bed. A posture other than standing is part of the key
+  or in a bed. A posture other than standing is part of the key
   (`ImpostorKey.posture`), and the picture is baked in it:
   - seated: in the riding pose, drawn lowered to the ground as the model is;
-  - lying: along its body, baked raised (`Posture.BAKED_LIFT`) so that none of it
-    falls below the tile, and laid along its bed when it is in one.
+  - in a bed: along its body, baked raised (`Posture.BAKED_LIFT`) so that none of it
+    falls below the tile, and laid along the bed.
 
   `render/Posture` seats or lays a figure down the same way for the model and for the picture.
 - **Riders** (players online or not, on a horse, a camel, a happy ghast, in a boat, a raft, a
@@ -938,17 +1017,22 @@ Horizon (on 26.3 the game's GPU device path works otherwise, see
 | Voxy, no shader pack | Voxy itself, for good: nothing to do |
 | Voxy, under a pack that keeps it out of the game's depth (Photon sets `excludeLodsFromVanillaDepth`) | `FarDepth`, around the entities only |
 | Distant Horizons | `FarDepth`, from Distant Horizons' own depth texture (`compat/DhDepth`) |
+| Lodistance with Sodium | Lodistance, at twice its terrain's distance: `FarDepth` moves it to its real depth, around the entities only |
+| Lodistance without Sodium | `FarDepth`, from Lodistance's own depth texture, the same way as Distant Horizons' |
+| Far View | Far View itself, with the game's projection: nothing to do (not with its *Seamless* option, see [Far View](#far-view)) |
+| Ecstatic | Nobody: it draws after the entities, tested against their depth ([Ecstatic](#ecstatic)) |
 
-### Links to Voxy, Distant Horizons and Iris
+### Links to Voxy, Distant Horizons, Lodistance, Far View, Ecstatic and Iris
 
-None of the three has an API for what the mod needs, or not all of it: they are reached by
-reflection, each through one class, `VoxyLink`, `DhLink` (what `DhDepth` and `DhSource` share)
-and `IrisLink`. A rename on their side is followed there and nowhere else. What an older or
-newer version lacks and the mod can do without is a fallback (`Links.optional…`), noted by the
-link; what it cannot do without turns that part off for the session. `/livinghorizon lod` has
-one line per link: linked, not installed or off and why, the fallbacks in use, and how often the
-mixins into Voxy (`renderOpaque`) and Distant Horizons (its fades) ran. Those two may find nothing
-to hook (`require = 0`): a count that stays at 0 while the mod draws is a renamed method.
+None of the six has an API for what the mod needs, or not all of it: they are reached by
+reflection, each through one class, `VoxyLink`, `DhLink` (what `DhDepth` and `DhSource` share),
+`LodistanceLink`, `FarViewLink`, `EcstaticLink` and `IrisLink`. A rename on their side is
+followed there and nowhere else. What an older or newer version lacks and the mod can do
+without is a fallback (`Links.optional…`), noted by the link; what it cannot do without turns
+that part off for the session. `/livinghorizon lod` has one line per link: linked, not
+installed or off and why, the fallbacks in use, and how often the mixins into Voxy
+(`renderOpaque`) and Distant Horizons (its fades) ran. Those two may find nothing to hook
+(`require = 0`): a count that stays at 0 while the mod draws is a renamed method.
 
 ### One frame
 
@@ -963,8 +1047,8 @@ game test fails on it.
 
 The shaders' depth arithmetic is written once, `shaders/include/far_depth.glsl`: the OpenGL
 programs splice it in (`GlPrograms`), 26.3's take it with `#include`, and `DepthMath` mirrors it
-in Java for `DepthMathTest`. The `depthview` game test compiles every program, those only Voxy
-or Distant Horizons would use included.
+in Java for `DepthMathTest`. The `depthview` game test compiles every program, those only Voxy,
+Distant Horizons or Lodistance would use included.
 
 ### Voxy under a shader pack
 
@@ -1006,6 +1090,111 @@ of the world's pass there, so the merge is a draw in that pass and is not taken 
 Horizons' depth stays in the game's for the rest of the frame, which its fade treats as sky.
 `FarDepthGpu.beforeFade` keeps the fade off our figures on a copy of the depth, put back
 after.
+
+### Lodistance
+
+Lodistance (Fabric, 26.3 only) has no API and no source code: `LodistanceLink` reads the fields
+of its own classes, never writes one, and turns itself off for the session when one is missing.
+It refuses Voxy and Distant Horizons (`conflicts`), so it is always alone. Its jar was
+decompiled to find out how it draws (0.8.7: no network but its own server channel, no files
+outside the game folder); nothing of it is copied here, its licence reserves all rights.
+
+It draws its terrain one of two ways:
+
+- **With Sodium** (`PearlLodRenderer`, its default), inside Sodium's opaque terrain pass, into
+  the game's own depth. Its vertex shader replaces the depth of each point by
+  `A + 0.5 * m32 / w` (A 0 when the depth is reversed, 1 otherwise), half the depth the game's
+  projection gives that distance, so that the game's terrain always wins over it. A distant mob
+  behind one of its hills is hidden only past twice the hill's distance, and shows through it
+  otherwise. (Its formula leaves out the projection's far plane: past half of it, its terrain
+  comes in front of the game's depth for the same distance instead.) `FarDepth.mergeLodistance`
+  moves those pixels to their real depth around the entities, either way, past the far plane to
+  the far plane, and `restore` puts Lodistance's back. A pixel is taken for its terrain only where,
+  read as the game's own, it would lie farther across than any of the game's chunks
+  (Lodistance leaves out the chunks within the render distance less one, and the game draws
+  none past it): the game's terrain is never touched.
+- **Without Sodium** (`LodRenderer`), into a framebuffer of its own, at `prepareTranslucents`
+  inside the world's pass before the solid step, then laid over the picture where the game drew
+  nothing. None of it reaches the game's depth: it is merged like Distant Horizons', through the
+  inverse of the projection it was drawn with.
+
+The occlusion queries read the merged depth, so *Skip Hidden Mobs* works behind its terrain too.
+Its fog: it pushes the game's render distance fog out to where its own terrain's fog runs
+(from `fogStart` times its distance to its distance), but its terrain has none of the game's
+atmospheric fog (1024 blocks in a clear overworld), which still reached the entities: a mob a
+thousand blocks away was a flat patch of fog colour on clear hills. `FarFog.lodistance` gives
+the entities its ramp alone, so within the game's render distance they are a little clearer
+than the game's terrain behind them; where the atmospheric fog ends before the render distance
+(the Nether, thick weather) the game's stays.
+
+`LodistanceSource` reads the ground of its regions held in memory (up to three runs of blocks
+per column, the block at the top of each, water over them; no biomes) without its locks, and
+`LodWorld.drawnDistance` its distance setting. Not done yet: Vulkan (the GPU device path, where
+the merge could not be taken back and would change how its terrain looks against clouds and
+particles) and shader packs, where it is left alone (`mergeLodistance` says why).
+
+### Far View
+
+Far View (Forge and NeoForge, 1.20.1 to 1.21.4, no API, no source published) keeps a height
+grid of the terrain the client has received, in regions of 128 by 128 columns (`FVWorld`), and
+in single player also reads the world's region files and generates chunks around the player
+on the integrated server. It meshes that grid and draws it with NeoForge's
+`AFTER_SOLID_BLOCKS` stage into the game's own picture and depth, before the entities, with the
+game's projection pushed out to its distance (`getProjectionMatrix`). Our figures are hidden
+behind it like any mob behind a block, and the occlusion queries see it; its haze is the game's
+terrain fog, which the entities share. Under a shader pack it draws in Iris's terrain phase.
+
+- **Its world** (`compat/FarViewSource`): the top block of each column and, under trees, the
+  ground and where the leaves start. Its map of regions is a plain one, filled on the game's
+  thread: once a second the game's thread copies the regions' arrays into a map of ours
+  (`tick`), which the reader threads read. It draws nothing in a dimension with a ceiling,
+  nor once switched off (Ctrl+H): its world reads as empty there.
+- **Its *Seamless* option** (off by default, never under a shader pack) draws its terrain with
+  a projection of its own squeezed into the back of the depth range (`glDepthRange`). A
+  figure's depth cannot be compared with it there: a mob shows through its hills. *Skip Hidden
+  Mobs* then asks the lines of sight through its grid instead of the depth
+  (`FarViewLink.squeezesDepth`); a mob half behind a hill is still drawn whole.
+- **Its far mobs** (on by default): past 128 blocks and up to the render distance it cancels
+  the game's model of a live mob (`EntityRenderDispatcher.shouldRender`) and draws a box of its
+  own. The game leaving it out, `GhostRenderer.unseen` would draw it too: it asks
+  `FVFarMobs.suppressModel` first (`FarViewLink.drawsMob`) and leaves those to Far View. With
+  its boxes off, the game draws them and we draw the rest past the render distance. In single
+  player it also has the built-in server send mobs out to the render distance.
+
+### Ecstatic
+
+Ecstatic (NeoForge 1.21.1) draws the overworld past the render distance from the world's seed,
+in single player only. It draws its terrain into the game's framebuffer after the entities
+(`RenderLevelStageEvent`, `AFTER_PARTICLES`), tested against the game's depth and written into
+it: our figures are already there, so its hills hide them like any block, and nothing is
+merged. But it projects its terrain with a far plane of its own (at least 16,800 blocks; the
+game's near plane), and depths agree only between projections with the same planes. With the
+game's nearer, a hill a hundred blocks behind a mob 300 blocks away has a smaller depth than the
+mob and is painted over it (`DepthMathTest`). So while Ecstatic draws, the game's far plane is
+Ecstatic's (`EcstaticLink.farPlane`, read from its renderer, in `GhostRenderer.farPlane`). The
+depth view's first three pictures are taken around the entities, before Ecstatic draws, and
+never show it; its fourth, *Whole World*, is copied once the world is drawn
+(`FarDepth.worldDrawn`, at the end of `renderLevel`): its hills there sit at their real
+distances, shaded like the game's terrain, only when the two far planes agree.
+
+Its fog: it moves the game's fog out to a hundred times the far distance (the entities'
+included) and fogs its terrain itself, without a shader pack, with the game's `linear_fog` in
+its own shaders: every way round, from the render distance to an end past its outermost ring
+(its fog reaches 45% there, times its *fog falloff*), in the game's fog colour. Distant mobs had
+no fog on its fogged hills. `EcstaticLink.fog` gives the world's entities that same ramp
+(`FarFog.chooseSmooth`, set around the entities through `GameFog`), which the entities' shaders
+apply the same way. Under a shader pack the pack's fog stays. Ecstatic advises against shader
+packs for now and its Iris support is not done: not checked here.
+
+Nothing of it runs in the game tests (NeoForge 1.21.1, which has no client game tests): it is
+checked by starting the `1.21.1-neoforge` client. Its source was read at 1.4.1 (October 2026): no
+network at all, no process, no class loading; files only under `config/ecstatic` and the
+world's save, and a PNG the player picks in a file dialog; `Unsafe` only to unmap its files.
+
+`compat/EcstaticSource` reads its grid of heights and biomes (one file per level of detail, a
+sample every 2 to 32 blocks): the ground for the mobs and *Only Over Terrain*. Ecstatic frees a
+file's memory as its server stops, without forgetting it; a read holds the file's lock, as its
+own reads and its closing do, and reads nothing from a closed file.
 
 ### Shadows under Photon
 
@@ -1103,6 +1292,14 @@ ground, its colour's alpha times `max`, fitted by least squares over two render 
 exponential). There is no floor: a `min` above 0 is only followed on average. Voxy is not
 there before 1.21.6, so nothing else changes. The block entities, drawn after, keep the game's.
 
+**Ecstatic** (1.21.1) moves the game's fog out to a hundred times the far distance while it
+draws and fogs its terrain with the game's own smooth ramp, in its own shaders, every way round:
+from the render distance to `R + (E - R) / 0.45 × falloff`, `E` the edge of its outermost ring
+and `falloff` its *fog falloff* setting (0.95 by default), in the game's fog colour. The same
+`FarFog.begin` sets exactly that ramp around the entities (`EcstaticLink.fog`), as long as the
+game's start is past fifty render distances: Ecstatic's own fog is on. Water, lava, blindness,
+a foggy biome or a boss keep the game's.
+
 ## Skipping hidden mobs
 
 *Skip Hidden Mobs* (`hideOccludedMobs`) does not draw a distant mob the terrain hides
@@ -1164,8 +1361,8 @@ debug options. `/livinghorizon debug` turns the panel and the boxes on or off to
 | Labels (from 1.21.11) | `debugLabels` | State, kind, distance and size on screen above each box, at a constant size |
 | Outlines | `outline*`, in *Outlines...* | An outline around each kind of figure, and a cross where a mob is not drawn (below) |
 | Statistics | *Statistics...* (`ui/StatsScreen`) | What is kept, counted when opened and on *Refresh*: remembered mobs (met, shared by the server, guessed), chosen, built and waiting; the guessed mobs kept apart, the chunks looked at and the memory they take; the size on disk of each folder of `config/livinghorizon`, this server's and all |
-| Depth view | `debugDepthView` | Bottom right: the game's depth alone, with the far terrain merged in, or after the entities. Near is white, far black, sky blue |
-| Far terrain | `/livinghorizon lod` (or `voxy`) | Which far terrain mod is read (Voxy or Distant Horizons), whether reading it failed, and the state of its depth |
+| Depth view | `debugDepthView` | Bottom right: the game's depth alone, with the far terrain merged in, after the entities, or once the whole world is drawn (a far terrain drawn after the entities, Ecstatic's, shows only there; copied only while chosen). Near is white, far black, sky blue |
+| Far terrain | `/livinghorizon lod` (or `voxy`) | Which far terrain mod is read (Voxy, Distant Horizons, Far View or Ecstatic), whether reading it failed, and the state of its depth |
 | Optimisations | `opt*`, `depthOcclusion`, `hideOccludedMobs` | Every optimisation has its own switch, to compare the cost (see [Optimizations](#optimizations)) |
 
 ### Box colours
@@ -1390,6 +1587,7 @@ and a slider dragged past its end is released beside it. Sodium's page cannot as
 | `impostors` | Simplified Mobs | `true` | | Far mobs and birds drawn as a flat picture of themselves (see [Impostors](#impostors)) |
 | `impostorEntities` | Simplified Entities | `true` | | Far boats, vehicles and mannequins drawn as pictures too, from every height; set from `impostors` when it came (layout 12) |
 | `impostorPlayers` | Simplified Players | `true` | | Distant players become impostors too; off, they keep their whole model at any distance |
+| `impostorShading` | Shader Lighting | `true` | | Under a shader pack that reads normal maps, the pictures are baked evenly lit with a normal map each, so the pack lights them like the models; twice the video memory. From 1.21.6 |
 | `impostorDistance` | Simplification Distance | `128` blocks | 0 to 2000 | Past this distance an impostor stands in for the model (`0`: the size alone) |
 | `impostorPixels` | Simplification Size | `10` pixels | 0 to 64 | A figure shorter than this on screen is an impostor too, even closer than `impostorDistance` (`0`: the distance alone) |
 | `impostorMobMemory` | Mob Picture Memory | `1024` MB | 64 to 4096 | Video memory the mobs' pictures may take, apart from the players' |
@@ -1462,7 +1660,7 @@ the mod shares come back by themselves. *Scan Nearby Mobs* runs a scan.
 | `debugLabels` | Labels on Mobs | `false` | State, kind, distance and size on screen above each box |
 | `debugGameMobs` | Game's Mobs Too | `false` | Boxes around the mobs the game draws itself too |
 | `box*` | Boxes... | `true` | Which other kinds get their box and label: `boxLiveMobs`, `boxCopies`, `boxForeseen`, `boxPlayers`, `boxLeftOut` |
-| `debugDepthView` | Depth View | `0` | `0` off; `1` the game's depth; `2` with the far terrain merged in; `3` after the entities |
+| `debugDepthView` | Depth View | `0` | `0` off; `1` the game's depth; `2` with the far terrain merged in; `3` after the entities; `4` the whole world |
 | `outline*` | Outlines... | `false` | See [Outlines](#outlines) |
 
 #### Display

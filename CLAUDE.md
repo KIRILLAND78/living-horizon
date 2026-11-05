@@ -129,6 +129,10 @@ must look exactly the same with Living Horizon installed as without it:
 Writing the mobs into Voxy's depth over the whole screen, for Photon's shadows, broke Voxy's
 water under Photon. Check any change to `compat/` against this section.
 
+Supporting a new far-terrain mod, or saying how well one is supported: the `far-terrain-mod`
+skill (`.claude/skills/far-terrain-mod/`), whose `support.md` is updated by any pull request
+that changes the support of Voxy, Distant Horizons or another such mod.
+
 ## Easter eggs are secret
 
 The mod hides a few easter eggs, in `ambient/` (the `eeN` commands in `LivingHorizonCommand`
@@ -325,6 +329,27 @@ come back, add it here in the same pull request: this file is what the next sess
   tries both). Check a new version with `javap` on its jar from Modrinth, as for Distant
   Horizons, and read the links' lines in `/livinghorizon lod`: each says what it runs without,
   and how often the mixins into Voxy and Distant Horizons ran (0 while they draw: renamed).
+- **Distant mobs through Lodistance's terrain** (Fabric 26.3; hidden only far behind its hills):
+  with Sodium, Lodistance writes its terrain into the game's depth at half the depth of its
+  distance, so that the game's terrain always wins. `FarDepth.mergeLodistance` moves the pixels
+  farther across than any of the game's chunks to their real depth around the entities; without
+  Sodium its depth is a texture of its own, merged like Distant Horizons'. It has no API and no
+  source: `LodistanceLink` reads its fields, so check a new version by decompiling its jar from
+  CurseForge (in the scratchpad, never copied in). Not done yet with Vulkan or a shader pack.
+  Distant mobs a flat patch of fog colour on its clear hills: its terrain has no atmospheric
+  fog, which the game still gave the entities; `FarFog.lodistance` gives them its ramp alone.
+  The `lodistance` scenario checks it (its jar in `build/game-test-mods/26.3-with/lodistance/`,
+  `--with lodistance`, with and without `--sodium`).
+- **Distant mobs painted over by Ecstatic's terrain behind them** (NeoForge 1.21.1, single
+  player): Ecstatic draws after the entities, tested against the game's depth, with a far plane
+  of its own; the game's projection must take the same one (`EcstaticLink.farPlane`, read from
+  its private `LodRenderer.extendedFarPlaneBlocks`). `/livinghorizon lod` says whether it is
+  matched; the depth view shows its terrain on its *Whole World* picture only, copied at the end
+  of `renderLevel` (`FarDepth.worldDrawn`): the others are taken before it draws. Its source is public (CC BY-NC-SA: read it, never copy it); `EcstaticSource` reads its
+  files only under their lock and while open, since Ecstatic frees them as its server stops.
+  Distant mobs sharp on its fogged hills: it pushes the game's fog (the entities' too) a hundred
+  far distances out and fogs its terrain with the game's ramp in its own shaders;
+  `EcstaticLink.fog` gives the entities that ramp, from its ring and *fog falloff* settings.
 - **Steps out of order** (`/livinghorizon lod` or the log says so; the `depthview` game test
   fails): a hook before that step no longer runs, renamed by the game or another mod. The order
   is in `FarDepth.Frame` and `docs/technical.md` ("One frame").
@@ -344,6 +369,17 @@ come back, add it here in the same pull request: this file is what the next sess
   Distant Horizons answers as cancelled. The game's thread never waits for a read of another mod.
 - **Depth view lighter or darker as far mobs show or hide**: the game's far plane follows the
   farthest figure drawn (`GhostRenderer.farPlane`); the view shades against `FarDepth.VIEW_FAR`.
+- **Far View** (Forge and NeoForge, 1.20.1 to 1.21.4; no API, no source): it draws its height
+  grid into the game's own depth, before the entities, with the game's projection pushed out, so
+  nothing merges it. Every distant mob hidden past the render distance with it: its grid not read
+  (`FarViewSource`, *Only Over Terrain* sees void; `/livinghorizon lod` says why). A mob drawn
+  twice, a box and a figure: its far mobs cancel the game's model past 128 blocks and draw a box,
+  which `FarViewLink.drawsMob` leaves to it. Mobs through its hills with its *Seamless* option
+  only: its terrain is squeezed into the back of the depth with a projection of its own, so hidden
+  mobs come from lines of sight there (`FarViewLink.squeezesDepth`). Its map of regions is a plain
+  one: read only on the game's thread, copied for the readers. Check a new version by decompiling
+  its jars (CurseForge's files, listed by `api.cfwidget.com/minecraft/mc-mods/far-view`) outside
+  the repository, and reach it by reflection only: the jar says "All Rights Reserved".
 - **Distant Horizons' rendering engine** (from 3.3: Blaze3D or OpenGL). With Iris installed,
   pack on or off, it switches itself to OpenGL and fills only `getDhDepthTextureGlId`; the
   Blaze3D wrapper the game's GPU device path reads stays empty ("has no depth texture").
@@ -378,6 +414,14 @@ come back, add it here in the same pull request: this file is what the next sess
   the wrong side): Iris throws away the normal given to a quad and computes it from its
   corners, counter-clockwise. `ImpostorLean` moves an impostor's corners along their lines of
   sight so that its own plane faces where the light should come from.
+- **Impostors without their normal maps under a pack that reads them** (*Shader Lighting* on,
+  Photon's *Normal Mapping* on, the pictures flat): Iris looks a texture's normal map up by its
+  class, through the loader `compat/IrisNormals` registers, and only for textures it is told
+  are drawn. Check it with the `impostorshading` scenario (Sodium, Iris and Photon in
+  `-Plh.mods` / `-Plh.shaderpack`, a real graphics card): its mobs stand past the game's
+  entity distance, since a mob the game draws itself is never an impostor; closer, the counts
+  stay 0 and say nothing. On 26.3 the game's copy of a depth texture fails ("No color buffer")
+  and blackened the screen: `OverrideBake.readDepth` reads it straight from OpenGL.
 - **Far terrain depth lost under shaders from 26.2** (depth view empty or uniform, nothing
   hidden behind the far terrain, only with a pack on): Iris's shadow pass draws its entities
   through the same `PreparedFrame.executeSolid` / `executeTranslucent` steps as the world,
@@ -396,6 +440,12 @@ come back, add it here in the same pull request: this file is what the next sess
 - **Mobs near the player never drawn far away**, only those met later: the mob memory is opened
   on the first tick with a player, and opening clears the mobs sent so far, which the level may
   have loaded just before. `FarPlayerTracker` hands it the level's entities again once open.
+- **Distant mobs missing, or far players stopping short, past the server's view distance with
+  Bobby** (issue #112): Bobby makes `getEffectiveRenderDistance` the client's own setting and
+  draws chunks it saved past the server's, which hold no entities. Anything about the entities
+  the server sends (the copies' near zone, a far player lost inside it) reads
+  `track/ServerView`, the render distance cut to the server's; terrain keeps the render
+  distance. The `bobby` scenario checks it (`run.sh bobby --with bobby`).
 - **Distant mobs jumping or sprinting as the player comes back** (the copy runs or teleports to
   the real mob once it is sent again): the server stops sending a mob at its tracking range
   (160 blocks for animals, scaled by *Entity Distance*) but keeps moving it out to the
@@ -408,7 +458,8 @@ come back, add it here in the same pull request: this file is what the next sess
   tick: the game plays idle movements at `tickCount` plus the frame's part of a tick, so a stopped
   one replays a tick's worth twenty times a second. Still copies are looked at once in sixteen
   ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
-  once in sixteen ticks went in jerks. The `stillmobs` scenario checks it all.
+  once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
+  skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
 - **Distant mobs only turning on the spot**, never walking, after the world was opened, while
   those met since walk: their ground was read (`MobPaths.plan`) where the far world had nothing
   (Voxy or Distant Horizons not open yet, or Voxy turned off for the session by one failed
@@ -508,6 +559,16 @@ come back, add it here in the same pull request: this file is what the next sess
   up to *Entity Render Distance*, not the mobs' (`GhostRenderer.creature`). Check the mod's classes
   with `javap` on its jar; the `vehicles` scenario checks Immersive Aircraft
   (`run.sh vehicles --with immersive-aircraft`).
+- **One of a mod's entities vanishing far away while its others stay** (Shippy Ships' galleon,
+  issue #320; listed and *Shown*, yet no copy and no picture): its save threw on the client, and
+  a kind that cannot be saved is never remembered. The log says so once per kind ("is not drawn
+  far away: its save failed", or "its copy could not be made"). The galleon's: a chest boat's hold
+  is 27 slots until a load sizes it, which never happens on the client, and the galleon writes
+  its 504 one by one. `EntityNbt.fitHold` sizes it there first. Then "does not fit its picture":
+  a boat or vehicle is pictured round the middle of its box, low in the hull, and the masts reach
+  40 blocks up. A figure pictured round its middle and cut off is moved to the middle of its tiles
+  before it grows (`ImpostorPixels.centred`; the sheet keeps where, on disk too). The `ships`
+  scenario checks both (`run.sh ships --with shippy-ships --with ingeniumapi`).
 - **Another mod's figure drawn black far away, its rider lit** (Immersive Aircraft's planes as
   you travel towards them, from 26.1): its renderer keeps its own copy of the light, read as it
   extracts (`getPackedLightCoords`), and ignores the `lightCoords` the mod sets after. In a chunk
@@ -721,6 +782,11 @@ come back, add it here in the same pull request: this file is what the next sess
   minutes: `DhSource.holds` asks its database instead (`FullDataSourceV2Repo`, the generation step
   of each column of a section, one query for 16 chunks). "its database not read" in the lod line
   means a version whose classes differ: check them with `javap`, as for its API.
+- **Debug panel, depth view or an offline player's name never drawn on Forge 1.20.1 to 1.20.4**
+  (nothing over the world, no error): Forge draws the overlay with `ForgeGui`, whose `render`
+  replaces `Gui.render` without calling it, so `GuiMixin` never runs there. `Events.hud` draws
+  them from Forge's `RenderGuiEvent.Post` instead; from 1.20.6 Forge keeps the game's `Gui`.
+  Anything else hooked into `Gui.render` needs the same.
 - **Reproduce first.** `LH_NODE=<node> .claude/skills/game-test/run.sh <scenario>` on the
   player's game version, OpenGL errors are in `build/game-test.log`; the `depthview`
   scenario shows the depth view.

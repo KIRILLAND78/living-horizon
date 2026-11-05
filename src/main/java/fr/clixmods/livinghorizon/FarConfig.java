@@ -296,6 +296,14 @@ public final class FarConfig {
     public boolean impostorPlayers = true;
 
     /**
+     * Under a shader pack, the impostors' pictures are baked lit evenly, each with a normal map
+     * made from its depth, which the pack reads to light a picture as it lights a model (see
+     * {@code ImpostorAtlas.relief}). Off: pictures baked with the game's own shading, which
+     * the pack lights again as a flat quad; a little less memory and time to bake. From 1.21.6.
+     */
+    public boolean impostorShading = true;
+
+    /**
      * Megabytes of video memory the mobs' impostor pictures may take, apart from the players':
      * taken only as looks are met, the picture used longest ago making room when full.
      */
@@ -340,7 +348,7 @@ public final class FarConfig {
     /** The far terrain's depth is merged only on frames that draw something past the render distance. */
     @SerializedName(value = "optLazyDepth", alternate = "optLazyVoxyDepth")
     public boolean optLazyDepth = true;
-    /** The far world (Voxy or Distant Horizons) is read on several threads at once rather than one. */
+    /** The far world (Voxy, Distant Horizons, Lodistance or Far View) is read on several threads at once rather than one. */
     @SerializedName(value = "optParallelRead", alternate = "optParallelVoxy")
     public boolean optParallelRead = true;
     /** Ground already read in the far world is kept for two minutes. */
@@ -390,6 +398,11 @@ public final class FarConfig {
     public int animationMaxDistance = MAX_DISTANCE;
     /** A copy that was not drawn for a moment (out of view, hidden, too small) stays where it is: no animation, no path read. */
     public boolean optFreezeHidden = false;
+    /**
+     * A model nearing its impostor turns to the angle the picture will show it at, so that the
+     * switch does not jump (see {@code GhostRenderer.turn}). Off: it turns at once as the picture takes over.
+     */
+    public boolean impostorTurn = true;
 
     // --- Debug -----------------------------------------------------------------------------
 
@@ -433,7 +446,7 @@ public final class FarConfig {
     private @Nullable String offlinePose;
     /** A panel of what the mod does and costs, in the corner of the screen. */
     public boolean debugHud = false;
-    /** 0: off; 1: the game's depth; 2: with the far terrain merged in; 3: after the entities. */
+    /** 0: off; 1: the game's depth; 2: with the far terrain merged in; 3: after the entities; 4: the whole world drawn. */
     public int debugDepthView = 0;
 
     /** Birds drawn as 3D models rather than flat sprites. */

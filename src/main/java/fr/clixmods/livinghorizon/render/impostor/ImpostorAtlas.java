@@ -11,6 +11,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Profile;
+import fr.clixmods.livinghorizon.compat.IrisNormals;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.Posture;
 import fr.clixmods.livinghorizon.render.Sink;
@@ -148,17 +149,22 @@ public final class ImpostorAtlas {
         if (!players && mobRowsForTests > 0) return mobRowsForTests;
         FarConfig config = FarConfig.get();
         long megabytes = players ? config.impostorPlayerMemory : config.impostorMobMemory;
-        return (int) Math.max(1, (megabytes << 20) / ROW_BYTES);
+        return (int) Math.max(1, (megabytes << 20) / rowBytesNow());
+    }
+
+    /** Bytes of video memory a row takes, with its normal map's while {@link #relief}. */
+    private static long rowBytesNow() {
+        return relief ? 2 * ROW_BYTES : ROW_BYTES;
     }
 
     /** Bytes of video memory the pages of the players, or of the mobs, take now. */
     public static long memory(boolean players) {
-        return (long) ALLOCATOR.taken(players) * ROW_BYTES;
+        return (long) ALLOCATOR.taken(players) * rowBytesNow();
     }
 
     /** Bytes of video memory the pages of the players, or of the mobs, may take at most. */
     public static long memoryLimit(boolean players) {
-        return (long) rows(players) * ROW_BYTES;
+        return (long) rows(players) * rowBytesNow();
     }
 
     /** Whether a sheet is filed with the players' (players, riders with what they ride), not the mobs'. */
@@ -179,6 +185,14 @@ public final class ImpostorAtlas {
      */
     static final Vector3f LIGHT_0 = new Vector3f(0.2f, 1f, -0.7f).normalize().negate();
     static final Vector3f LIGHT_1 = new Vector3f(-0.2f, 1f, 0.7f).normalize().negate();
+
+    /**
+     * The light of pictures a shader pack lights itself ({@link #relief()}): the same on every
+     * side, so that the pack does not shade a side the picture already shades. The game adds
+     * each light's part along the normal, never below 0, and caps the sum at full: two lights
+     * this strong, opposite each other, light any side fully but one seen exactly edge on.
+     */
+    static final Vector3f EVEN_0 = new Vector3f(1000f, 1700f, 1300f), EVEN_1 = new Vector3f(EVEN_0).negate();
 
     /**
      * Where a figure's pictures are: which page and row of it, how many rows the page has,
@@ -244,21 +258,22 @@ public final class ImpostorAtlas {
     /**
      * A figure to bake, its picture covering {@code grow} times what {@link #size} gives: a
      * figure longer than its box (a horse's muzzle, a sniffer) is baked again with more round
-     * it, drawn smaller in a tile of the same pixels.
+     * it, drawn smaller in a tile of the same pixels. A figure pictured round its middle stands
+     * {@code centred} down its tiles once moved there ({@link #CENTRED}), NaN until then.
      */
     record Request(ImpostorKey key, @Nullable Entity puppet, @Nullable ImpostorFigure figure, double grow,
-                   @Nullable Rider rider) {
+                   @Nullable Rider rider, float centred) {
         static Request of(ImpostorKey key, Entity puppet, double grow) {
             return of(key, puppet, grow, null);
         }
 
         static Request of(ImpostorKey key, Entity puppet, double grow, @Nullable Rider rider) {
-            return new Request(key, puppet, null, grow, rider);
+            return new Request(key, puppet, null, grow, rider, CENTRED.getOrDefault(key, Float.NaN));
         }
 
         /** One of the mod's own figures: its tile is the size it asks for, never grown. */
         static Request of(ImpostorKey key, ImpostorFigure figure) {
-            return new Request(key, null, figure, 1.0, null);
+            return new Request(key, null, figure, 1.0, null, Float.NaN);
         }
 
         /** The same figure, baked again with its picture covering {@code grow} times its box. */
@@ -276,7 +291,8 @@ public final class ImpostorAtlas {
 
         /** How far down a tile its origin is. */
         float feet() {
-            return figure != null ? figure.feet() : ImpostorAtlas.feet(key);
+            if (figure != null) return figure.feet();
+            return Float.isNaN(centred) ? ImpostorAtlas.feet(key) : centred;
         }
 
         /** Degrees the camera looks down on it from: 0 for a figure pictured level with it. */
@@ -305,6 +321,44 @@ public final class ImpostorAtlas {
     /** How this game version draws and reads back the pictures, and writes the pages. */
     private static final BakeBackend BACKEND = BakeBackend.of();
 
+    /** Whether the pages hold pictures for a shader pack, with their normal maps: see {@link #relief()}. */
+    private static boolean relief;
+
+    /** The normal map of each page, by its number, while {@link #relief}. */
+    private static final Map<Integer, AbstractTexture> NORMALS = new HashMap<>();
+
+    /**
+     * Whether the pictures are baked for a shader pack to light: lit evenly, with a normal map
+     * beside each page, which Iris hands the pack as the pictures' own (a pack that reads
+     * normal maps then lights a picture as it lights the model's sides). Only with a pack on,
+     * the setting on, and a game version whose bake reads the depth back. A pack that reads no
+     * normal maps keeps the pictures shaded by the game: lit evenly, it would show them brighter
+     * than their models.
+     */
+    public static boolean relief() {
+        return relief;
+    }
+
+    /** What {@link #relief} should be now; when it changes, every picture is baked again. */
+    private static boolean wantsRelief() {
+        return FarConfig.get().impostorShading && BACKEND.reliefs() && IrisNormals.packReadsNormalMaps();
+    }
+
+    /** How many levels a sheet has: its colours, then its normal map's while {@link #relief}. */
+    static int levels() {
+        return relief ? 2 * MIPS : MIPS;
+    }
+
+    /** The texture Iris is handed as the normal map of {@code page}, or null for none. */
+    public static @Nullable AbstractTexture normalsOf(Object page) {
+        if (!relief) return null;
+        for (Map.Entry<Integer, AbstractTexture> normals : NORMALS.entrySet()) {
+            AbstractTexture texture = ALLOCATOR.texture(normals.getKey() * SheetAllocator.ROWS);
+            if (texture == page) return BACKEND.borrowed(normals.getValue());
+        }
+        return null;
+    }
+
     /** The pages and their rows, each a texture of the game's, filed under {@link #id}. */
     private static final SheetAllocator<ImpostorKey, AbstractTexture> ALLOCATOR = new SheetAllocator<>(
             System::currentTimeMillis, ImpostorKey::type, ImpostorAtlas::rows,
@@ -313,12 +367,18 @@ public final class ImpostorAtlas {
                 public AbstractTexture open(int number, int width, int height) {
                     AbstractTexture texture = BACKEND.create("living horizon impostors " + number, width, height);
                     Minecraft.getInstance().getTextureManager().register(id(number), texture);
+                    if (relief) {
+                        IrisNormals.register(texture.getClass(), ImpostorAtlas::normalsOf);
+                        NORMALS.put(number, BACKEND.create("living horizon impostor normals " + number, width, height));
+                    }
                     return texture;
                 }
 
                 @Override
                 public void release(int number, AbstractTexture texture) {
                     Minecraft.getInstance().getTextureManager().release(id(number));
+                    AbstractTexture normals = NORMALS.remove(number);
+                    if (normals != null) normals.close();
                 }
             },
             ImpostorAtlas::forget);
@@ -349,6 +409,11 @@ public final class ImpostorAtlas {
 
     /** How much larger each figure was last baked: asked for again, it starts there. */
     private static final Map<ImpostorKey, Double> GROWN = new HashMap<>();
+    /**
+     * How far down its tiles each figure pictured round its middle was last moved to, to stand
+     * in the middle of them: a ship's middle is low, its masts reach far above it.
+     */
+    private static final Map<ImpostorKey, Float> CENTRED = new HashMap<>();
     /** Figures the pages had no room for, and when: not asked for again for a while. */
     private static final Map<ImpostorKey, Long> REFUSED = new HashMap<>();
     /**
@@ -572,10 +637,14 @@ public final class ImpostorAtlas {
 
     /** Drops what a reload or a switch-off made stale. */
     private static void settle() {
+        boolean wanted = wantsRelief();
+        if (wanted != relief) dirty = true;
         if (!dirty) return;
         dirty = false;
         generation++;
         ALLOCATOR.clear();
+        // Every page was released just now: the pictures to come are baked the new way.
+        relief = wanted;
         ORIGINS.clear();
         ALIASES.clear();
         LOOKS.clear();
@@ -585,6 +654,7 @@ public final class ImpostorAtlas {
         BAKING.clear();
         LOADED.clear();
         GROWN.clear();
+        CENTRED.clear();
         REFUSED.clear();
         UNDRAWABLE.clear();
         ImpostorKey.forgetAll();
@@ -631,7 +701,7 @@ public final class ImpostorAtlas {
         Loaded loaded;
         while ((loaded = LOADED.poll()) != null) {
             if (loaded.generation != generation) continue;
-            if (loaded.stored == null || !ImpostorPixels.fits(loaded.stored.levels(), MIPS)) {
+            if (loaded.stored == null || !ImpostorPixels.fits(loaded.stored.levels(), levels())) {
                 ImpostorDisk.forget(loaded.key);
                 QUEUE.add(Request.of(loaded.key, loaded.puppet, GROWN.getOrDefault(loaded.key, 1.0)));
                 continue;
@@ -644,7 +714,8 @@ public final class ImpostorAtlas {
                 continue;
             }
             try {
-                place(loaded.key, index, loaded.stored.worldSize(), feet(loaded.key), loaded.stored.levels());
+                float feet = Float.isNaN(loaded.stored.feet()) ? feet(loaded.key) : loaded.stored.feet();
+                place(loaded.key, index, loaded.stored.worldSize(), feet, loaded.stored.levels());
                 if (ALLOCATOR.contains(loaded.key)) {
                     ORIGINS.put(loaded.key, new Origin(Source.DISK, loaded.stored.bakedAt(), loaded.stored.world()));
                 }
@@ -750,9 +821,9 @@ public final class ImpostorAtlas {
                 }
 
                 @Override
-                public void done(int @Nullable [][] pictures, @Nullable Throwable error) {
+                public void done(int @Nullable [][] pictures, float @Nullable [][] depths, @Nullable Throwable error) {
                     if (error != null && wanted()) fail(error);
-                    store(request, index, size, pictures, baking);
+                    store(request, index, size, pictures, depths, baking);
                 }
             });
             sent = true;
@@ -882,21 +953,38 @@ public final class ImpostorAtlas {
      * and the sheet can be used. No pictures when the read back failed. A figure cut off by
      * the edge of its tiles is queued again, larger.
      */
-    private static void store(Request request, int index, double size, int @Nullable [][] pictures, int generation) {
+    private static void store(Request request, int index, double size, int @Nullable [][] pictures,
+                              float @Nullable [][] depths, int generation) {
         long started = Profile.begin(Profile.Section.BAKE_STORE);
         try {
-            storeSheet(request, index, size, pictures, generation);
+            storeSheet(request, index, size, pictures, depths, generation);
         } finally {
             Profile.end(Profile.Section.BAKE_STORE, started);
         }
     }
 
-    private static void storeSheet(Request request, int index, double size, int @Nullable [][] pictures, int generation) {
+    private static void storeSheet(Request request, int index, double size, int @Nullable [][] pictures,
+                                   float @Nullable [][] depths, int generation) {
         ImpostorKey key = request.key;
         boolean again = false;
         try {
             if (generation != ImpostorAtlas.generation || pictures == null) return;
             double growth = request.figure != null ? 1 : growth(pictures, request.render(), request.feet());
+            if (growth > 1.01 && turns(request)) {
+                // Pictured round its middle and cut off: moved to the middle of its pictures first,
+                // which may be all it needs. Its tile cannot grow past MAX_GROW, but it can still move.
+                ImpostorPixels.Fit fit = centred(pictures, request.render(), request.feet());
+                float feet = 1 - fit.feet() / (float) request.render();
+                if (Math.abs(feet - request.feet()) * request.render() >= 2) {
+                    CENTRED.put(key, feet);
+                    growth = fit.growth();
+                    if (growth <= 1.01 || request.grow >= MAX_GROW) {
+                        QUEUE.add(request.grown(request.grow));
+                        again = true;
+                        return;
+                    }
+                }
+            }
             if (growth > 1.01 && request.grow < MAX_GROW) {
                 double grow = Math.min(MAX_GROW, request.grow * growth);
                 GROWN.put(key, grow);
@@ -915,6 +1003,17 @@ public final class ImpostorAtlas {
                 return;
             }
             int[][] levels = ImpostorPixels.sheet(pictures, request.render(), ImpostorViews.TILE, MIPS);
+            if (relief) {
+                // Baked for a pack that lights it: its normal map's levels after the colours'.
+                int[][] normals = new int[pictures.length][];
+                for (int view = 0; view < pictures.length; view++) {
+                    normals[view] = depths == null ? ImpostorPixels.flat(pictures[view])
+                            : ImpostorPixels.normals(pictures[view], depths[view], request.render());
+                }
+                int[][] both = Arrays.copyOf(levels, 2 * MIPS);
+                System.arraycopy(ImpostorPixels.sheet(normals, request.render(), ImpostorViews.TILE, MIPS), 0, both, MIPS, MIPS);
+                levels = both;
+            }
             if (!place(key, index, size, request.feet(), levels)) return;
             BAKING.remove(index);
             // The mod's own figures are not kept: their sheets have no entity to be read for.
@@ -922,7 +1021,7 @@ public final class ImpostorAtlas {
             long now = System.currentTimeMillis();
             String world = world();
             if (ALLOCATOR.contains(key)) ORIGINS.put(key, new Origin(kept ? Source.SAVED : Source.TEMPORARY, now, world));
-            if (kept) ImpostorDisk.write(key, size, levels, now, world);
+            if (kept) ImpostorDisk.write(key, size, request.feet(), levels, now, world);
         } catch (RuntimeException | LinkageError error) {
             if (generation == ImpostorAtlas.generation) fail(error);
         } finally {
@@ -954,8 +1053,31 @@ public final class ImpostorAtlas {
             int tile = ImpostorViews.TILE >> level;
             BACKEND.write(page, level, 0, row * tile, tile * ImpostorViews.VIEWS, tile, levels[level]);
         }
+        AbstractTexture normals = NORMALS.get(index / SheetAllocator.ROWS);
+        if (normals != null && levels.length == 2 * MIPS) {
+            for (int level = 0; level < MIPS; level++) {
+                int tile = ImpostorViews.TILE >> level;
+                BACKEND.write(normals, level, 0, row * tile, tile * ImpostorViews.VIEWS, tile, levels[MIPS + level]);
+            }
+        }
         ALLOCATOR.put(key, index, size, feet);
         return true;
+    }
+
+    /** Whether a figure is pictured round its middle, from a height: a flyer, a boat, a vehicle. */
+    private static boolean turns(Request request) {
+        return request.puppet != null && !Float.isNaN(ImpostorKey.elevation(request.key));
+    }
+
+    /**
+     * Where a figure pictured round its middle would stand in the middle of its pictures, and how
+     * much larger they would then be. Its middle stays no lower down its tiles than a standing
+     * figure's feet ({@link #FEET}), and as far from their top.
+     */
+    private static ImpostorPixels.Fit centred(int[][] pictures, int render, float feet) {
+        int hidden = (int) Math.ceil(ImpostorRenderer.INSET * render);
+        return ImpostorPixels.centred(pictures, render, hidden, Math.round(render * (1 - feet)),
+                Math.round(render * (1 - FEET)), Math.round(render * FEET), GROW);
     }
 
     /** How much larger the views must be drawn to stay within what their tiles show. */

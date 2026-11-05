@@ -129,6 +129,24 @@ final class MobMotion {
     }
 
     /**
+     * Held where it stands and turned by something else this tick (easter egg 15, {@link
+     * fr.clixmods.livinghorizon.ambient.Herd}): its animation goes on from there once let go,
+     * walking and turning to where its loop has got to rather than jumping.
+     */
+    void held(LivingEntity puppet, MobMemory.Remembered mob) {
+        if (!placed) place(mob);
+        x = puppet.getX();
+        y = puppet.getY();
+        z = puppet.getZ();
+        body = puppet.yBodyRot;
+        head = puppet.yHeadRot;
+        pitch = puppet.getXRot();
+        air = -1;
+        lift = 0;
+        climbing = false;
+    }
+
+    /**
      * How much a mob is called back to its spot, from 0 (far: it plays its animation) to 1
      * (about to be handed over to the real one: it stands where the real one was last seen).
      * Full from a few blocks inside the distance the server starts sending it, nil forty beyond.

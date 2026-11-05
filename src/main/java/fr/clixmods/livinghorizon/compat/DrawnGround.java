@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Whether terrain is drawn under a distant mob, for {@link FarConfig#onlyOverTerrain}: the
- * game's own chunk, or the far world's terrain (Voxy or Distant Horizons). A mob remembered
+ * game's own chunk, or the far world's terrain (Voxy, Distant Horizons or Lodistance). A mob remembered
  * where neither draws anything yet would stand in the void.
  *
  * <p>Chunks the game holds within its render distance are answered at once. The others are

@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Client
+
+#### New
+- **Support for Lodistance's terrain** — Distant mobs and players now hide behind Lodistance's far terrain like behind any hill and blend into its fog, and distant mobs walk on its ground, as they do with Voxy and Distant Horizons. (Minecraft 26.3, with OpenGL, without shaders.)
+- **Support for Far View's terrain** — Distant mobs now show and walk on Far View's far terrain and hide behind its hills, instead of being hidden past the render distance. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
+- **Support for Ecstatic's terrain** — Distant mobs now appear on Ecstatic's terrain and walk on its ground, instead of vanishing past the render distance. They hide correctly behind its hills, stay visible in front of them, and blend into its fog. (NeoForge, Minecraft 1.21.1, single player; the fog without shaders.)
+- **Simplified mobs lit by shaders** — With a shader pack that reads normal maps, such as Photon with *Normal Mapping* on, the simplified images of distant mobs are now lit by the pack like their 3D models, one side in the sun and the other in shade, instead of looking flat and darker. These images take twice the video memory; the new *Shader Lighting* setting turns this off. (Minecraft 1.21.6 and later.)
+- **Push offline players aside** — You can now push offline players out of your way by walking into them. They never push you back, as they only exist in your game.
+- **Offline players go fishing** — Offline players near water can now stop at the water's edge to fish for a while. Only one fishes at a time along the same stretch of shore.
+- **Offline players take shelter from the rain** — When it rains, some offline players now walk to stand under a roof or a tree they can reach, and wait there until it stops. The others carry on as usual.
+- **Offline players gather by the fire** — In the evening, offline players now go and stand in front of a campfire or a furnace they can reach, each in a spot of their own.
+- **Offline players chat together** — Two offline players close to each other can now walk up to one another and chat for a while, face to face. Never more than two at once, and only one conversation in the same area.
+- **Offline players look back at you** — Offline players now turn to look at you when you look at them from close by. If one is facing you and you crouch, it crouches too.
+
+#### Improved
+- **More natural nights for offline players** — Offline players now sleep in a bed they can reach, or stay on their feet, instead of lying down on the ground.
+- **Sharper distant ships** — The simplified images of tall boats and vehicles, such as Shippy Ships' sailing ships, are now sharper. The tallest ones, like the galleon, now get one too, instead of always being drawn as a full model, which is heavier on performance.
+- **Smoother switch to simplified images** — Distant mobs and players now turn little by little to the angle their simplified image shows them at, as they near the distance where it replaces them, instead of snapping round at the moment of the switch. The change from the 3D model to the image is less noticeable.
+- **NeoForge 1.21.4 and 1.21.11 builds easier to find** — The NeoForge builds for Minecraft 1.21.4 and 1.21.11 are now published as beta. They now show up on CurseForge and in launchers that hide alpha versions.
+
+#### Fixed
+- **Mobs shown only once with Far View** — Mobs that Far View draws as boxes between 128 blocks and the render distance are now shown only once, instead of twice on top of each other. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
+- **Offline players' names shown on Forge** — Aiming at an offline player now shows their name and when they were last seen, instead of nothing at all. (Forge, Minecraft 1.20.1 to 1.20.4.)
+- **Better integration with Bobby** — Distant mobs now stay visible just past the distance the server sends them, over the terrain Bobby keeps, instead of disappearing. Distant players also no longer stop short as they walk out of that distance.
+- **Shippy Ships' galleon visible from afar** — The galleon from Shippy Ships now stays visible in the distance where you left it, like the mod's other ships, instead of vanishing as soon as it leaves the render distance.
+- **Offline players keep moving in the distance** — Once you walk away, offline players now keep strolling right where they are, instead of walking back to where they logged off or standing perfectly still. Where there is no room for a stroll, they take a few steps, turn around or sit down for a while.
+
 ## 0.15.0 — 2026-10-31
 
 ### Server
@@ -31,16 +58,12 @@
 - **More sensible default limits** — No setting is unlimited by default any more, to avoid large drops in performance: *Player Render Distance*, *Animation Distance* and *Entity Render Distance* stop at 4,000 blocks. The *High* and *Ultra* presets show at most 1,500 and 3,000 mobs, *Ultra* up to 2,048 blocks, and settings left on the old defaults move to the new ones.
 - **More natural elytra flight** — Distant players flying with an elytra are now shown with their wings spread in a real flying pose, instead of running upright in the air.
 - **Smoother resource pack changes** — Simplified images of mobs are no longer needlessly rebuilt when a resource pack is turned off and back on. Loading resources also no longer freezes the game while they are looked up.
-
-#### Fixed
-- **Distant mobs visible on the far terrain** — Distant mobs, estimated ones included, now stay visible on the far terrain, instead of being hidden as if nothing were under them: for a while after a world opens, among thousands of estimated mobs, or when Voxy or Distant Horizons is slow to answer.
-- **Distant Horizons' fog on mobs** — Distant mobs now get the same fog as Distant Horizons' terrain and fade with it, instead of standing out sharply against the landscape. (Without shaders.)
-
-#### Improved
 - **Ice and Fire flying mobs seen from every angle** — Ice and Fire's dragons, amphitheres and hippogryphs now have simplified images seen from below and from above, like phantoms and planes, instead of from the side only. They look right as they fly overhead or when you look down on them.
 - **Sharper huge mobs in the distance** — Very large mobs now keep their full 3D model while they still look large on screen, instead of turning into a blocky simplified image.
 
 #### Fixed
+- **Distant mobs visible on the far terrain** — Distant mobs, estimated ones included, now stay visible on the far terrain, instead of being hidden as if nothing were under them: for a while after a world opens, among thousands of estimated mobs, or when Voxy or Distant Horizons is slow to answer.
+- **Distant Horizons' fog on mobs** — Distant mobs now get the same fog as Distant Horizons' terrain and fade with it, instead of standing out sharply against the landscape. (Without shaders.)
 - **Ice and Fire mobs correctly simplified** — Distant Ice and Fire dragons now have whole simplified images at their real size, instead of a close-up of their legs or a wing. Dragons of different ages no longer share one image, and sea serpents keep their 3D model instead of a cut-off image.
 - **Players who logged off keep their boat** — A player who logged off in the middle of the water no longer loses the boat they rest in once you move away: they keep it near or far, and the next time you play.
 - **Players who logged off no longer float in the air** — A player who logged off in the air, gliding with an elytra or falling, no longer goes back up there once you move away: they rest on the ground under them. With Voxy or Distant Horizons, they are on the ground even before you come near.

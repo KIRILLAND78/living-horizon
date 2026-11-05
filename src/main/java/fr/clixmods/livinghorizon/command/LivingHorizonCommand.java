@@ -9,6 +9,7 @@ import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.ambient.Ambience;
+import fr.clixmods.livinghorizon.ambient.Egg;
 import fr.clixmods.livinghorizon.ambient.EggLog;
 import fr.clixmods.livinghorizon.ambient.Ufo;
 import fr.clixmods.livinghorizon.compat.FarDepth;
@@ -105,13 +106,25 @@ public final class LivingHorizonCommand {
     }
 
     /** The command tree, for a dispatcher whose sources {@code source} turns into a {@link Source}. */
+    /** The easter eggs' numbers from 9 on: 14 and 20 are no more. */
+    private static final int[] MORE_EGGS = {9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 21};
+
     public static <S> LiteralArgumentBuilder<S> tree(Function<S, Source> source) {
         // One word per kind of bird, so that the chat offers them all.
         LiteralArgumentBuilder<S> birds = LiteralArgumentBuilder.literal("bird");
         for (Ambience.Type type : Ambience.Type.values()) {
             birds.then(LiteralArgumentBuilder.<S>literal(type.id).executes(c -> bird(source.apply(c.getSource()), type)));
         }
-        return LiteralArgumentBuilder.<S>literal(LivingHorizonClient.MOD_ID)
+        LiteralArgumentBuilder<S> root = LiteralArgumentBuilder.<S>literal(LivingHorizonClient.MOD_ID);
+        // The easter eggs from 9 on, by number, for whoever works on them (EGGS) as the others.
+        for (int egg : MORE_EGGS) {
+            root.then(LiteralArgumentBuilder.<S>literal("ee" + egg).requires(c -> EGGS).executes(c -> egg(source.apply(c.getSource()),
+                    "ee" + egg, (level, player) -> {
+                        Egg found = FarPlayerTracker.get().ambience().egg(egg);
+                        return found != null && found.summon(level, player, true);
+                    })));
+        }
+        return root
                         .executes(c -> status(source.apply(c.getSource())))
                         .then(LiteralArgumentBuilder.<S>literal("lod").executes(c -> lod(source.apply(c.getSource()))))
                         .then(LiteralArgumentBuilder.<S>literal("voxy").executes(c -> lod(source.apply(c.getSource()))))
@@ -159,6 +172,8 @@ public final class LivingHorizonCommand {
                                 (level, player) -> FarPlayerTracker.get().ambience().bigfoot().summon(level, player, true))))
                         .then(LiteralArgumentBuilder.<S>literal("ee7").requires(c -> EGGS).executes(c -> egg(source.apply(c.getSource()), "ee7",
                                 (level, player) -> FarPlayerTracker.get().ambience().ghostBoat().summon(level, player, true))))
+                        .then(LiteralArgumentBuilder.<S>literal("ee8").requires(c -> EGGS).executes(c -> egg(source.apply(c.getSource()), "ee8",
+                                (level, player) -> FarPlayerTracker.get().ambience().ghostVillager().summon(level, player, true))))
                         .then(birds)
                         .then(LiteralArgumentBuilder.<S>literal("config").executes(c -> {
                             // After the chat screen, which closes once the command has run.

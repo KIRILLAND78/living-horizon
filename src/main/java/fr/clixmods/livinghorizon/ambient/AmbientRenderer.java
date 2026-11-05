@@ -82,6 +82,8 @@ public final class AmbientRenderer {
             ambience.bigfoot().submit(pose, camera, collector, partial);
             ambience.ghosts().submit(pose, camera, collector, partial);
             ambience.ghostBoat().submit(pose, camera, collector, partial);
+            ambience.ghostVillager().submit(pose, camera, collector, partial);
+            for (Egg egg : ambience.more()) egg.submit(pose, camera, collector, partial);
         }
         boolean models = config.birdModels();
         Arrays.fill(ASKED, false);

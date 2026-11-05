@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.render;
 
 import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.compat.FarDepth;
+import fr.clixmods.livinghorizon.compat.FarViewLink;
 import fr.clixmods.livinghorizon.compat.OcclusionQueries;
 import fr.clixmods.livinghorizon.compat.LodWorld;
 import net.minecraft.world.entity.Entity;
@@ -57,6 +58,9 @@ public final class Occlusion {
         // Through the game's device where the far terrain goes that way (Vulkan, or Distant
         // Horizons on 26.3), else OpenGL's queries; without either, the far terrain's world.
         if (!FarConfig.get().optOcclusionQueries || !OcclusionQueries.usable()) return false;
+        // Far View's Seamless option squeezes its terrain into the back of the depth, with a
+        // projection of its own: a mob's depth cannot be compared with it.
+        if (FarViewLink.squeezesDepth()) return false;
         return FarDepth.gpuPath() ? OcclusionQueries.gpuReady() : DepthFar.openGl();
     }
 

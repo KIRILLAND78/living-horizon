@@ -22,8 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * A mob's sheet saved on disk reads back the same, when and where it was baked included, a file of
- * the format before still reads, and a damaged one never asks for more than a sheet.
+ * A mob's sheet saved on disk reads back the same, when and where it was baked and where its origin
+ * stands included, files of the formats before still read, and a damaged one never asks for more
+ * than a sheet.
  */
 class ImpostorDiskTest {
     /** The levels of a sheet of scale 1, each pixel its own number. */
@@ -40,11 +41,36 @@ class ImpostorDiskTest {
 
     private static final long BAKED_AT = 1_790_000_000_000L;
     private static final String WORLD = "New World";
+    /** A ship's middle, moved down its tiles so that its masts fit. */
+    private static final float FEET = 0.72f;
 
     private static byte[] encoded(double worldSize, int scale, int[][] levels) throws IOException {
+        return encoded(worldSize, FEET, scale, levels);
+    }
+
+    private static byte[] encoded(double worldSize, float feet, int scale, int[][] levels) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(bytes)) {
-            ImpostorDisk.encode(out, worldSize, scale, levels, BAKED_AT, WORLD);
+            ImpostorDisk.encode(out, worldSize, feet, scale, levels, BAKED_AT, WORLD);
+        }
+        return bytes.toByteArray();
+    }
+
+    /** A sheet as format 3 wrote it, without where its origin stands. */
+    private static byte[] encodedThree(double worldSize, int scale, int[][] levels) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            out.writeInt(0x4C484953);
+            out.writeInt(3);
+            out.writeLong(BAKED_AT);
+            out.writeUTF(WORLD);
+            out.writeDouble(worldSize);
+            out.writeInt(scale);
+            out.writeInt(levels.length);
+            for (int[] level : levels) {
+                out.writeInt(level.length);
+                for (int pixel : level) out.writeInt(pixel);
+            }
         }
         return bytes.toByteArray();
     }
@@ -80,6 +106,25 @@ class ImpostorDiskTest {
         for (int level = 0; level < levels.length; level++) assertArrayEquals(levels[level], stored.levels()[level]);
         assertEquals(BAKED_AT, stored.bakedAt());
         assertEquals(WORLD, stored.world());
+        assertEquals(FEET, stored.feet());
+    }
+
+    @Test
+    void readsTheFormatBeforeWithItsOriginWhereItsKindPutsIt() throws IOException {
+        int[][] levels = sheet();
+        ImpostorDisk.Stored stored = decoded(encodedThree(2.5, 1, levels));
+        assertNotNull(stored);
+        assertEquals(2.5, stored.worldSize());
+        for (int level = 0; level < levels.length; level++) assertArrayEquals(levels[level], stored.levels()[level]);
+        assertEquals(BAKED_AT, stored.bakedAt());
+        assertEquals(WORLD, stored.world());
+        assertTrue(Float.isNaN(stored.feet()));
+    }
+
+    @Test
+    void refusesAnOriginOutsideItsTiles() {
+        assertThrows(IOException.class, () -> decoded(encoded(2.5, 1.5f, ImpostorDisk.SCALE, sheet())));
+        assertThrows(IOException.class, () -> decoded(encoded(2.5, 0f, ImpostorDisk.SCALE, sheet())));
     }
 
     @Test
@@ -91,6 +136,7 @@ class ImpostorDiskTest {
         for (int level = 0; level < levels.length; level++) assertArrayEquals(levels[level], stored.levels()[level]);
         assertEquals(0, stored.bakedAt());
         assertEquals("", stored.world());
+        assertTrue(Float.isNaN(stored.feet()));
     }
 
     @Test

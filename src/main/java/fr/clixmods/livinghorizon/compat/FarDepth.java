@@ -314,8 +314,12 @@ public final class FarDepth {
                 } else if (merging) {
                     if (available()) FRAME.merged = merge(false);
                     else if (!broken && DhDepth.available()) FRAME.merged = mergeDh(false);
+                    else if (!broken && LodistanceLink.linked()) FRAME.merged = mergeLodistance(false);
                     // Why Distant Horizons is of no use (too old, most often), not what an earlier frame said.
-                    else reason = Platform.isModLoaded("distanthorizons") ? DhDepth.reason() : "neither Voxy nor Distant Horizons is usable";
+                    else if (Platform.isModLoaded("distanthorizons")) reason = DhDepth.reason();
+                    else if (Platform.isModLoaded("lodistance")) reason = "Lodistance is not the version this mod knows";
+                    else if (FarViewLink.installed()) reason = "Far View draws into the game's depth itself: nothing to merge";
+                    else reason = "neither Voxy, Distant Horizons nor Lodistance is usable";
                 }
                 // Distant Horizons' fade, without a shader pack, needs to know where the entities are.
                 boolean dhFade = wanted && config.anyDistant() && config.optDhFade && DhDepth.available()
@@ -462,7 +466,7 @@ public final class FarDepth {
         if (!late(owner)) return;
         FRAME.lateBegan = true;
         try {
-            if (FRAME.lateMerge) FRAME.lateMerged = available() ? merge(true) : mergeDh(true);
+            if (FRAME.lateMerge) FRAME.lateMerged = mergeFar(true);
             else {
                 prepareLate();
                 copy(depthTexture, lateWritten);
@@ -501,6 +505,30 @@ public final class FarDepth {
         }
         FRAME.lateMerge = FRAME.lateCopy = FRAME.lateMerged = FRAME.lateBegan = false;
         FRAME.lateOwner = null;
+    }
+
+    /**
+     * The game's depth once the whole world is drawn, for the depth view's fourth picture only:
+     * made the first time that picture is chosen, copied only while it is.
+     */
+    private static int finished;
+
+    /**
+     * The world is drawn: the depth view's fourth picture is copied, with whatever was drawn after
+     * the entities. Ecstatic draws its terrain then, tested against our figures' depth: this is
+     * where its hills and our mobs can be seen at the same distances.
+     */
+    public static void worldDrawn() {
+        if (FarConfig.get().debugDepthView != 4 || saved == 0 || depthTexture == 0 || !DepthFar.openGl() || gpuPath()) {
+            return;
+        }
+        try {
+            if (finished == 0) finished = texture();
+            copy(depthTexture, finished);
+        } catch (Throwable e) {
+            LivingHorizonClient.LOGGER.warn("Copying the depth for the depth view failed", e);
+            FarConfig.get().debugDepthView = 0;
+        }
     }
 
     /** The translucent step's copies, made the first time they are needed. */
@@ -548,11 +576,12 @@ public final class FarDepth {
     /**
      * Draws one of the depth copies of the last frame in the bottom right corner of the
      * screen, near white to far black, the sky in dark blue: {@code 1} the game's depth,
-     * {@code 2} with Voxy's terrain merged in, {@code 3} after the entities were drawn.
+     * {@code 2} with Voxy's terrain merged in, {@code 3} after the entities were drawn, {@code 4}
+     * once the whole world is drawn (what a far terrain drawn after the entities added).
      * Called with the HUD, after the world, before the HUD itself is drawn over it.
      */
     public static void drawDebugView(int mode) {
-        if (mode < 1 || mode > 3 || saved == 0 || !DepthFar.openGl() || gpuPath()) return;
+        if (mode < 1 || mode > 4 || saved == 0 || mode == 4 && finished == 0 || !DepthFar.openGl() || gpuPath()) return;
         try {
             Minecraft minecraft = Minecraft.getInstance();
             int colorId = mainTexture(false);
@@ -587,7 +616,8 @@ public final class FarDepth {
                 GL20C.glUniform2f(viewUniforms[4], DepthFar.reversed() ? 1f : 0f, DepthFar.zeroToOne() ? 1f : 0f);
                 GL30C.glBindVertexArray(vertexArray);
                 GL33C.glBindSampler(0, 0);
-                GL45C.glBindTextureUnit(0, mode == 1 ? saved : mode == 2 ? written : FRAME.lateShown ? lateDrawn : drawn);
+                GL45C.glBindTextureUnit(0, mode == 1 ? saved : mode == 2 ? written : mode == 4 ? finished
+                        : FRAME.lateShown ? lateDrawn : drawn);
                 GL11C.glDrawArrays(GL11C.GL_TRIANGLES, 0, 3);
             } finally {
                 gl.restore();
@@ -797,14 +827,7 @@ public final class FarDepth {
         prepare(w, h, f);
         notePicture(w, h);
         if (late) prepareLate();
-        if (dhProgram == 0) {
-            dhProgram = GlPrograms.fullScreen("Distant Horizons depth", DH_MERGE, "dhDepth");
-            dhUniforms = GlPrograms.uniforms(dhProgram, "screen", "dhSize", "dh", "game", "depthLayout", "exact", "dhInverse");
-            dhSampler = GL33C.glGenSamplers();
-            GL33C.glSamplerParameteri(dhSampler, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
-            GL33C.glSamplerParameteri(dhSampler, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
-            GL33C.glSamplerParameteri(dhSampler, GL14C.GL_TEXTURE_COMPARE_MODE, GL11C.GL_NONE);
-        }
+        prepareDhProgram();
 
         copy(depthTexture, late ? lateSaved : saved);
         // No colour attached: blending and the colour masks are left alone.
@@ -845,6 +868,149 @@ public final class FarDepth {
     /** Its uniforms, looked up once. */
     private static int[] dhUniforms;
     private static final float[] DH_INVERSE = new float[16];
+
+    /** The program of {@link #DH_MERGE} and a sampler that reads a depth texture as it is, made once. */
+    private static void prepareDhProgram() {
+        if (dhProgram != 0) return;
+        dhProgram = GlPrograms.fullScreen("Distant Horizons depth", DH_MERGE, "dhDepth");
+        dhUniforms = GlPrograms.uniforms(dhProgram, "screen", "dhSize", "dh", "game", "depthLayout", "exact", "dhInverse");
+        dhSampler = GL33C.glGenSamplers();
+        GL33C.glSamplerParameteri(dhSampler, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
+        GL33C.glSamplerParameteri(dhSampler, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
+        GL33C.glSamplerParameteri(dhSampler, GL14C.GL_TEXTURE_COMPARE_MODE, GL11C.GL_NONE);
+    }
+
+    /** Merges the far terrain of whichever mod draws it: Voxy, Distant Horizons or Lodistance. */
+    private static boolean mergeFar(boolean late) throws ReflectiveOperationException {
+        if (available()) return merge(late);
+        if (DhDepth.available()) return mergeDh(late);
+        return mergeLodistance(late);
+    }
+
+    // --- Lodistance -----------------------------------------------------------------------
+
+    private static int lodProgram;
+    private static int[] lodUniforms;
+    private static final Matrix4f LOD_MATRIX = new Matrix4f();
+    private static final float[] LOD_INVERSE = new float[16];
+
+    /**
+     * Lodistance's terrain at the depth the game would give it, around the entities
+     * ({@link LodistanceLink}). With Sodium its terrain is in the game's depth already, but
+     * twice as far as it stands: the pixels that can only be its terrain are moved to their
+     * real depth. Without Sodium it is in a texture of its own, written in like Distant
+     * Horizons'. Either way {@link #restore} gives the game's depth back as it was.
+     */
+    private static boolean mergeLodistance(boolean late) throws ReflectiveOperationException {
+        String why = LodistanceLink.drawing();
+        if (why != null) return skip(why);
+        // Not checked under a pack yet: what Iris does with its passes is unknown there.
+        if (IrisLink.shaderPackOn()) return skip("Lodistance under a shader pack is not supported yet");
+        boolean inGame = LodistanceLink.intoGameDepth();
+        int lodTexture = inGame ? 0 : LodistanceLink.ownDepth();
+        int[] lodSize = inGame ? null : LodistanceLink.ownSize();
+        if (!inGame && (lodTexture == 0 || lodSize[0] <= 0 || lodSize[1] <= 0)) return skip("Lodistance has no depth yet");
+        target = ownTarget();
+        if (target == 0) return skip("no framebuffer to draw into");
+        depthTexture = ownTargetDepth;
+        int w = GlCache.width(depthTexture), h = GlCache.height(depthTexture), f = GlCache.format(depthTexture);
+        if (w <= 0 || h <= 0) return skip("the depth texture has no size");
+        prepare(w, h, f);
+        notePicture(w, h);
+        if (late) prepareLate();
+        prepareDhProgram();
+        if (lodProgram == 0) {
+            lodProgram = GlPrograms.fullScreen("Lodistance depth", LOD_MERGE, "gameDepth");
+            lodUniforms = GlPrograms.uniforms(lodProgram, "screen", "lod", "game", "depthLayout", "inverseView", "reach");
+        }
+
+        int before = late ? lateSaved : saved;
+        copy(depthTexture, before);
+        Minecraft minecraft = Minecraft.getInstance();
+        float[] terms = DepthFar.terms(minecraft);
+        boolean reversed = DepthFar.reversed(), zeroToOne = DepthFar.zeroToOne();
+        // No colour attached: blending and the colour masks are left alone.
+        GlState gl = GlState.save(1, 0);
+        try {
+            GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, target);
+            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            GL11C.glDisable(GL11C.GL_CULL_FACE);
+            GL11C.glDisable(GL11C.GL_STENCIL_TEST);
+            GL11C.glEnable(GL11C.GL_DEPTH_TEST);
+            GL11C.glDepthMask(true);
+            GL11C.glViewport(0, 0, w, h);
+            GL30C.glBindVertexArray(vertexArray);
+            GL33C.glBindSampler(0, dhSampler);
+            if (inGame) {
+                // Its pixels only, which may move either way: nearer, or past the game's far plane.
+                GL11C.glDepthFunc(GL11C.GL_ALWAYS);
+                GL20C.glUseProgram(lodProgram);
+                GL20C.glUniform2f(lodUniforms[0], w, h);
+                float[] lod = LodistanceLink.terms();
+                GL20C.glUniform2f(lodUniforms[1], lod[0], lod[1]);
+                GL20C.glUniform2f(lodUniforms[2], terms[0], terms[1]);
+                GL20C.glUniform2f(lodUniforms[3], reversed ? 1f : 0f, zeroToOne ? 1f : 0f);
+                GL20C.glUniformMatrix4fv(lodUniforms[4], false, LOD_MATRIX.set(VIEW_PROJECTION).invert().get(LOD_INVERSE));
+                // Farther than any of the game's own chunks reach: Lodistance leaves out those
+                // within the render distance less a chunk, and the game draws none past it.
+                GL20C.glUniform1f(lodUniforms[5], minecraft.options.getEffectiveRenderDistance() * 16f + 32f);
+                GL45C.glBindTextureUnit(0, before);
+            } else {
+                // Nearer only: written over what the game drew where it is in front.
+                GL11C.glDepthFunc(reversed ? GL11C.GL_GREATER : GL11C.GL_LESS);
+                GL20C.glUseProgram(dhProgram);
+                GL20C.glUniform2f(dhUniforms[0], w, h);
+                GL20C.glUniform2f(dhUniforms[1], lodSize[0], lodSize[1]);
+                // Its own depth: OpenGL's usual direction, empty at 1, laid out as the game's device is.
+                GL20C.glUniform4f(dhUniforms[2], 0f, 0f, zeroToOne ? 0f : 1f, 1f);
+                GL20C.glUniform2f(dhUniforms[3], terms[0], terms[1]);
+                GL20C.glUniform2f(dhUniforms[4], reversed ? 1f : 0f, zeroToOne ? 1f : 0f);
+                GL20C.glUniform1f(dhUniforms[5], 1f);
+                GL20C.glUniformMatrix4fv(dhUniforms[6], false, LodistanceLink.ownProjection(LOD_MATRIX).invert().get(LOD_INVERSE));
+                GL45C.glBindTextureUnit(0, lodTexture);
+            }
+            GL11C.glDrawArrays(GL11C.GL_TRIANGLES, 0, 3);
+        } finally {
+            gl.restore();
+        }
+        copy(depthTexture, late ? lateWritten : written);
+        state = 1;
+        return true;
+    }
+
+    /**
+     * Lodistance's depth, read from a copy of the game's, to the depth the game gives the same
+     * distance. Its terrain was written with {@code lod} for the projection's two terms, which
+     * puts it at twice its distance up to half the game's far plane, and in front of it past
+     * that: past the far plane, it goes to the far plane, behind any figure. A pixel is taken for
+     * its terrain only where, read as the game's own, it would lie farther across than any of
+     * the game's chunks: everything nearer is left as it is.
+     */
+    private static final String LOD_MERGE = """
+            #version 330 core
+            uniform sampler2D gameDepth;
+            uniform vec2 screen;
+            uniform vec2 lod;         // the two terms Lodistance's depth was written with
+            uniform vec2 game;        // the game's projection a and b, see DepthFar.terms
+            uniform vec2 depthLayout; // 1 when the game's depth is reversed, 1 when it is 0..1
+            uniform mat4 inverseView; // the view-projection's inverse, from the camera
+            uniform float reach;      // blocks across: none of the game's chunks lies farther
+            """ + GlPrograms.DEPTH_MATH + """
+
+            void main() {
+                float d = texelFetch(gameDepth, ivec2(gl_FragCoord.xy), 0).r;
+                bool reversed = depthLayout.x > 0.5, zeroToOne = depthLayout.y > 0.5;
+                if (reversed ? !(d > 0.0) : !(d < 1.0)) discard;
+                // Where the pixel would be if it were the game's terrain.
+                float ndc = zeroToOne ? d : d * 2.0 - 1.0;
+                vec4 p = inverseView * vec4(gl_FragCoord.xy / screen * 2.0 - 1.0, ndc, 1.0);
+                if (!(abs(p.w) > 0.0)) discard;
+                if (!(length(p.xz / p.w) > reach)) discard;
+                float w = lhDistance(d, lod, zeroToOne);
+                if (!(w > 0.0)) discard;
+                gl_FragDepth = clamp(lhGameDepth(-w, game, zeroToOne), 0.0, 1.0);
+            }
+            """;
 
     /**
      * Distant Horizons' depth to the game's: back to a distance in front of the camera
@@ -1180,12 +1346,12 @@ public final class FarDepth {
             vertexArray = GL45C.glCreateVertexArrays();
         }
         if (saved != 0 && w == width && h == height && f == format) return;
-        for (int texture : new int[]{saved, written, drawn, faded, lateSaved, lateWritten, lateDrawn}) {
+        for (int texture : new int[]{saved, written, drawn, faded, lateSaved, lateWritten, lateDrawn, finished}) {
             if (texture == 0) continue;
             GL11C.glDeleteTextures(texture);
             GlCache.deleted(texture);
         }
-        lateSaved = lateWritten = lateDrawn = 0;
+        lateSaved = lateWritten = lateDrawn = finished = 0;
         FRAME.lateShown = FRAME.lateFade = false;
         width = w;
         height = h;
@@ -1377,14 +1543,15 @@ public final class FarDepth {
     // --- For the game tests -------------------------------------------------------------------
 
     /**
-     * Compiles every OpenGL program here, those only Voxy or Distant Horizons would ask for too,
-     * and the fragment shaders of {@code FarDepthGpu} (26.3) as OpenGL reads them, and throws at
-     * the first that fails: the game tests run without either mod, and on an older game.
+     * Compiles every OpenGL program here, those only Voxy, Distant Horizons or Lodistance would ask
+     * for too, and the fragment shaders of {@code FarDepthGpu} (26.3) as OpenGL reads them, and
+     * throws at the first that fails: the game tests run without these mods, and on an older game.
      */
     public static void compileAll() {
         int[] programs = {
                 GlPrograms.fullScreen("Depth view", VIEW, "depth"),
                 GlPrograms.fullScreen("Distant Horizons depth", DH_MERGE, "dhDepth"),
+                GlPrograms.fullScreen("Lodistance depth", LOD_MERGE, "gameDepth"),
                 GlPrograms.fullScreen("Voxy depth", INTO_VOXY, "written", "drawn"),
                 GlPrograms.fullScreen("Fade mask", UNMASK, "current", "written", "drawn"),
                 GlPrograms.fullScreen("Depth restore", RESTORE, "saved", "written", "drawn"),
