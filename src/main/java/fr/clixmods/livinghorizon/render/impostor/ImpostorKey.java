@@ -172,12 +172,12 @@ public record ImpostorKey(String type, long appearance, int posture) {
         return new ImpostorKey(PLAYER, hash * 31 + type(mount).hashCode());
     }
 
-    /** A player who logged off: sitting on the ground, lying down or in a bed; standing otherwise. */
+    /** A player who logged off: sitting on the ground or in a bed; standing otherwise. */
     public static int posture(Entity entity) {
         if (!(entity instanceof RestingPuppet puppet)) return STANDING;
         return switch (puppet.look()) {
             case SIT -> SEATED;
-            case LIE, BED -> LYING;
+            case BED -> LYING;
             default -> STANDING;
         };
     }

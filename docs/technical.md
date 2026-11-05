@@ -268,8 +268,9 @@ under 48.
 
 - **By day** they stand and look around, sit down, stroll, or stand in front of a chest, a
   crafting table or a villager's workstation and look at it.
-- **At night** they walk to a free bed they can reach and sleep in it, or lie down where
-  they are. In the morning they get up. Night is whenever the sky is dark: a thunderstorm
+- **At night** they walk to a free bed they can reach and sleep in it. With none, they stay
+  on their feet, looking around, and look for one again every 10 to 20 seconds: they never
+  lie on the ground. In the morning they get up. Night is whenever the sky is dark: a thunderstorm
   too, and always in the Nether and the End.
 - **Walking** (`track/Walkway`) only where a player could: one block up, two down, no corner
   cut, nothing walked through but doors and fence gates, which they cannot open. It is worked
@@ -287,22 +288,57 @@ under 48.
 - **A creeper** blowing up within 7 blocks, in sight, throws them, shield up, and they walk
   back.
 - **Hit by you**, they raise their shield.
+- **Looked at** by you (the nearest under your crosshair, within 6 blocks, nothing in
+  between), they look back for as long as you look and 1.5 seconds more: standing, they turn
+  to you, and facing you they crouch while you crouch; walking, seated, fishing or on a
+  mount, they turn their head only and never crouch.
+- **In the rain**, six players in ten (by their name, always the same ones) walk to a spot
+  they can reach with a roof or leaves within 20 blocks above, one of the four nearest, as soon
+  as the rain reaches them, and stay there, standing or seated, while it rains; at night, after
+  looking for a bed. The others carry on.
+- **In the evening** (from 11000 ticks into the day until dark), at each choice they go, six
+  times in ten, to stand in front of a campfire, a soul campfire, a furnace, a blast furnace or
+  a smoker they can reach, one of the three nearest, on a spot beside it nobody else stands on
+  or walks to, for 15 to 30 seconds.
+- **A chat**: by day one of them may walk up to another within 24 blocks who is idle, seated
+  or looking at something, to a spot 2 blocks from them; the other waits, turned to it, then
+  both talk face to face for 20 to 40 seconds, each nodding while it speaks, in turn. Never a
+  third, and never another pair within 16 blocks. Night, a monster, a hit or a push of more
+  than a few blocks ends it.
+- **At the water's edge**, where open water runs 3 blocks out from a spot they can reach, they
+  may fish for a minute or so: a rod in hand, the bobber on the water with the game's line,
+  a fish's wake now and then, a bite that pulls the bobber under, the line reeled in and cast
+  again. Nothing is caught. Never two within 16 blocks of each other at once, those walking
+  to the water included; at night they leave it for a bed.
+- **Walked into** by you or what you ride, they are shoved out of your way (a quarter of a
+  block per tick at most, never into a wall), getting up if they sat; never out of a bed. A
+  walk that runs into you for two seconds in a row is given up.
+  They never push you: nothing of them exists on the server.
 - **In lava or fire** they show the swirls of fire resistance; **under water**, those of
   water breathing.
 
-Where the blocks are not loaded, they only stand, sit or sleep where they are. With
+Where the blocks are not loaded, they only stand or sit where they are, standing at night. With
 `offlineLife` off, they sit on their spot.
 
 ### Far from the camera
 
 Past 64 blocks they have no life of their own (`track/RestingLoop`): nothing is decided,
 but once a second they are still kept out of water (below). They play one of the animations
-distant mobs play (`track/MobAnimations`) in a loop around their spot, on the ground read
-around it (`track/MobPaths`, read again every 30 seconds while some of it is missing),
-sitting in some of its pauses and lying down at night, in their bed if they are in one.
+distant mobs play (`track/MobAnimations`) in a loop around where they stand, on the ground
+read there (`track/MobPaths`, read again every 30 seconds while some of it is missing),
+sitting in some of its pauses by day. At night they stand in those pauses, or stay in their
+bed until the morning if they are in one.
 
-- From wherever their life left them, they stroll back to the loop, stopping now and then to
-  look around, and start it once there.
+- Where none of the mobs' animations fits (indoors, on a roof, a balcony), they play a
+  cramped one (`MobAnimations.CRAMPED`: a step or two and back). Where not even that fits,
+  or while the ground is not read, they turn on their spot every 8 seconds, as mobs do, and
+  sit in one stance out of three: never a statue.
+- The loop starts wherever their life left them (beside the bed in the morning): they never
+  walk back to their spot. Their spot stays the middle of where they may go: ground farther
+  than `offlineRoam` from it is left out when the animation is chosen (`MobPaths.within`).
+  Mounts do the same.
+- Only a figure left standing in water when its rest place is found (`forgetShore`), or one
+  that logged off flying and is put on the ground under it, is moved there.
 - When the camera comes near again, their life goes on from where the loop left them.
 
 ### Ground and water
@@ -942,11 +978,11 @@ that a mob met in an earlier game is read back rather than baked.
   far from the bottom), then grown if it still needs room; how far down its tiles its middle
   stands is kept with the sheet, on disk too.
 - **Players who logged off** are impostors in every posture: standing, seated on the ground,
-  lying down or in a bed. A posture other than standing is part of the key
+  or in a bed. A posture other than standing is part of the key
   (`ImpostorKey.posture`), and the picture is baked in it:
   - seated: in the riding pose, drawn lowered to the ground as the model is;
-  - lying: along its body, baked raised (`Posture.BAKED_LIFT`) so that none of it
-    falls below the tile, and laid along its bed when it is in one.
+  - in a bed: along its body, baked raised (`Posture.BAKED_LIFT`) so that none of it
+    falls below the tile, and laid along the bed.
 
   `render/Posture` seats or lays a figure down the same way for the model and for the picture.
 - **Riders** (players online or not, on a horse, a camel, a happy ghast, in a boat, a raft, a

@@ -9,8 +9,15 @@
 - **Support for Far View's terrain** — Distant mobs now show and walk on Far View's far terrain and hide behind its hills, instead of being hidden past the render distance. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
 - **Support for Ecstatic's terrain** — Distant mobs now appear on Ecstatic's terrain and walk on its ground, instead of vanishing past the render distance. They hide correctly behind its hills, stay visible in front of them, and blend into its fog. (NeoForge, Minecraft 1.21.1, single player; the fog without shaders.)
 - **Simplified mobs lit by shaders** — With a shader pack that reads normal maps, such as Photon with *Normal Mapping* on, the simplified images of distant mobs are now lit by the pack like their 3D models, one side in the sun and the other in shade, instead of looking flat and darker. These images take twice the video memory; the new *Shader Lighting* setting turns this off. (Minecraft 1.21.6 and later.)
+- **Push offline players aside** — You can now push offline players out of your way by walking into them. They never push you back, as they only exist in your game.
+- **Offline players go fishing** — Offline players near water can now stop at the water's edge to fish for a while. Only one fishes at a time along the same stretch of shore.
+- **Offline players take shelter from the rain** — When it rains, some offline players now walk to stand under a roof or a tree they can reach, and wait there until it stops. The others carry on as usual.
+- **Offline players gather by the fire** — In the evening, offline players now go and stand in front of a campfire or a furnace they can reach, each in a spot of their own.
+- **Offline players chat together** — Two offline players close to each other can now walk up to one another and chat for a while, face to face. Never more than two at once, and only one conversation in the same area.
+- **Offline players look back at you** — Offline players now turn to look at you when you look at them. If one is facing you and you crouch, it crouches too.
 
 #### Improved
+- **More natural nights for offline players** — Offline players now sleep in a bed they can reach, or stay on their feet, instead of lying down on the ground.
 - **Sharper distant ships** — The simplified images of tall boats and vehicles, such as Shippy Ships' sailing ships, are now sharper. The tallest ones, like the galleon, now get one too, instead of always being drawn as a full model, which is heavier on performance.
 - **Smoother switch to simplified images** — Distant mobs and players now turn little by little to the angle their simplified image shows them at, as they near the distance where it replaces them, instead of snapping round at the moment of the switch. The change from the 3D model to the image is less noticeable.
 
@@ -22,6 +29,7 @@
 - **Offline players' names shown on Forge** — Aiming at an offline player now shows their name and when they were last seen, instead of nothing at all. (Forge, Minecraft 1.20.1 to 1.20.4.)
 - **Better integration with Bobby** — Distant mobs now stay visible just past the distance the server sends them, over the terrain Bobby keeps, instead of disappearing. Distant players also no longer stop short as they walk out of that distance.
 - **Shippy Ships' galleon visible from afar** — The galleon from Shippy Ships now stays visible in the distance where you left it, like the mod's other ships, instead of vanishing as soon as it leaves the render distance.
+- **Offline players keep moving in the distance** — Once you walk away, offline players now keep strolling right where they are, instead of walking back to where they logged off or standing perfectly still. Where there is no room for a stroll, they take a few steps, turn around or sit down for a while.
 
 ## 0.15.0 — 2026-10-31
 

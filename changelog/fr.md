@@ -9,8 +9,15 @@
 - **Prise en charge du terrain de Far View** — Les créatures lointaines s'affichent et marchent maintenant sur le terrain lointain de Far View et se cachent derrière ses collines, au lieu d'être masquées au-delà de la distance d'affichage. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
 - **Prise en charge du terrain d'Ecstatic** — Les créatures lointaines apparaissent maintenant sur le terrain d'Ecstatic et marchent sur son sol, au lieu de disparaître au-delà de la distance d'affichage. Elles se cachent correctement derrière ses collines, restent visibles devant elles et se fondent dans son brouillard. (NeoForge, Minecraft 1.21.1, solo ; le brouillard sans shaders.)
 - **Créatures simplifiées éclairées par les shaders** — Avec un pack de shaders qui lit les normal maps, comme Photon avec *Normal Mapping* activé, les images simplifiées des créatures lointaines sont maintenant éclairées par le pack comme leurs modèles 3D, un côté au soleil et l'autre à l'ombre, au lieu de paraître plates et plus sombres. Ces images prennent deux fois plus de mémoire vidéo ; le nouveau réglage *Éclairage des shaders* permet de le désactiver. (Minecraft 1.21.6 et plus.)
+- **Pousser les joueurs déconnectés** — Vous pouvez maintenant écarter un joueur déconnecté de votre chemin en avançant dans lui. Lui ne vous repousse jamais, puisqu'il n'existe que dans votre jeu.
+- **Les joueurs déconnectés vont pêcher** — Les joueurs déconnectés près de l'eau peuvent maintenant s'arrêter au bord pour pêcher un moment. Un seul pêche à la fois sur un même bout de rive.
+- **Les joueurs déconnectés s'abritent de la pluie** — Quand il pleut, certains joueurs déconnectés vont maintenant se mettre sous un toit ou un arbre à leur portée, et y attendent la fin de l'averse. Les autres continuent comme si de rien n'était.
+- **Les joueurs déconnectés se réunissent près du feu** — Le soir, les joueurs déconnectés vont maintenant se tenir devant un feu de camp ou un four à leur portée, chacun à sa place.
+- **Les joueurs déconnectés discutent entre eux** — Deux joueurs déconnectés proches l'un de l'autre peuvent maintenant se rejoindre et discuter un moment, face à face. Jamais plus de deux à la fois, et une seule conversation dans un même coin.
+- **Les joueurs déconnectés vous regardent** — Les joueurs déconnectés se tournent maintenant vers vous quand vous les regardez. Si l'un d'eux vous fait face et que vous vous accroupissez, il s'accroupit aussi.
 
 #### Améliorations
+- **Des nuits plus naturelles pour les joueurs déconnectés** — Les joueurs déconnectés dorment maintenant dans un lit à leur portée, ou restent debout, au lieu de s'allonger par terre.
 - **Navires lointains plus nets** — Les images simplifiées des bateaux et véhicules élevés, comme les voiliers de Shippy Ships, sont maintenant plus nettes. Les plus grands, comme le galion, en ont maintenant une aussi, au lieu d'être toujours affichés en modèle complet, plus coûteux en performances.
 - **Passage plus doux aux images simplifiées** — Les créatures et les joueurs lointains se tournent maintenant peu à peu vers l'angle sous lequel leur image simplifiée les montre, à l'approche de la distance où elle les remplace, au lieu de pivoter d'un coup au moment du passage. La transition du modèle 3D à l'image se remarque ainsi moins.
 
@@ -22,6 +29,7 @@
 - **Nom des joueurs déconnectés affiché sur Forge** — Viser un joueur déconnecté affiche maintenant son nom et quand il a été vu pour la dernière fois, au lieu de ne rien afficher. (Forge, Minecraft 1.20.1 à 1.20.4.)
 - **Meilleure intégration avec Bobby** — Les créatures lointaines restent maintenant visibles juste au-delà de la distance jusqu'où le serveur les envoie, sur le terrain que Bobby conserve, au lieu de disparaître. Les joueurs lointains ne s'arrêtent plus net non plus en sortant de cette distance.
 - **Galion de Shippy Ships visible au loin** — Le galion de Shippy Ships reste maintenant visible au loin, là où vous l'avez laissé, comme les autres navires du mod, au lieu de disparaître dès qu'il sort de la distance d'affichage.
+- **Les joueurs déconnectés restent animés au loin** — Quand vous vous éloignez, les joueurs déconnectés continuent maintenant de se promener là où ils sont, au lieu de revenir à l'endroit où ils se sont déconnectés ou de rester parfaitement immobiles. Là où ils n'ont pas la place de se promener, ils font quelques pas, se retournent ou s'assoient un moment.
 
 ## 0.15.0 — 2026-10-31
 

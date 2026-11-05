@@ -730,7 +730,7 @@ public final class GhostRenderer {
 
     /**
      * Players who logged off: standing, walking or on guard as the game would draw any
-     * player, or seated, lying on the ground or asleep in a bed.
+     * player, or seated on the ground or asleep in a bed.
      */
     private static void rest(List<EntityRenderState> frame, Minecraft minecraft, EntityRenderDispatcher dispatcher,
                              Vec3 eye, float partialTick, FarConfig config) {
@@ -770,9 +770,6 @@ public final class GhostRenderer {
             }
             if (look == RestingPuppet.Look.BED) {
                 Posture.lie(body, true);
-            } else if (look == RestingPuppet.Look.LIE && Posture.lie(body, false)) {
-                // On the ground the game lays a sleeper a little lower than on a mattress.
-                body.y += Posture.LIE_LIFT;
             } else if (look == RestingPuppet.Look.SIT && Posture.seat(body)) {
                 // The riding pose, without a mount: legs out in front, on the ground.
                 body.y -= Posture.SEAT_DROP;
@@ -780,14 +777,16 @@ public final class GhostRenderer {
             // Their name, marked offline, where the game would show it: close by, as for anyone.
             Component name = config.offlineNames ? body.nameTag : null;
             //? if >=1.21.2 {
-            if (name != null && (look == RestingPuppet.Look.BED || look == RestingPuppet.Look.LIE)
-                    && body.nameTagAttachment != null) {
+            if (name != null && look == RestingPuppet.Look.BED && body.nameTagAttachment != null) {
                 // Lying down: just above the body, as the game puts a sleeper's name (the tag adds half a block).
                 body.nameTagAttachment = new Vec3(0, 0.3, 0);
             }
             //?}
             add(frame, minecraft, eye, body, mountState, true, Mark.PLAYER, config, spot.name());
             body.nameTag = name;
+            // Fishing: its bobber on the water, the line drawn from the rod by the game.
+            Entity hook = puppet.hook();
+            if (hook != null) add(frame, minecraft, eye, extract(dispatcher, hook, partialTick), null, true, Mark.PLAYER, config, null);
         }
     }
 
@@ -1207,19 +1206,17 @@ public final class GhostRenderer {
 
     /**
      * A player who logged off as a picture, in its posture: standing, seated on the ground,
-     * lying on it or in a bed (laid along the bed, as the game lays a sleeper), or on its mount.
+     * in a bed (laid along the bed, as the game lays a sleeper), or on its mount.
      */
     private static boolean restingImpostor(Minecraft minecraft, Vec3 eye, RestingPuppet puppet, @Nullable Entity mount,
                                            RestingPuppet.Look look, float partialTick, FarConfig config) {
         return switch (look) {
             case STAND -> impostor(minecraft, eye, puppet, partialTick, config);
             case SIT -> impostor(minecraft, eye, puppet, partialTick, config, 0, -Posture.SEAT_DROP, 0, Float.NaN);
-            // Lying pictures are baked raised (Posture.BAKED_LIFT): lowered back here.
-            case LIE -> impostor(minecraft, eye, puppet, partialTick, config, 0, Posture.LIE_LIFT - Posture.BAKED_LIFT, 0,
-                    Float.NaN);
             case BED -> {
                 Direction bed = puppet.getBedOrientation();
                 if (bed == null) {
+                    // Lying pictures are baked raised (Posture.BAKED_LIFT): lowered back here.
                     yield impostor(minecraft, eye, puppet, partialTick, config, 0, Posture.LIE_LIFT - Posture.BAKED_LIFT, 0,
                             Float.NaN);
                 }
