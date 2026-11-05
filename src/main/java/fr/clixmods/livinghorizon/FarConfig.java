@@ -296,6 +296,14 @@ public final class FarConfig {
     public boolean impostorPlayers = true;
 
     /**
+     * Under a shader pack, the impostors' pictures are baked lit evenly, each with a normal map
+     * made from its depth, which the pack reads to light a picture as it lights a model (see
+     * {@code ImpostorAtlas.relief}). Off: pictures baked with the game's own shading, which
+     * the pack lights again as a flat quad; a little less memory and time to bake. From 1.21.6.
+     */
+    public boolean impostorShading = true;
+
+    /**
      * Megabytes of video memory the mobs' impostor pictures may take, apart from the players':
      * taken only as looks are met, the picture used longest ago making room when full.
      */

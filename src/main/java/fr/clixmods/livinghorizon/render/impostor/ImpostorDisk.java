@@ -99,7 +99,7 @@ public final class ImpostorDisk {
     }
 
     /** What the render thread knows of the game to work the fingerprint out from. */
-    private record Inputs(Path base, File gameDirectory, String game, List<String> packs) {
+    private record Inputs(Path base, File gameDirectory, String game, List<String> packs, boolean relief) {
     }
 
     /** The disk's thread working out the current fingerprint; null until asked for after a reload. */
@@ -242,10 +242,13 @@ public final class ImpostorDisk {
         int scale = in.readInt();
         if (scale != SCALE) throw new IOException("tiles " + scale + " times larger");
         int count = in.readInt();
-        if (count != ImpostorAtlas.MIPS) throw new IOException(count + " levels, not " + ImpostorAtlas.MIPS);
+        // With their normal maps, twice as many (ImpostorAtlas.relief).
+        if (count != ImpostorAtlas.MIPS && count != 2 * ImpostorAtlas.MIPS) {
+            throw new IOException(count + " levels, not " + ImpostorAtlas.MIPS);
+        }
         int[][] levels = new int[count][];
         for (int level = 0; level < count; level++) {
-            int tile = ImpostorViews.TILE >> level;
+            int tile = ImpostorViews.TILE >> level % ImpostorAtlas.MIPS;
             int expected = tile * ImpostorViews.VIEWS * tile;
             int length = in.readInt();
             if (length != expected) throw new IOException("level " + level + " of " + length + " pixels, not " + expected);
@@ -263,7 +266,7 @@ public final class ImpostorDisk {
         Minecraft minecraft = Minecraft.getInstance();
         Inputs inputs = new Inputs(Platform.configDir().resolve("livinghorizon").resolve("impostors"),
                 minecraft.gameDirectory, minecraft.getLaunchedVersion(),
-                List.copyOf(minecraft.getResourcePackRepository().getSelectedIds()));
+                List.copyOf(minecraft.getResourcePackRepository().getSelectedIds()), ImpostorAtlas.relief());
         return CompletableFuture.supplyAsync(() -> find(inputs), IO).exceptionally(error -> {
             LivingHorizonClient.LOGGER.warn("Could not look for the saved impostors", error);
             return new Found(Set.of(), Map.of());
@@ -336,6 +339,9 @@ public final class ImpostorDisk {
         // Still named "format": a new name would change every fingerprint, and bake every sheet again.
         text.append("format ").append(BAKE).append(" tile ").append(ImpostorViews.TILE).append(" views ")
                 .append(ImpostorViews.VIEWS).append(" mips ").append(ImpostorAtlas.MIPS).append('\n');
+        // Baked evenly lit, with normal maps, for a shader pack: sheets of their own. Without,
+        // the line is left out, so that the fingerprints of before stay the same.
+        if (inputs.relief) text.append("relief\n");
         text.append("game ").append(inputs.game).append('\n');
         File packs = new File(inputs.gameDirectory, "resourcepacks");
         for (String pack : inputs.packs) {

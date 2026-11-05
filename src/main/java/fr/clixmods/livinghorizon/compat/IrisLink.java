@@ -96,6 +96,39 @@ final class IrisLink {
         }
     }
 
+    /** The pipeline {@link #readsNormalMaps} was last read from, and what it said. */
+    private static @Nullable Object normalsPipeline;
+    private static boolean readsNormals;
+    private static boolean normalsUnknown;
+
+    /**
+     * Whether the shader pack on samples normal maps (Photon with its <em>Normal Mapping</em>,
+     * labPBR packs): Iris works it out as it builds the pack's programs, in its pipeline's
+     * {@code shouldBindPBR}, which is not its public API. False without a pack, or when it
+     * cannot be read.
+     */
+    static boolean readsNormalMaps() {
+        if (!shaderPackOn() || normalsUnknown) return false;
+        try {
+            Class<?> iris = Class.forName("net.irisshaders.iris.Iris");
+            Object manager = iris.getMethod("getPipelineManager").invoke(null);
+            Object pipeline = manager.getClass().getMethod("getPipelineNullable").invoke(manager);
+            if (pipeline == null) return false;
+            if (pipeline != normalsPipeline) {
+                java.lang.reflect.Field field = pipeline.getClass().getDeclaredField("shouldBindPBR");
+                field.setAccessible(true);
+                // Set as the programs are built: read again for each new pipeline, a moment after.
+                readsNormals = field.getBoolean(pipeline);
+                if (readsNormals) normalsPipeline = pipeline;
+            }
+            return readsNormals;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            normalsUnknown = true;
+            STATUS.fallback("no normal map flag: impostors get none");
+            return false;
+        }
+    }
+
     /**
      * Whether Iris is drawing its shadow pass. From 26.2 that pass draws its entities through
      * the same steps as the world's, after the world's are submitted.

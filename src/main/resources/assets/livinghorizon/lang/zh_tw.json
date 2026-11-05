@@ -305,6 +305,8 @@
   "livinghorizon.options.debugHud": "除錯面板",
   "livinghorizon.options.impostorPlayers": "簡化玩家",
   "livinghorizon.options.impostorPlayers.tooltip": "遠處玩家也會像生物一樣被簡化。關閉：他們在任何距離都保持完整模型，外觀和盔甲保留全部細節。",
+  "livinghorizon.options.impostorShading": "光影照明",
+  "livinghorizon.options.impostorShading.tooltip": "使用光影包時，簡化生物會保留其模型的形狀，能讀取法線貼圖的光影包會像照亮模型一樣照亮它們：一面向陽，一面背陰（在 Photon 中開啟 Normal Mapping）。它們的圖像佔用兩倍的顯示記憶體。關閉：平面圖像，稍輕一些。適用於 Minecraft 1.21.6 以上。",
   "livinghorizon.options.impostorMobMemory": "生物圖片顯示記憶體",
   "livinghorizon.options.impostorMobMemory.tooltip": "簡化生物的圖片可占用的顯示記憶體，與玩家的分開。只在遇到新外觀時逐步占用；占滿後，最久未使用的圖片會讓出位置。",
   "livinghorizon.options.impostorPlayerMemory": "玩家圖片顯示記憶體",

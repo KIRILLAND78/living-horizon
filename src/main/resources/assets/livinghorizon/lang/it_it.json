@@ -305,6 +305,8 @@
   "livinghorizon.options.debugHud": "Pannello diagnostico",
   "livinghorizon.options.impostorPlayers": "Giocatori semplificati",
   "livinghorizon.options.impostorPlayers.tooltip": "Anche i giocatori lontani vengono semplificati, come le creature. No: mantengono il modello completo a qualsiasi distanza, con skin e armatura in pieno dettaglio.",
+  "livinghorizon.options.impostorShading": "Illuminazione shader",
+  "livinghorizon.options.impostorShading.tooltip": "Con un pacchetto di shader, le creature semplificate mantengono la forma del loro modello, così un pacchetto che legge le normal map le illumina come il modello: un lato al sole, l'altro in ombra (in Photon, attiva Normal Mapping). Le loro immagini occupano il doppio della memoria video. No: immagini piatte, un po' più leggere. Da Minecraft 1.21.6.",
   "livinghorizon.options.impostorMobMemory": "Memoria immagini creature",
   "livinghorizon.options.impostorMobMemory.tooltip": "Memoria video che possono occupare le immagini delle creature semplificate, separata da quella dei giocatori. Viene occupata solo man mano che compaiono nuovi aspetti; quando è piena, l'immagine inutilizzata da più tempo lascia il posto.",
   "livinghorizon.options.impostorPlayerMemory": "Memoria immagini giocatori",
