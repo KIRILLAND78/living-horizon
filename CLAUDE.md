@@ -414,6 +414,14 @@ come back, add it here in the same pull request: this file is what the next sess
   the wrong side): Iris throws away the normal given to a quad and computes it from its
   corners, counter-clockwise. `ImpostorLean` moves an impostor's corners along their lines of
   sight so that its own plane faces where the light should come from.
+- **Impostors without their normal maps under a pack that reads them** (*Shader Lighting* on,
+  Photon's *Normal Mapping* on, the pictures flat): Iris looks a texture's normal map up by its
+  class, through the loader `compat/IrisNormals` registers, and only for textures it is told
+  are drawn. Check it with the `impostorshading` scenario (Sodium, Iris and Photon in
+  `-Plh.mods` / `-Plh.shaderpack`, a real graphics card): its mobs stand past the game's
+  entity distance, since a mob the game draws itself is never an impostor; closer, the counts
+  stay 0 and say nothing. On 26.3 the game's copy of a depth texture fails ("No color buffer")
+  and blackened the screen: `OverrideBake.readDepth` reads it straight from OpenGL.
 - **Far terrain depth lost under shaders from 26.2** (depth view empty or uniform, nothing
   hidden behind the far terrain, only with a pack on): Iris's shadow pass draws its entities
   through the same `PreparedFrame.executeSolid` / `executeTranslucent` steps as the world,
@@ -450,7 +458,8 @@ come back, add it here in the same pull request: this file is what the next sess
   tick: the game plays idle movements at `tickCount` plus the frame's part of a tick, so a stopped
   one replays a tick's worth twenty times a second. Still copies are looked at once in sixteen
   ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
-  once in sixteen ticks went in jerks. The `stillmobs` scenario checks it all.
+  once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
+  skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
 - **Distant mobs only turning on the spot**, never walking, after the world was opened, while
   those met since walk: their ground was read (`MobPaths.plan`) where the far world had nothing
   (Voxy or Distant Horizons not open yet, or Voxy turned off for the session by one failed
@@ -550,6 +559,16 @@ come back, add it here in the same pull request: this file is what the next sess
   up to *Entity Render Distance*, not the mobs' (`GhostRenderer.creature`). Check the mod's classes
   with `javap` on its jar; the `vehicles` scenario checks Immersive Aircraft
   (`run.sh vehicles --with immersive-aircraft`).
+- **One of a mod's entities vanishing far away while its others stay** (Shippy Ships' galleon,
+  issue #320; listed and *Shown*, yet no copy and no picture): its save threw on the client, and
+  a kind that cannot be saved is never remembered. The log says so once per kind ("is not drawn
+  far away: its save failed", or "its copy could not be made"). The galleon's: a chest boat's hold
+  is 27 slots until a load sizes it, which never happens on the client, and the galleon writes
+  its 504 one by one. `EntityNbt.fitHold` sizes it there first. Then "does not fit its picture":
+  a boat or vehicle is pictured round the middle of its box, low in the hull, and the masts reach
+  40 blocks up. A figure pictured round its middle and cut off is moved to the middle of its tiles
+  before it grows (`ImpostorPixels.centred`; the sheet keeps where, on disk too). The `ships`
+  scenario checks both (`run.sh ships --with shippy-ships --with ingeniumapi`).
 - **Another mod's figure drawn black far away, its rider lit** (Immersive Aircraft's planes as
   you travel towards them, from 26.1): its renderer keeps its own copy of the light, read as it
   extracts (`getPackedLightCoords`), and ignores the `lightCoords` the mod sets after. In a chunk

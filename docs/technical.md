@@ -465,6 +465,12 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   stands where it was left, as a boat does: no animation, and only this client remembers it.
   So a kind that is not alive, a boat included, is only *Shown* or *Hidden* there, never
   *Roaming* or *Still*.
+- **A save that fails.** On the client a chest boat or minecart has the game's own hold, 27
+  slots, sized again only when it is loaded from a save, which the client never does: another
+  mod's larger one that writes its slots one by one (Shippy Ships' galleon, 504) threw as the
+  client saved it, and was never remembered. `EntityNbt.save` first makes the client's hold
+  again, empty, at its size; the client never knows what is in it anyway. A kind whose save
+  or copy still fails is not drawn far away, and the log says why, once per kind.
 - **Mannequins** (from 1.21.9) are shown too, standing still: Distant Friends uses them as its fake
   players. Mobs in `stillMobTypes` (happy ghast, mannequin) stand still instead of walking
   their loop. A copy wears its mannequin's skin, from a player's name or a texture of a
@@ -803,8 +809,8 @@ frame. A boat or a vehicle is pictured from every height, as a phantom or a ghas
     neither a ghost nor fatter than its model.
 
   The page is sampled smoothly when small, by pixels when large.
-- **Light.** Colour only, no normal map: the game's entity shaders have no use for one. The
-  pictures are lit by the game's world light as a model is (turned over, the way the picture
+- **Light.** Colour only, without a shader pack that reads normal maps: the game's entity
+  shaders have no use for one. The pictures are lit by the game's world light as a model is (turned over, the way the picture
   is drawn), and the quad's normal points up, which that light leaves at full brightness.
   Only the light where the figure stands (sky, torches, night) is applied on top. Under a
   shader pack, Iris works out a quad's normal from its corners, so `ImpostorLean` leans the
@@ -813,6 +819,21 @@ frame. A boat or a vehicle is pictured from every height, as a phantom or a ghas
   extract (Immersive Aircraft's, from 26.1), so `GhostRenderer.extract` hands the light over
   then too, through `EntityRendererLightMixin`, and does the same for the models it draws far
   away, where the client may have no light yet.
+- **Normal maps** (`impostorShading`, from 1.21.6). Under a pack that samples normal maps
+  (Iris's `shouldBindPBR`: Photon with *Normal Mapping*, labPBR packs), the pictures are baked
+  lit evenly (two opposite lights far stronger than the cap, `ImpostorAtlas.EVEN_0`) and each
+  page gets a normal map beside it: the bake's depth is read back with the colours, the slope
+  between neighbouring pixels gives each pixel's normal (`ImpostorPixels.normals`, no slope read
+  across a step of more than 3 pixels), turned onto the quad `ImpostorLean` leans back by 45
+  degrees, red along the picture's right, green along its down. Iris is handed them by a loader
+  registered for the page textures' class (`compat/IrisNormals`, its loader registry, not its
+  API), which answers with a texture that only borrows the normal map, since Iris closes what
+  it is handed when it reloads. A sheet then has twice the levels, saved under a fingerprint
+  of its own, and takes twice the memory in the budgets below. A pack that reads no normal map
+  keeps the pictures the game shades: lit evenly, they came out brighter than their models.
+  From 26.3 the game's copy of a depth texture reads a colour buffer that is not there (an
+  OpenGL error, the screen black under a pack), so the depth is read straight from OpenGL there
+  (`OverrideBake.readDepth`); under another renderer the normal maps are flat.
 - **When.** Every figure on hand (distant players, remembered mobs) is queued about once a
   second, near or far, and baked a little each frame (from the GUI pass from 1.21.6; see
   below), 3 ms of it, checked after each sheet, one sheet at least, so it is ready when the
@@ -869,6 +890,13 @@ textures, draws and reads back the views, and writes a sheet into its page. Ever
   (a dragon twenty blocks long just past the distance), and a picture kept stays one until 5%
   past that.
 - It keeps a picture until it has turned 8 degrees past the edge between it and the next one.
+- A mob or player model nearing its picture turns to it: from 80% of either threshold to the
+  point a picture would come back (95%), its body is eased to the yaw the picture will show it at
+  (`ImpostorViews.yaw`, the same 8-degree stickiness), head straight and level
+  (`ImpostorThreshold.approach`, `GhostRenderer.turn` / `turned`). Only once its sheet is baked
+  and not too large to be shown; never on a mount or in a bed. The picture then starts on the
+  view the model had turned to. *Smooth Simplification* in the debug screen (`impostorTurn`)
+  turns it off.
 - When its look changes, a player or a mob keeps its old picture until the new one is baked;
   a 3D bird is drawn as a model meanwhile.
 
@@ -908,8 +936,9 @@ that a mob met in an earlier game is read back rather than baked.
   again finds its sheets. Its text is kept beside the sheets (`fingerprint.txt`), and the log says
   which lines changed when an older folder is thrown away ("the saved mob pictures of ... are
   thrown away").
-- Each file holds when and in which world or server its sheet was baked (file `FORMAT` 3; a
-  file of 2 still reads, its date unknown). The impostor screen shows it under each name, with
+- Each file holds when and in which world or server its sheet was baked, and how far down its
+  tiles the figure's origin stands (file `FORMAT` 4; a file of 3 still reads, its origin where
+  its kind puts it, and one of 2, its date unknown). The impostor screen shows it under each name, with
   where the pictures come from (`ImpostorAtlas.Origin`): *Shared*, read back from disk; *New*,
   baked in this game and saved; *Not saved* (players, riders, birds).
 - A sheet read back is checked against the size of a sheet (`ImpostorDisk.decode`) before
@@ -941,6 +970,12 @@ that a mob met in an earlier game is read back rather than baked.
   nearer than that middle (an aircraft's nose, the wheels under it) farther along the line of
   sight, under the ground the figure stands on when seen from above: `GhostRenderer.picture`
   moves it nearer by half its size and makes it as much smaller, the same on screen.
+  The middle is the box's, which is not always the figure's: Shippy Ships' galleon has a box
+  9 blocks high and masts 40 blocks up, so half of its pictures stayed empty below the hull and
+  its masts were cut off even five times larger. One cut off is first moved down or up its tiles
+  until it stands in their middle (`ImpostorPixels.centred`, between `FEET` from the top and as
+  far from the bottom), then grown if it still needs room; how far down its tiles its middle
+  stands is kept with the sheet, on disk too.
 - **Players who logged off** are impostors in every posture: standing, seated on the ground,
   or in a bed. A posture other than standing is part of the key
   (`ImpostorKey.posture`), and the picture is baked in it:
@@ -1551,6 +1586,7 @@ and a slider dragged past its end is released beside it. Sodium's page cannot as
 | `impostors` | Simplified Mobs | `true` | | Far mobs and birds drawn as a flat picture of themselves (see [Impostors](#impostors)) |
 | `impostorEntities` | Simplified Entities | `true` | | Far boats, vehicles and mannequins drawn as pictures too, from every height; set from `impostors` when it came (layout 12) |
 | `impostorPlayers` | Simplified Players | `true` | | Distant players become impostors too; off, they keep their whole model at any distance |
+| `impostorShading` | Shader Lighting | `true` | | Under a shader pack that reads normal maps, the pictures are baked evenly lit with a normal map each, so the pack lights them like the models; twice the video memory. From 1.21.6 |
 | `impostorDistance` | Simplification Distance | `128` blocks | 0 to 2000 | Past this distance an impostor stands in for the model (`0`: the size alone) |
 | `impostorPixels` | Simplification Size | `10` pixels | 0 to 64 | A figure shorter than this on screen is an impostor too, even closer than `impostorDistance` (`0`: the distance alone) |
 | `impostorMobMemory` | Mob Picture Memory | `1024` MB | 64 to 4096 | Video memory the mobs' pictures may take, apart from the players' |

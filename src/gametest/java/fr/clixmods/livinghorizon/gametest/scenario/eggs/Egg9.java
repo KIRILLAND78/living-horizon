@@ -64,6 +64,7 @@ public final class Egg9 {
                 }
             }
             if (players < 6) throw new AssertionError("ee9 has " + players + " players round the fire");
+            Egg19.standsStill(sect().figures(), "ee9");
         });
         Scene.screenshot(context, scenario, "ee9-circle");
         if (context.computeOnClient(minecraft -> sect().noticed())) throw new AssertionError("ee9 noticed without a spyglass");

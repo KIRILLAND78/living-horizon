@@ -25,11 +25,14 @@ import fr.clixmods.livinghorizon.gametest.scenario.ImpostorLongMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorScreenScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorSharingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorSizeScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.ImpostorTurnScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LanShareScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MannequinsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MoreEggsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LightingScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.PhotonVoxyScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.ImpostorShadingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.OcclusionScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LinksScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LodistanceScenario;
@@ -51,6 +54,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.RestingTouchScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SeedCrowdScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SeedMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ServerWithoutModScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.ShipsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ShoreScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SittingPetsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SodiumControlsScenario;
@@ -85,7 +89,10 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new ImpostorEdgesScenario(),
             new ImpostorLongMobsScenario(),
             new ImpostorScreenScenario(),
+            new ImpostorTurnScenario(),
             new LightingScenario(),
+            new PhotonVoxyScenario(),
+            new ImpostorShadingScenario(),
             new FarFogScenario(),
             new DhFogScenario(),
             new RememberedMobsScenario(),
@@ -94,6 +101,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new OverVoidScenario(),
             new MannequinsScenario(),
             new VehiclesScenario(),
+            new ShipsScenario(),
             new GlidersScenario(),
             new OutlinesScenario(),
             new RestingScenario(),

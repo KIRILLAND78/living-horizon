@@ -84,4 +84,18 @@ class ImpostorViewsTest {
         assertEquals(3, ImpostorViews.height(20));
         assertEquals(3, ImpostorViews.height(89));
     }
+
+    @Test
+    void aModelTurnedToAPictureShowsThatPicture() {
+        for (int angle = 0; angle < 360; angle += 15) {
+            double dx = Math.cos(Math.toRadians(angle)) * 100, dz = Math.sin(Math.toRadians(angle)) * 100;
+            for (int v = 0; v < ImpostorViews.VIEWS; v++) {
+                assertEquals(v, ImpostorViews.view(ImpostorViews.yaw(v, dx, dz), dx, dz), "angle " + angle + " view " + v);
+            }
+        }
+        // As baked: the camera north of the figure.
+        for (int v = 0; v < ImpostorViews.VIEWS; v++) {
+            assertEquals(0, Math.IEEEremainder(ImpostorViews.yaw(v, 0, -10) - ImpostorViews.facing(v), 360), 1e-3);
+        }
+    }
 }

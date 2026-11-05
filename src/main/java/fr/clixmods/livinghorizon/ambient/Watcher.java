@@ -9,7 +9,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.player.RemotePlayer;
-import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
@@ -19,7 +18,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -33,9 +31,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Easter egg 11: now and then, while the player looks far off through a spyglass, a figure
  * appears on a far hilltop close to where they look, a spyglass to its own eye, looking back
- * at them. Once they stop scoping it is gone. If they keep looking at it a few seconds it
- * lowers its spyglass, turns, walks off a few steps and is gone; gone too if they come near.
- * Only on this screen.
+ * at them. It never moves: it scopes them a few seconds, lowers its spyglass a while, and raises
+ * it again, as long as they look at it. Once they stop, lowering their spyglass or turning it
+ * away from it, it is gone; gone too if they come near. Only on this screen.
  *
  * <p>The figure is a player of no one, in a default skin of the game's, any but Steve's
  * ({@link #anyone}), holding a spyglass. It scopes as a player does, in the game's own
@@ -58,12 +56,12 @@ public final class Watcher implements Egg {
     private static final double SPYGLASS = 0.1;
     /** How much of the spyglass's view a spot may stand in, from its middle; degrees to each side when called without one. */
     private static final double IN_SCOPE = 0.6, CALLED_CONE = 12;
-    /** Blocks per tick it walks away; blocks it walks, at least and at most. */
-    private static final double PACE = 0.09, WALK_MIN = 3, WALK_MAX = 6;
-    /** Ticks of scoping far before it may come; ticks looked at before it leaves; ticks it waits, called, for the player to scope. */
-    private static final int SESSION = 60, STARE = 80, ALONE = 400;
-    /** Ticks it stands with the spyglass lowered before it turns; ticks it turns. */
-    private static final int LOWER = 15, TURN = 10;
+    /** Ticks of scoping far before it may come; ticks it waits, called, for the player to scope. */
+    private static final int SESSION = 60, ALONE = 400;
+    /** Ticks it scopes, at least and more by chance; ticks it holds its spyglass lowered, the same. */
+    private static final int UP_MIN = 60, UP_MORE = 100, DOWN_MIN = 30, DOWN_MORE = 70;
+    /** Ticks out of the player's spyglass, once seen in it, before it is gone: a glance off its edge is not looking away. */
+    private static final int UNSEEN = 5;
     /** Ticks it stays at most; ticks a search may take. */
     private static final int LINGER = 2400, SEARCH = 400;
     /** Spots tried. */
@@ -77,11 +75,9 @@ public final class Watcher implements Egg {
     private @Nullable RemotePlayer figure;
     /** For the game tests: whether the player scopes, in their place; null reads the player. */
     private @Nullable Boolean pretend;
-    private boolean searching, called, scoped, rolled;
-    private double dirX, dirZ, walked, walk;
-    private float away;
-    /** Ticks since it came; looked at; with the spyglass lowered, -1 until then; this session of scoping far. */
-    private int age, looked, leaving = -1, unscoped, far, idle, searchAge;
+    private boolean searching, called, scoped, rolled, seen, raised;
+    /** Ticks since it came; out of the player's spyglass since seen in it; left before it raises or lowers its own; this session of scoping far. */
+    private int age, unseen, phase, unscoped, far, idle, searchAge;
 
     Watcher(EggCalendar calendar) {
         this.calendar = calendar;
@@ -109,9 +105,9 @@ public final class Watcher implements Egg {
         return him == null ? List.of() : List.of(him);
     }
 
-    /** For the game tests: it has lowered its spyglass and is on its way. */
-    public boolean leaving() {
-        return figure != null && leaving >= 0;
+    /** For the game tests: it holds its spyglass to its eye. */
+    public boolean raised() {
+        return figure != null && raised;
     }
 
     /**
@@ -209,9 +205,10 @@ public final class Watcher implements Egg {
         made.yHeadRotO = made.yHeadRot;
         made.setOldPosAndRot();
         figure = made;
-        age = looked = unscoped = 0;
-        leaving = -1;
-        scoped = false;
+        age = unseen = unscoped = 0;
+        phase = UP_MIN + random.nextInt(UP_MORE);
+        raised = true;
+        scoped = seen = false;
         EggLog.came(NUMBER, spot.x(), spot.y(), spot.z(), self, called);
     }
 
@@ -263,52 +260,27 @@ public final class Watcher implements Egg {
             clear();
             return;
         }
-        if (leaving < 0) {
-            face(him, self, true);
-            Puppets.walk(him, 0f, 0.4f, 1f);
+        // Seen through the spyglass, it is gone once the spyglass turns away from it.
+        if (scoping) {
             Vec3 head = him.getEyePosition();
             double high = scopeHigh(), wide = Math.atan(Math.tan(high) * Statue.aspect());
-            if (scoping && Statue.inView(self, head, high, wide) && inSight(current, self, head) && ++looked > STARE) {
-                leave(him, self);
-            }
-        } else if (++leaving < LOWER) {
-            face(him, self, false);
-            Puppets.walk(him, 0f, 0.4f, 1f);
-        } else if (leaving < LOWER + TURN) {
-            float yaw = Mth.approachDegrees(him.getYRot(), away, 180f / TURN);
-            turn(him, yaw);
-            Puppets.walk(him, 0f, 0.4f, 1f);
-        } else {
-            turn(him, away);
-            double nx = him.getX() + dirX * PACE, nz = him.getZ() + dirZ * PACE;
-            double ground = ground(current, nx, nz, him.getY());
-            if (Double.isNaN(ground)) {
-                // A step too high, or water: it is gone there.
-                clear();
-                return;
-            }
-            him.setPos(nx, ground, nz);
-            walked += PACE;
-            Puppets.walk(him, 0.5f, 0.4f, 1f);
-            if (walked >= walk) {
+            if (Statue.inView(self, head, high, wide) && inSight(current, self, head)) {
+                seen = true;
+                unseen = 0;
+            } else if (seen && ++unseen > UNSEEN) {
                 clear();
                 return;
             }
         }
+        // Where it stands, turned to the player: scoping them a while, then not, then again.
+        if (--phase <= 0) {
+            raised = !raised;
+            scope(him, raised);
+            phase = raised ? UP_MIN + random.nextInt(UP_MORE) : DOWN_MIN + random.nextInt(DOWN_MORE);
+        }
+        face(him, self, raised);
+        Puppets.walk(him, 0f, 0.4f, 1f);
         him.tickCount++;
-    }
-
-    /** Looked at long enough: the spyglass down, a way off chosen, away from the player. */
-    private void leave(RemotePlayer him, LocalPlayer self) {
-        leaving = 0;
-        scope(him, false);
-        float from = (float) Math.toDegrees(Math.atan2(-(self.getX() - him.getX()), self.getZ() - him.getZ()));
-        away = Mth.wrapDegrees(from + 180f + (random.nextFloat() * 2 - 1) * 50f);
-        double heading = Math.toRadians(away);
-        dirX = -Math.sin(heading);
-        dirZ = Math.cos(heading);
-        walked = 0;
-        walk = WALK_MIN + random.nextDouble() * (WALK_MAX - WALK_MIN);
     }
 
     /** Holding the spyglass to its eye, or not: the use flag, from which the client takes the item in use. */
@@ -328,18 +300,6 @@ public final class Watcher implements Egg {
         him.setYRot(yaw);
         him.yBodyRot = yaw;
         him.yHeadRot = yaw;
-    }
-
-    /**
-     * The ground to walk on: the loaded column's, NaN where it is water or a step too high;
-     * where it is not loaded, the height it walks at.
-     */
-    private static double ground(ClientLevel level, double x, double z, double at) {
-        if (!Columns.loaded(level, x, z)) return at;
-        int bx = Mth.floor(x), bz = Mth.floor(z);
-        int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
-        boolean dry = level.getFluidState(new BlockPos(bx, top - 1, bz)).isEmpty();
-        return dry && Math.abs(top - at) <= 1.2 ? top : Double.NaN;
     }
 
     /** Radians up and down from the middle of the spyglass's view. */
@@ -370,7 +330,6 @@ public final class Watcher implements Egg {
         searching = false;
         figure = null;
         level = null;
-        leaving = -1;
     }
 
     /** The figure is the game's to draw; called, the beam over it. */

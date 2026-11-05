@@ -84,6 +84,9 @@ final class GameFire {
             EntityNbt.load(block, level, tag);
             block.setBlockState(Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, on));
             block.setPos(pos.getX(), pos.getY(), pos.getZ());
+            // Its last tick's place too, which the saved data put at the world's origin: drawn
+            // between the two, it leapt about every frame.
+            block.setOldPosAndRot();
             block.tick();
             return true;
         } catch (Exception e) {

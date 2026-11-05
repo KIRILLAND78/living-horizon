@@ -296,6 +296,14 @@ public final class FarConfig {
     public boolean impostorPlayers = true;
 
     /**
+     * Under a shader pack, the impostors' pictures are baked lit evenly, each with a normal map
+     * made from its depth, which the pack reads to light a picture as it lights a model (see
+     * {@code ImpostorAtlas.relief}). Off: pictures baked with the game's own shading, which
+     * the pack lights again as a flat quad; a little less memory and time to bake. From 1.21.6.
+     */
+    public boolean impostorShading = true;
+
+    /**
      * Megabytes of video memory the mobs' impostor pictures may take, apart from the players':
      * taken only as looks are met, the picture used longest ago making room when full.
      */
@@ -390,6 +398,11 @@ public final class FarConfig {
     public int animationMaxDistance = MAX_DISTANCE;
     /** A copy that was not drawn for a moment (out of view, hidden, too small) stays where it is: no animation, no path read. */
     public boolean optFreezeHidden = false;
+    /**
+     * A model nearing its impostor turns to the angle the picture will show it at, so that the
+     * switch does not jump (see {@code GhostRenderer.turn}). Off: it turns at once as the picture takes over.
+     */
+    public boolean impostorTurn = true;
 
     // --- Debug -----------------------------------------------------------------------------
 
