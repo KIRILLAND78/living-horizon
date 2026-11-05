@@ -14,6 +14,9 @@
 - **Sharper distant ships** — The simplified images of tall boats and vehicles, such as Shippy Ships' sailing ships, are now sharper. The tallest ones, like the galleon, now get one too, instead of always being drawn as a full model, which is heavier on performance.
 - **Smoother switch to simplified images** — Distant mobs and players now turn little by little to the angle their simplified image shows them at, as they near the distance where it replaces them, instead of snapping round at the moment of the switch. The change from the 3D model to the image is less noticeable.
 
+#### Improved
+- **NeoForge 1.21.4 and 1.21.11 builds easier to find** — The NeoForge builds for Minecraft 1.21.4 and 1.21.11 are now published as beta. They now show up on CurseForge and in launchers that hide alpha versions.
+
 #### Fixed
 - **Mobs shown only once with Far View** — Mobs that Far View draws as boxes between 128 blocks and the render distance are now shown only once, instead of twice on top of each other. (Forge and NeoForge, Minecraft 1.20.1 to 1.21.4.)
 - **Offline players' names shown on Forge** — Aiming at an offline player now shows their name and when they were last seen, instead of nothing at all. (Forge, Minecraft 1.20.1 to 1.20.4.)

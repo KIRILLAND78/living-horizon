@@ -14,6 +14,9 @@
 - **Navires lointains plus nets** — Les images simplifiées des bateaux et véhicules élevés, comme les voiliers de Shippy Ships, sont maintenant plus nettes. Les plus grands, comme le galion, en ont maintenant une aussi, au lieu d'être toujours affichés en modèle complet, plus coûteux en performances.
 - **Passage plus doux aux images simplifiées** — Les créatures et les joueurs lointains se tournent maintenant peu à peu vers l'angle sous lequel leur image simplifiée les montre, à l'approche de la distance où elle les remplace, au lieu de pivoter d'un coup au moment du passage. La transition du modèle 3D à l'image se remarque ainsi moins.
 
+#### Améliorations
+- **Versions NeoForge 1.21.4 et 1.21.11 plus faciles à trouver** — Les versions NeoForge pour Minecraft 1.21.4 et 1.21.11 sont maintenant publiées en bêta. Elles apparaissent ainsi sur CurseForge et dans les launchers qui masquent les versions alpha.
+
 #### Corrections
 - **Créatures affichées une seule fois avec Far View** — Les créatures que Far View dessine en boîtes entre 128 blocs et la distance d'affichage ne sont maintenant affichées qu'une fois, au lieu de deux fois l'une sur l'autre. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
 - **Nom des joueurs déconnectés affiché sur Forge** — Viser un joueur déconnecté affiche maintenant son nom et quand il a été vu pour la dernière fois, au lieu de ne rien afficher. (Forge, Minecraft 1.20.1 à 1.20.4.)
