@@ -3,7 +3,7 @@
 mod.id = "livinghorizon"
 mod.name = "Living Horizon"
 mod.group = "fr.clixmods.livinghorizon"
-mod.version = "0.15.0"
+mod.version = "0.16.0"
 
 deps.fabric_loader = "0.19.3"
 # What fabric.mod.json asks of players. Fabric API sets the real floor on each game

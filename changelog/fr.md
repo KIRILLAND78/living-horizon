@@ -2,6 +2,8 @@
 
 ## Prochaine version
 
+## 0.16.0 — 2026-11-05
+
 ### Client
 
 #### Nouveautés
