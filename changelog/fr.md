@@ -14,14 +14,12 @@
 - **Les joueurs déconnectés s'abritent de la pluie** — Quand il pleut, certains joueurs déconnectés vont maintenant se mettre sous un toit ou un arbre à leur portée, et y attendent la fin de l'averse. Les autres continuent comme si de rien n'était.
 - **Les joueurs déconnectés se réunissent près du feu** — Le soir, les joueurs déconnectés vont maintenant se tenir devant un feu de camp ou un four à leur portée, chacun à sa place.
 - **Les joueurs déconnectés discutent entre eux** — Deux joueurs déconnectés proches l'un de l'autre peuvent maintenant se rejoindre et discuter un moment, face à face. Jamais plus de deux à la fois, et une seule conversation dans un même coin.
-- **Les joueurs déconnectés vous regardent** — Les joueurs déconnectés se tournent maintenant vers vous quand vous les regardez. Si l'un d'eux vous fait face et que vous vous accroupissez, il s'accroupit aussi.
+- **Les joueurs déconnectés vous regardent** — Les joueurs déconnectés se tournent maintenant vers vous quand vous les regardez de près. Si l'un d'eux vous fait face et que vous vous accroupissez, il s'accroupit aussi.
 
 #### Améliorations
 - **Des nuits plus naturelles pour les joueurs déconnectés** — Les joueurs déconnectés dorment maintenant dans un lit à leur portée, ou restent debout, au lieu de s'allonger par terre.
 - **Navires lointains plus nets** — Les images simplifiées des bateaux et véhicules élevés, comme les voiliers de Shippy Ships, sont maintenant plus nettes. Les plus grands, comme le galion, en ont maintenant une aussi, au lieu d'être toujours affichés en modèle complet, plus coûteux en performances.
 - **Passage plus doux aux images simplifiées** — Les créatures et les joueurs lointains se tournent maintenant peu à peu vers l'angle sous lequel leur image simplifiée les montre, à l'approche de la distance où elle les remplace, au lieu de pivoter d'un coup au moment du passage. La transition du modèle 3D à l'image se remarque ainsi moins.
-
-#### Améliorations
 - **Versions NeoForge 1.21.4 et 1.21.11 plus faciles à trouver** — Les versions NeoForge pour Minecraft 1.21.4 et 1.21.11 sont maintenant publiées en bêta. Elles apparaissent ainsi sur CurseForge et dans les launchers qui masquent les versions alpha.
 
 #### Corrections
@@ -60,16 +58,12 @@
 - **Limites par défaut plus raisonnables** — Plus aucun réglage n'est illimité par défaut, pour éviter les grosses chutes de performances : *Distance d'affichage des joueurs*, *Distance des animations* et *Distance d'affichage des entités* s'arrêtent à 4000 blocs. Les préréglages *Élevé* et *Ultra* affichent au plus 1500 et 3000 créatures, *Ultra* jusqu'à 2048 blocs, et les réglages restés sur les anciennes valeurs par défaut passent aux nouvelles.
 - **Vol en élytres plus naturel** — Les joueurs lointains qui volent avec des élytres sont maintenant affichés ailes déployées, dans une vraie posture de vol, au lieu de courir debout dans les airs.
 - **Changement de pack de ressources plus fluide** — Les images simplifiées des créatures ne sont plus recréées inutilement quand un pack de ressources est désactivé puis réactivé. Le chargement des ressources ne fige plus non plus le jeu pendant leur recherche.
-
-#### Corrections
-- **Créatures lointaines visibles sur le terrain lointain** — Les créatures lointaines, estimées comprises, restent maintenant visibles sur le terrain lointain, au lieu d'être masquées comme s'il n'y avait rien sous elles : un moment après l'ouverture d'un monde, parmi des milliers de créatures estimées, ou quand Voxy ou Distant Horizons tarde à répondre.
-- **Brouillard de Distant Horizons appliqué aux créatures** — Les créatures lointaines reçoivent maintenant le même brouillard que le terrain de Distant Horizons et s'estompent avec lui, au lieu de ressortir nettement sur le paysage. (Sans shaders.)
-
-#### Améliorations
 - **Créatures volantes d'Ice and Fire vues sous tous les angles** — Les dragons, amphithères et hippogriffes d'Ice and Fire ont maintenant des images simplifiées vues d'en dessous et d'au-dessus, comme les phantoms et les avions, au lieu d'être vus seulement de côté. Ils restent ainsi fidèles quand ils vous survolent ou que vous les regardez d'en haut.
 - **Créatures géantes plus nettes au loin** — Les très grandes créatures gardent maintenant leur modèle 3D complet tant qu'elles paraissent grandes à l'écran, au lieu de devenir une image simplifiée pixelisée.
 
 #### Corrections
+- **Créatures lointaines visibles sur le terrain lointain** — Les créatures lointaines, estimées comprises, restent maintenant visibles sur le terrain lointain, au lieu d'être masquées comme s'il n'y avait rien sous elles : un moment après l'ouverture d'un monde, parmi des milliers de créatures estimées, ou quand Voxy ou Distant Horizons tarde à répondre.
+- **Brouillard de Distant Horizons appliqué aux créatures** — Les créatures lointaines reçoivent maintenant le même brouillard que le terrain de Distant Horizons et s'estompent avec lui, au lieu de ressortir nettement sur le paysage. (Sans shaders.)
 - **Créatures d'Ice and Fire correctement simplifiées** — Les dragons lointains d'Ice and Fire ont maintenant des images simplifiées entières à leur vraie taille, au lieu d'un gros plan de leurs pattes ou d'une aile. Des dragons d'âges différents ne partagent plus la même image, et les serpents de mer gardent leur modèle 3D au lieu d'une image coupée.
 - **Les joueurs déconnectés gardent leur bateau** — Un joueur déconnecté au milieu de l'eau ne perd plus le bateau où il se repose quand vous vous éloignez : il le garde de près comme de loin, et la prochaine fois que vous jouez.
 - **Les joueurs déconnectés ne flottent plus dans les airs** — Un joueur déconnecté en l'air, en vol plané avec des élytres ou en pleine chute, n'y remonte plus quand vous vous éloignez : il se repose sur le sol sous lui. Avec Voxy ou Distant Horizons, il est au sol avant même que vous vous approchiez.
