@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "End",
   "livinghorizon.options.renderTrackedVehiclesFar": "Véhicules montés",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "Le jeu masque tôt les petites entités comme les bateaux : un joueur en bateau flotterait dans le vide. Garde un véhicule affiché tant qu'un joueur est dessus.",
+  "livinghorizon.options.impostorTurn": "Simplification douce",
+  "livinghorizon.options.impostorTurn.tooltip": "Une créature ou un joueur lointain sur le point de devenir une image simplifiée se tourne d'abord vers l'angle sous lequel l'image le montrera, pour que le passage ne saute pas. Désactivé : il pivote d'un coup quand l'image prend le relais.",
   "livinghorizon.options.distantMobs": "Afficher les créatures",
   "livinghorizon.options.distantMobs.tooltip": "Les animaux, villageois et golems restent visibles une fois hors de portée, là où ils étaient : ils se promènent, regardent autour d'eux et broutent.",
   "livinghorizon.options.maxDistantMobs": "Créatures max",

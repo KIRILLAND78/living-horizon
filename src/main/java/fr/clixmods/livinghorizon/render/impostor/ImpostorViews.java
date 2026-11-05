@@ -85,4 +85,16 @@ public final class ImpostorViews {
     public static float facing(int view) {
         return 180f - view * (360f / VIEWS);
     }
+
+    /**
+     * The way picture {@code view} shows a figure to a camera, in the game's yaw degrees: the yaw
+     * its model turns to before the picture takes over ({@link ImpostorThreshold#approach}).
+     *
+     * @param dx from the figure to the camera, east-west
+     * @param dz from the figure to the camera, north-south
+     */
+    public static float yaw(int view, double dx, double dz) {
+        double toCamera = Math.toDegrees(Math.atan2(-dx, dz));
+        return (float) Math.IEEEremainder(toCamera - view * (360.0 / VIEWS), 360.0);
+    }
 }

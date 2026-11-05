@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "Das Ende",
   "livinghorizon.options.renderTrackedVehiclesFar": "Fahrmittel behalten",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "Das Spiel blendet kleine Objekte wie Boote früh aus, sodass ein Spieler im Boot über dem Nichts schweben würde. Hält ein Fahrmittel sichtbar, solange ein Spieler es benutzt.",
+  "livinghorizon.options.impostorTurn": "Sanfte Vereinfachung",
+  "livinghorizon.options.impostorTurn.tooltip": "Eine ferne Kreatur oder ein ferner Spieler, die gleich zu einem vereinfachten Bild werden, dreht sich zuerst in den Winkel, in dem das Bild sie zeigen wird, damit der Wechsel nicht springt. Aus: dreht sich auf einen Schlag, wenn das Bild übernimmt.",
   "livinghorizon.options.distantMobs": "Kreaturen anzeigen",
   "livinghorizon.options.distantMobs.tooltip": "Tiere, Dorfbewohner und Golems bleiben außer Reichweite sichtbar, wo sie waren: Sie wandern umher, schauen sich um und grasen.",
   "livinghorizon.options.maxDistantMobs": "Max. Kreaturen",

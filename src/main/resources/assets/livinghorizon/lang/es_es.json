@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "End",
   "livinghorizon.options.renderTrackedVehiclesFar": "Vehículos en uso",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "El juego oculta pronto las entidades pequeñas como las barcas, así que un jugador en barca flotaría sobre la nada. Mantiene visible un vehículo mientras un jugador va en él.",
+  "livinghorizon.options.impostorTurn": "Simplificación suave",
+  "livinghorizon.options.impostorTurn.tooltip": "Una criatura o un jugador lejano a punto de convertirse en una imagen simplificada gira primero hacia el ángulo en que la imagen lo mostrará, para que el cambio no dé un salto. Desactivado: gira de golpe cuando la imagen toma el relevo.",
   "livinghorizon.options.distantMobs": "Mostrar criaturas",
   "livinghorizon.options.distantMobs.tooltip": "Los animales, aldeanos y gólems siguen visibles fuera de alcance, donde estaban: deambulan, miran a su alrededor y pastan.",
   "livinghorizon.options.maxDistantMobs": "Máx. de criaturas",

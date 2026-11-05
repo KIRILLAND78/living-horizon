@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.render.impostor;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,5 +55,31 @@ class ImpostorThresholdTest {
     @Test
     void neverAtTheEye() {
         assertFalse(ImpostorThreshold.pictured(0, 0, true, 128, 20));
+    }
+
+    @Test
+    void aModelTurnsToItsPictureAsItNearsIt() {
+        // 128 blocks: still from 102.4, wholly turned from where a picture comes back, 121.6.
+        assertEquals(0, ImpostorThreshold.approach(90, 500, 128, 0));
+        assertEquals(0, ImpostorThreshold.approach(102, 500, 128, 0));
+        double half = ImpostorThreshold.approach(112, 500, 128, 0);
+        assertTrue(half > 0.3 && half < 0.7, "halfway " + half);
+        assertTrue(ImpostorThreshold.approach(115, 500, 128, 0) > half);
+        assertEquals(1, ImpostorThreshold.approach(122, 500, 128, 0));
+        assertEquals(1, ImpostorThreshold.approach(127, 500, 128, 0));
+    }
+
+    @Test
+    void aModelSmallOnScreenTurnsToo() {
+        // 20 pixels: still above 25, wholly turned under 21.05.
+        assertEquals(0, ImpostorThreshold.approach(60, 26, 0, 20));
+        double half = ImpostorThreshold.approach(60, 23, 0, 20);
+        assertTrue(half > 0 && half < 1, "between " + half);
+        assertEquals(1, ImpostorThreshold.approach(60, 21, 0, 20));
+        // The nearer of the two counts.
+        assertEquals(1, ImpostorThreshold.approach(125, 500, 128, 20));
+        // Both off: never turned.
+        assertEquals(0, ImpostorThreshold.approach(5000, 1, 0, 0));
+        assertEquals(0, ImpostorThreshold.approach(0, 0, 128, 20));
     }
 }

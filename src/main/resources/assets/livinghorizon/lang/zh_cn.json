@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "末地",
   "livinghorizon.options.renderTrackedVehiclesFar": "保留骑乘中的载具",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "游戏会较早隐藏船等小型实体，导致坐船的玩家悬浮在空中。玩家骑乘期间保持显示其载具。",
+  "livinghorizon.options.impostorTurn": "平滑简化",
+  "livinghorizon.options.impostorTurn.tooltip": "即将变为简化图像的远处生物或玩家会先转向图像将显示它的角度，让切换不再跳动。关：在图像接替时一下子转过去。",
   "livinghorizon.options.distantMobs": "显示生物",
   "livinghorizon.options.distantMobs.tooltip": "动物、村民和傀儡离开范围后仍然可见，留在原处游荡、张望和吃草。",
   "livinghorizon.options.maxDistantMobs": "最大生物数量",
