@@ -1103,7 +1103,7 @@ public final class GhostRenderer {
         double apparent = distance < 1e-3 ? Double.MAX_VALUE : size / distance * pixelsPerRadian;
         if (!ImpostorThreshold.pictured(distance, apparent, last != null, config.impostorDistance, config.impostorPixels)) {
             if (last != null) SHOWN.remove(shown);
-            if (seat == null) turn(shown, key, last, yaw, ax, az, distance, apparent, size, config);
+            if (seat == null && config.impostorTurn) turn(shown, key, last, yaw, ax, az, distance, apparent, size, config);
             return false;
         }
         // A rider is pictured with its mount, at the mount's place.

@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "End",
   "livinghorizon.options.renderTrackedVehiclesFar": "Veicoli in uso",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "Il gioco nasconde presto le entità piccole come le barche, quindi un giocatore in barca galleggerebbe nel vuoto. Mantiene visibile un veicolo finché un giocatore lo usa.",
+  "livinghorizon.options.impostorTurn": "Semplificazione graduale",
+  "livinghorizon.options.impostorTurn.tooltip": "Una creatura o un giocatore lontano che sta per diventare un'immagine semplificata si gira prima verso l'angolo in cui l'immagine lo mostrerà, così il passaggio non fa uno scatto. Disattivato: si gira di colpo quando subentra l'immagine.",
   "livinghorizon.options.distantMobs": "Mostra creature",
   "livinghorizon.options.distantMobs.tooltip": "Animali, villici e golem restano visibili fuori portata, dov'erano: vagano, si guardano intorno e brucano.",
   "livinghorizon.options.maxDistantMobs": "Limite creature",

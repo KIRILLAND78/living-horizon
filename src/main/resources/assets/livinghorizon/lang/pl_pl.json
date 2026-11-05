@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "End",
   "livinghorizon.options.renderTrackedVehiclesFar": "Zachowaj pojazdy",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "Gra wcześnie ukrywa małe byty, takie jak łódki, więc gracz w łódce unosiłby się w powietrzu. Pojazd pozostaje widoczny, dopóki jedzie nim gracz.",
+  "livinghorizon.options.impostorTurn": "Płynne uproszczenie",
+  "livinghorizon.options.impostorTurn.tooltip": "Odległe stworzenie lub gracz, który zaraz stanie się uproszczonym obrazem, najpierw obraca się pod kątem, pod jakim pokaże go obraz, aby zmiana nie przeskakiwała. Wyłączone: obraca się nagle, gdy obraz przejmuje.",
   "livinghorizon.options.distantMobs": "Pokazuj stworzenia",
   "livinghorizon.options.distantMobs.tooltip": "Zwierzęta, osadnicy i golemy pozostają widoczne poza zasięgiem, tam, gdzie były: wędrują, rozglądają się i pasą.",
   "livinghorizon.options.maxDistantMobs": "Maks. stworzeń",

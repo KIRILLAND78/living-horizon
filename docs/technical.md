@@ -845,7 +845,8 @@ textures, draws and reads back the views, and writes a sheet into its page. Ever
   (`ImpostorViews.yaw`, the same 8-degree stickiness), head straight and level
   (`ImpostorThreshold.approach`, `GhostRenderer.turn` / `turned`). Only once its sheet is baked
   and not too large to be shown; never on a mount or in a bed. The picture then starts on the
-  view the model had turned to.
+  view the model had turned to. *Smooth Simplification* in the debug screen (`impostorTurn`)
+  turns it off.
 - When its look changes, a player or a mob keeps its old picture until the new one is baked;
   a 3D bird is drawn as a model meanwhile.
 

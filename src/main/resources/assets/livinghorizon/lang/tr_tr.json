@@ -58,6 +58,8 @@
   "livinghorizon.offline.test.dimension.2": "End",
   "livinghorizon.options.renderTrackedVehiclesFar": "Binilen Araçları Tut",
   "livinghorizon.options.renderTrackedVehiclesFar.tooltip": "Oyun, tekne gibi küçük varlıkları erkenden gizler; bu yüzden teknedeki bir oyuncu boşlukta süzülürdü. Bir oyuncu bindiği sürece aracı görünür tutar.",
+  "livinghorizon.options.impostorTurn": "Yumuşak Basitleştirme",
+  "livinghorizon.options.impostorTurn.tooltip": "Basit bir görüntüye dönüşmek üzere olan uzak bir canlı ya da oyuncu, geçiş sıçramasın diye önce görüntünün onu göstereceği açıya döner. KAPALI: görüntü devraldığında bir anda döner.",
   "livinghorizon.options.distantMobs": "Canlıları Göster",
   "livinghorizon.options.distantMobs.tooltip": "Hayvanlar, köylüler ve golemler menzil dışına çıktıklarında da oldukları yerde, dolaşarak, etrafa bakarak ve otlayarak görünür kalır.",
   "livinghorizon.options.maxDistantMobs": "En Fazla Canlı",

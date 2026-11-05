@@ -390,6 +390,11 @@ public final class FarConfig {
     public int animationMaxDistance = MAX_DISTANCE;
     /** A copy that was not drawn for a moment (out of view, hidden, too small) stays where it is: no animation, no path read. */
     public boolean optFreezeHidden = false;
+    /**
+     * A model nearing its impostor turns to the angle the picture will show it at, so that the
+     * switch does not jump (see {@code GhostRenderer.turn}). Off: it turns at once as the picture takes over.
+     */
+    public boolean impostorTurn = true;
 
     // --- Debug -----------------------------------------------------------------------------
 
