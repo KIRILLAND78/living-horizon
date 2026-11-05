@@ -58,7 +58,10 @@ public final class ImpostorTurnScenario implements Scenario {
                     }
                 }
                 minecraft.options.fov().set(30);
+                // The HUD hidden, as F1 does; from 26.2 it is the overlay's own, and stays shown.
+                //? if <26.2 {
                 minecraft.options.hideGui = true;
+                //?}
             });
             context.waitTicks(80);
             context.runOnClient(minecraft -> describe(minecraft, "baked"));
