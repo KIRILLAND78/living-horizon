@@ -123,6 +123,8 @@ public final class RestingPuppet extends RemotePlayer {
     private static final int AWAKE = 200;
     /** Blocks it is shoved aside in a tick at most, out of the way of whoever walks into it. */
     private static final double SHOVE = 0.25;
+    /** Ticks a walk may keep running into you before it gives up and goes another way. */
+    private static final int BLOCKED = 40;
     /** Blocks between two who fish: one on a stretch of shore, not the whole crowd. */
     static final double FISHERS_APART = 16;
     /** Blocks of open water out from the edge, the bobber at the last one. */
@@ -267,6 +269,8 @@ public final class RestingPuppet extends RemotePlayer {
     private int gazed;
     /** You looked at it since its last tick: it crouches with you only then, never from memory. */
     private boolean gazerCrouching, watched, crouched;
+    /** Ticks its walk has run into you in a row. */
+    private int blocked;
     /** The way to a spot, searched off the game's thread in {@link #area}; empty when there is none. */
     private @Nullable CompletableFuture<Optional<List<Walkway.Step>>> route;
     private float headYaw, headPitch, headYawGoal, headPitchGoal;
@@ -487,7 +491,12 @@ public final class RestingPuppet extends RemotePlayer {
         if (tickCount % 5 == 0) swirls(level);
         survey(level, work);
         double before = getX(), beforeZ = getZ();
-        if (activity != Activity.FLY) shove(level, you);
+        if (activity != Activity.FLY && shove(level, you) && activity == Activity.WALK) {
+            // Its way runs through you: pushed back every tick, it would never get there.
+            if (++blocked > BLOCKED) start(Activity.IDLE, 40 + random.nextInt(40));
+        } else {
+            blocked = 0;
+        }
 
         if (activity == Activity.FLY) {
             fly(level);
@@ -510,12 +519,12 @@ public final class RestingPuppet extends RemotePlayer {
 
     /**
      * Walked into by you, or by what you ride: it is shoved out of your way, getting up if it
-     * sat, never into a wall. Never out of its bed.
+     * sat, never into a wall. Never out of its bed. Whether you were in its way.
      */
-    private void shove(ClientLevel level, @Nullable Entity you) {
-        if (you == null || you.isSpectator() || activity == Activity.BED) return;
+    private boolean shove(ClientLevel level, @Nullable Entity you) {
+        if (you == null || you.isSpectator() || activity == Activity.BED) return false;
         Entity body = you.getRootVehicle();
-        if (!getBoundingBox().intersects(body.getBoundingBox())) return;
+        if (!getBoundingBox().intersects(body.getBoundingBox())) return false;
         double dx = getX() - body.getX(), dz = getZ() - body.getZ();
         double d = Math.hypot(dx, dz);
         if (d < 1e-4) {
@@ -527,9 +536,10 @@ public final class RestingPuppet extends RemotePlayer {
         }
         double step = Math.min(SHOVE, Math.max(0.05, (getBbWidth() + body.getBbWidth()) / 2 - d));
         double x = getX() + dx / d * step, z = getZ() + dz / d * step;
-        if (!Footing.fits(blocks, x, getY(), z, Footing.STANDING)) return;
+        if (!Footing.fits(blocks, x, getY(), z, Footing.STANDING)) return true;
         setPos(x, getY(), z);
         if (activity == Activity.SIT) start(Activity.IDLE, 40 + random.nextInt(40));
+        return true;
     }
 
     // --- In the saddle ----------------------------------------------------------------------

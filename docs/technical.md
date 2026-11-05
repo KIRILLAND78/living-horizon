@@ -311,7 +311,8 @@ under 48.
   again. Nothing is caught. Never two within 16 blocks of each other at once, those walking
   to the water included; at night they leave it for a bed.
 - **Walked into** by you or what you ride, they are shoved out of your way (a quarter of a
-  block per tick at most, never into a wall), getting up if they sat; never out of a bed.
+  block per tick at most, never into a wall), getting up if they sat; never out of a bed. A
+  walk that runs into you for two seconds in a row is given up.
   They never push you: nothing of them exists on the server.
 - **In lava or fire** they show the swirls of fire resistance; **under water**, those of
   water breathing.
