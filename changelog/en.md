@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Client
+
+#### Fixed
+- **Smooth animations with Entity Model Features** — Distant mobs and players now move smoothly with Entity Model Features animations, such as Fresh Animations, instead of sliding along with their limbs frozen and then jerking into a new pose.
+
 ## 0.16.0 — 2026-11-05
 
 ### Client

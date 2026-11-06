@@ -2,6 +2,11 @@
 
 ## Prochaine version
 
+### Client
+
+#### Corrections
+- **Animations fluides avec Entity Model Features** — Les créatures et les joueurs lointains bougent maintenant de façon fluide avec les animations d'Entity Model Features, comme Fresh Animations, au lieu de glisser les membres figés puis de changer de pose par à-coups.
+
 ## 0.16.0 — 2026-11-05
 
 ### Client

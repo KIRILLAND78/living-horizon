@@ -514,6 +514,13 @@ come back, add it here in the same pull request: this file is what the next sess
   that turns the head without `yHeadRotO`. A mob the mod draws in the game's place is told seen
   (`compat/EntityCulling.drawn`, from `GhostRenderer`); the `headturn` scenario checks it with
   Entity Culling in `-Plh.mods`.
+- **Distant figures sliding and jerking with Entity Model Features** (Fresh Animations or a player
+  animation pack; issue #331): EMF plays an entity's animations once in `distance / 20` frames
+  (its *Animation LOD*) and keeps the last pose in between, one frame in 25 at 500 blocks.
+  `GhostRenderer.extract` notes each figure (`compat/EntityModelFeatures`), and `EmfLodMixin`
+  answers EMF's `isLODSkippingThisFrame` with no skip for them (`EMFLODHandler` from 3.3,
+  `EMFAnimationEntityContext` before), except in Iris's shadow pass. The `emf` scenario checks it
+  with a pack of its own (`run.sh emf --with entity-model-features --with entitytexturefeatures`).
 - **Crash extracting a distant mob on 1.21.2 to 1.21.8** (`NullPointerException` under
   `GhostRenderer.state`, often blamed on another mod's mixin into `extractRenderState`):
   GeckoLib 4's `createRenderState()` returns null and its `render` draws the entity it was

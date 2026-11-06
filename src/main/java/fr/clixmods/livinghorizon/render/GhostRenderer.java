@@ -9,6 +9,7 @@ import fr.clixmods.livinghorizon.ambient.Herd;
 import fr.clixmods.livinghorizon.compat.DrawnGround;
 import fr.clixmods.livinghorizon.compat.EcstaticLink;
 import fr.clixmods.livinghorizon.compat.EntityCulling;
+import fr.clixmods.livinghorizon.compat.EntityModelFeatures;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.FarViewLink;
 import fr.clixmods.livinghorizon.compat.IceAndFire;
@@ -229,6 +230,7 @@ public final class GhostRenderer {
     public static void beginFrame() {
         OcclusionQueries.beginFrame();
         FarDepth.beginFigures();
+        EntityModelFeatures.beginFrame();
         EXTRACTED.clear();
         TRANSFORMS.clear();
         transforms = 0;
@@ -302,6 +304,7 @@ public final class GhostRenderer {
         if (!drawable(dispatcher, entity)) return null;
         Puppets.skin(entity);
         Puppets.cape(entity);
+        EntityModelFeatures.drawn(entity);
         int before = extractLight;
         extractLight = light;
         try {

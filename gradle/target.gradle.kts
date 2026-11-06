@@ -101,6 +101,8 @@ extra["lhMixins"] = buildList {
     }
     // Distant Horizons' fade, which would paint its terrain over the distant figures.
     add("DhClientApiMixin")
+    // Entity Model Features' animation level of detail, which froze the distant figures' poses.
+    add("EmfLodMixin")
     add("EntityMixin")
     add("EntityRenderDispatcherMixin")
     // The light of the figures the mod extracts, where the client has none.

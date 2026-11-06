@@ -18,6 +18,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.FlyersScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.GaitsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.StillMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.GlidersScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.EmfScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.HeadTurnScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorCrowdScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorEdgesScenario;
@@ -130,6 +131,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new BobbyScenario(),
             new SittingPetsScenario(),
             new HeadTurnScenario(),
+            new EmfScenario(),
             new GaitsScenario(),
             new StillMobsScenario(),
             new FlyersScenario(),
