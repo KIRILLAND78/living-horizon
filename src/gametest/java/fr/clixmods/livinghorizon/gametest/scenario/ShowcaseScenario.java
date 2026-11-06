@@ -56,6 +56,8 @@ public final class ShowcaseScenario implements Scenario {
             Scene.command(world, "weather clear");
             Scene.command(world, "time set " + time);
             Scene.command(world, "gamemode creative @a");
+            // Peaceful would remove the endermen, piglins and ghasts at once.
+            Scene.command(world, "difficulty normal");
             context.runOnClient(minecraft -> {
                 hideGui(minecraft, true);
                 minecraft.options.renderDistance().set(distance);
