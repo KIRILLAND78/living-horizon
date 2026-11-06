@@ -55,6 +55,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.SeedCrowdScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SeedMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ServerWithoutModScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ShipsScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.ShowcaseScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ShoreScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SittingPetsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SodiumControlsScenario;
@@ -144,7 +145,8 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new ServerWithoutModScenario(),
             new PerfScenario(),
             new BenchmarkScenario(),
-            new BenchmarkWorldScenario());
+            new BenchmarkWorldScenario(),
+            new ShowcaseScenario());
 
     @Override
     public void runTest(ClientGameTestContext context) {
