@@ -394,6 +394,12 @@ come back, add it here in the same pull request: this file is what the next sess
   Distant Horizons reports (`getDepthRange`, `getDepthDirection`: reversed and 0..1 on 26.2,
   empty at 0). Measured: sky 0, ground at 53 blocks 0.067, horizon 0.005. `DhDepth.frame`
   combines the two from 26.2 only; older versions keep OpenGL's -1..1.
+- **The game aborts on a Mac, no crash report** (macOS writes one with `jni_FatalError` on the
+  render thread, from LWJGL; the log says "a function that is not available in the current
+  context was called"): an OpenGL call past 4.1, which macOS never goes past. Every such call
+  goes through `compat/GlCalls`, which goes another way where the context lacks it;
+  `OpenGlVersionTest` finds one made anywhere else. Reproduce with Mesa held at 4.1 (see
+  `docs/technical.md`, "OpenGL 4.1 and older"): the game aborts the same way.
 - **Before 1.21.5** the game's depth texture has an unsized format (`GL_DEPTH_COMPONENT`):
   `glTextureStorage2D` refuses it, so anything copied from it is allocated the way the game
   allocates its own. A copy "with no size" or an all-white depth view is this.

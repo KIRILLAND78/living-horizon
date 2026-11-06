@@ -15,7 +15,6 @@ import org.lwjgl.opengl.GL32C;
 import org.lwjgl.opengl.GL33C;
 import org.lwjgl.opengl.GL42C;
 import org.lwjgl.opengl.GL43C;
-import org.lwjgl.opengl.GL45C;
 import org.lwjgl.opengl.GLCapabilities;
 
 import java.nio.FloatBuffer;
@@ -348,17 +347,13 @@ public final class OcclusionQueries {
 
     /** The program, and a framebuffer of our own around the depth texture, with no colour. */
     private static void prepare(int depthTexture) {
-        if (vertexArray == 0) vertexArray = GL45C.glCreateVertexArrays();
+        if (vertexArray == 0) vertexArray = GlCalls.createVertexArray();
         // Attached again every frame: the copy is made again, often under the same name, when
         // the window is resized (see FarDepth.attachDepth).
         boolean made = framebuffer == 0;
         framebuffer = FarDepth.attachDepth(framebuffer, depthTexture);
-        if (made) {
-            GL45C.glNamedFramebufferDrawBuffer(framebuffer, GL11C.GL_NONE);
-            GL45C.glNamedFramebufferReadBuffer(framebuffer, GL11C.GL_NONE);
-        }
-        if (framebufferDepth != depthTexture
-                && GL45C.glCheckNamedFramebufferStatus(framebuffer, GL30C.GL_FRAMEBUFFER) != GL30C.GL_FRAMEBUFFER_COMPLETE) {
+        if (made) GlCalls.noColour(framebuffer);
+        if (framebufferDepth != depthTexture && GlCalls.framebufferStatus(framebuffer) != GL30C.GL_FRAMEBUFFER_COMPLETE) {
             throw new IllegalStateException("the occlusion framebuffer is incomplete");
         }
         framebufferDepth = depthTexture;
@@ -497,8 +492,8 @@ public final class OcclusionQueries {
         if (wordsProgram == 0) {
             wordsProgram = compileWords();
             wordsMatrixLocation = GL20C.glGetUniformLocation(wordsProgram, "viewProjection");
-            boxBuffer = GL45C.glCreateBuffers();
-            wordBuffer = GL45C.glCreateBuffers();
+            boxBuffer = GlCalls.createBuffer();
+            wordBuffer = GlCalls.createBuffer();
         }
         if (corners.capacity() < 8 * n) corners = BufferUtils.createFloatBuffer(8 * Math.max(n, 2 * corners.capacity() / 8));
         if (words.capacity() < n) words = BufferUtils.createIntBuffer(Math.max(n, 2 * words.capacity()));
@@ -510,17 +505,17 @@ public final class OcclusionQueries {
         }
         corners.flip();
         // Streamed: a new store each frame, so the GPU never waits for the last frame's draw.
-        GL45C.glNamedBufferData(boxBuffer, corners, GL15C.GL_STREAM_DRAW);
+        GlCalls.bufferData(boxBuffer, corners, GL15C.GL_STREAM_DRAW);
         words.clear();
         for (int i = 0; i < n; i++) words.put(0);
         words.flip();
-        GL45C.glNamedBufferData(wordBuffer, words, GL15C.GL_STREAM_COPY);
+        GlCalls.bufferData(wordBuffer, words, GL15C.GL_STREAM_COPY);
 
         Words batch = WORDS_FREE.isEmpty() ? new Words() : WORDS_FREE.pop();
-        if (batch.buffer == 0) batch.buffer = GL45C.glCreateBuffers();
+        if (batch.buffer == 0) batch.buffer = GlCalls.createBuffer();
         if (batch.capacity < 4L * n) {
             batch.capacity = 4L * Math.max(n, 64);
-            GL45C.glNamedBufferData(batch.buffer, batch.capacity, GL15C.GL_STREAM_READ);
+            GlCalls.bufferData(batch.buffer, batch.capacity, GL15C.GL_STREAM_READ);
         }
 
         int storage = GL11C.glGetInteger(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING);
@@ -540,7 +535,7 @@ public final class OcclusionQueries {
             GL31C.glDrawArraysInstanced(GL11C.GL_TRIANGLES, 0, 36, n);
             // The fragments' writes are made visible to the copy that follows.
             GL42C.glMemoryBarrier(GL42C.GL_BUFFER_UPDATE_BARRIER_BIT);
-            GL45C.glCopyNamedBufferSubData(wordBuffer, batch.buffer, 0, 0, 4L * n);
+            GlCalls.copyBuffer(wordBuffer, batch.buffer, 4L * n);
         } finally {
             for (int i = 0; i < 2; i++) {
                 if (bound[i] != 0 && sizes[i] > 0) {
@@ -571,7 +566,7 @@ public final class OcclusionQueries {
             if (words.capacity() < n) words = BufferUtils.createIntBuffer(n);
             words.clear();
             words.limit(n);
-            GL45C.glGetNamedBufferSubData(batch.buffer, 0, words);
+            GlCalls.readBuffer(batch.buffer, words);
             for (int i = 0; i < n; i++) remember(batch.keys[i], words.get(i) != 0, batch.frame);
             Arrays.fill(batch.keys, 0, n, null);
             batch.size = 0;

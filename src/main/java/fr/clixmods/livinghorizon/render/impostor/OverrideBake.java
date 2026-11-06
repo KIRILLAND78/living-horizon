@@ -300,8 +300,7 @@ final class OverrideBake implements BakeBackend {
             org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ROW_LENGTH, 0);
             org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_PIXELS, 0);
             org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_SKIP_ROWS, 0);
-            org.lwjgl.opengl.GL45C.glGetTextureImage(gl.glId(), 0, org.lwjgl.opengl.GL11C.GL_DEPTH_COMPONENT,
-                    org.lwjgl.opengl.GL11C.GL_FLOAT, out);
+            fr.clixmods.livinghorizon.compat.GlCalls.readDepth(gl.glId(), out);
         } finally {
             org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ALIGNMENT, alignment);
             org.lwjgl.opengl.GL11C.glPixelStorei(org.lwjgl.opengl.GL11C.GL_PACK_ROW_LENGTH, rowLength);

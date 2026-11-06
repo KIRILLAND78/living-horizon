@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Client
+
+#### Fixed
+- **Crash on Mac fixed** — The game no longer crashes about a second after you join a world on a Mac or an older graphics card. Distant mobs still hide behind the far terrain there, and *Skip Hidden Mobs* keeps working.
+
 ## 0.16.0 — 2026-11-05
 
 ### Client
