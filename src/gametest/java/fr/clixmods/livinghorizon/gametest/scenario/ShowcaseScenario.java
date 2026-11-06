@@ -414,6 +414,8 @@ public final class ShowcaseScenario implements Scenario {
             config.distantMobs = defaults.distantMobs;
             config.distantEntities = defaults.distantEntities;
             config.skyBirds = Boolean.parseBoolean(env("LH_SHOW_BIRDS", "true"));
+            // Every kind a player's game shows, monsters too: the tests start from the shared ones only.
+            config.resetMobs(fr.clixmods.livinghorizon.ui.MobList.all());
         });
     }
 
