@@ -60,6 +60,7 @@ public final class ShowcaseScenario implements Scenario {
                 hideGui(minecraft, true);
                 minecraft.options.renderDistance().set(distance);
                 minecraft.options.fov().set(fov);
+                noChunkFade(minecraft);
             });
             context.waitTicks(40);
             if (fr.clixmods.livinghorizon.platform.Platform.isModLoaded("distanthorizons")) {
@@ -248,6 +249,19 @@ public final class ShowcaseScenario implements Scenario {
             return "render distance " + value.getMethod("getValue").invoke(distance) + " chunks";
         } catch (ReflectiveOperationException e) {
             return "could not set its render distance: " + e;
+        }
+    }
+
+    /**
+     * New chunks fade in over a time of their own from 26.x: at a few frames a second they
+     * are still dithered in the shot. Through reflection, the option being missing before.
+     */
+    private static void noChunkFade(net.minecraft.client.Minecraft minecraft) {
+        try {
+            Object option = minecraft.options.getClass().getMethod("chunkSectionFadeInTime").invoke(minecraft.options);
+            option.getClass().getMethod("set", Object.class).invoke(option, 0.0);
+        } catch (ReflectiveOperationException e) {
+            // No fade on this version.
         }
     }
 
