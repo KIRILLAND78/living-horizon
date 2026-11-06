@@ -178,10 +178,11 @@ public final class ShowcaseScenario implements Scenario {
     /** The top of the floor under a point (scanning down), and 1 when it is lava; null when none. */
     private static int @org.jspecify.annotations.Nullable [] floor(ServerLevel level, int x, int z, int from) {
         for (int y = from; y > level.getMinY() + 4; y--) {
-            var state = level.getBlockState(new BlockPos(x, y, z));
+            BlockPos at = new BlockPos(x, y, z);
+            var state = level.getBlockState(at);
             if (state.isAir()) continue;
             boolean lava = state.getFluidState().is(net.minecraft.tags.FluidTags.LAVA);
-            if (!lava && !state.blocksMotion()) continue;
+            if (!lava && state.getCollisionShape(level, at).isEmpty()) continue;
             return new int[]{y + 1, lava ? 1 : 0};
         }
         return null;
