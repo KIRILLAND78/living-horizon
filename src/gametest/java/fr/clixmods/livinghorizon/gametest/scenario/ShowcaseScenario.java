@@ -131,11 +131,10 @@ public final class ShowcaseScenario implements Scenario {
                     if (!level.getBlockState(new BlockPos(cx, eye, cz)).isAir()) continue;
                     for (int i = 0; i < 24; i++) {
                         double angle = i * Math.PI * 2 / 24;
-                        int free = 0;
-                        for (int t = 4; t <= 220; t += 4) {
-                            BlockPos at = BlockPos.containing(cx - Math.sin(angle) * t, eye - t * 0.08, cz + Math.cos(angle) * t);
-                            if (!level.getBlockState(at).isAir() || !level.getBlockState(at.above(12)).isAir()) break;
-                            free = t;
+                        // Open straight ahead and towards both edges of the picture.
+                        int free = Integer.MAX_VALUE;
+                        for (double turn : new double[]{-0.45, 0, 0.45}) {
+                            free = Math.min(free, open(level, cx, cz, eye, angle + turn) + (turn == 0 ? 0 : 40));
                         }
                         if (free > found[3]) found = new double[]{cx, cz, angle, free};
                     }
@@ -174,6 +173,17 @@ public final class ShowcaseScenario implements Scenario {
                 env("LH_SHOW_NETHER_PITCH", "8")));
         fly(world);
         frame(context, world, both, "nether");
+    }
+
+    /** How far the view is open from a point at eye height, in blocks. */
+    private static int open(ServerLevel level, double cx, double cz, int eye, double angle) {
+        int free = 0;
+        for (int t = 4; t <= 220; t += 4) {
+            BlockPos at = BlockPos.containing(cx - Math.sin(angle) * t, eye - t * 0.08, cz + Math.cos(angle) * t);
+            if (!level.getBlockState(at).isAir() || !level.getBlockState(at.above(12)).isAir()) break;
+            free = t;
+        }
+        return free;
     }
 
     /** The top of the floor under a point (scanning down), and 1 when it is lava; null when none. */
