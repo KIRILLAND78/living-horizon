@@ -66,6 +66,24 @@ public final class ShowcaseScenario implements Scenario {
                 Scene.log("showcase Distant Horizons: " + dhDistance(envInt("LH_SHOW_DH_RD", 48)));
             }
 
+            for (String dimension : env("LH_SHOW_DIMS", "overworld").split(",")) {
+                switch (dimension.trim()) {
+                    case "nether" -> nether(context, world, both);
+                    case "end" -> end(context, world, both);
+                    default -> overworld(context, world, villages, away, above, both);
+                }
+            }
+        } finally {
+            context.runOnClient(minecraft -> {
+                hideGui(minecraft, false);
+                minecraft.options.fov().set(70);
+            });
+            context.getInput().resizeWindow(854, 480);
+        }
+    }
+
+    private void overworld(ClientGameTestContext context, TestSingleplayerContext world, int villages, int away, int above,
+                           boolean both) {
             BlockPos origin = BlockPos.ZERO;
             int skipped = 0;
             for (int v = 0; v < villages; v++) {
@@ -91,13 +109,130 @@ public final class ShowcaseScenario implements Scenario {
                 context.waitTicks(200);
                 shoot(context, world, village, away, above, both, "v" + v);
             }
-        } finally {
-            context.runOnClient(minecraft -> {
-                hideGui(minecraft, false);
-                minecraft.options.fov().set(70);
-            });
-            context.getInput().resizeWindow(854, 480);
+    }
+
+    /**
+     * Over a lava sea of the Nether: the direction from a spot above the lava where the view
+     * goes farthest, with striders on the lava, hoglins, piglins and ghasts along it.
+     */
+    private void nether(ClientGameTestContext context, TestSingleplayerContext world, boolean both) {
+        int eye = envInt("LH_SHOW_NETHER_Y", 48);
+        String in = "execute in minecraft:the_nether run ";
+        Scene.command(world, in + "tp @a 0 " + eye + " 0");
+        fly(world);
+        context.waitTicks(200);
+        // The farthest open view at eye height, from a few spots round the origin.
+        double[] best = world.getServer().computeOnServer(server -> {
+            ServerLevel level = server.getLevel(net.minecraft.world.level.Level.NETHER);
+            double[] found = {0, 0, 0, -1};
+            for (int cx = -192; cx <= 192; cx += 96) {
+                for (int cz = -192; cz <= 192; cz += 96) {
+                    if (!level.getBlockState(new BlockPos(cx, eye, cz)).isAir()) continue;
+                    for (int i = 0; i < 24; i++) {
+                        double angle = i * Math.PI * 2 / 24;
+                        int free = 0;
+                        for (int t = 4; t <= 220; t += 4) {
+                            BlockPos at = BlockPos.containing(cx - Math.sin(angle) * t, eye - t * 0.08, cz + Math.cos(angle) * t);
+                            if (!level.getBlockState(at).isAir() || !level.getBlockState(at.above(12)).isAir()) break;
+                            free = t;
+                        }
+                        if (free > found[3]) found = new double[]{cx, cz, angle, free};
+                    }
+                }
+            }
+            return found;
+        });
+        double cx = best[0], cz = best[1], angle = best[2], free = best[3];
+        float yaw = (float) Math.toDegrees(angle);
+        Scene.log(String.format(Locale.ROOT, "showcase nether camera %.0f %d %.0f yaw %.0f, open for %.0f blocks", cx, eye, cz, yaw, free));
+        Random random = new Random(11);
+        String[] kinds = {"strider", "hoglin", "piglin", "strider", "zombified_piglin", "hoglin", "strider", "piglin"};
+        double fx = -Math.sin(angle), fz = Math.cos(angle), rx = -fz, rz = fx;
+        for (int h = 0; h < kinds.length; h++) {
+            double along = 45 + random.nextDouble() * Math.max(60, free + 40);
+            double side = (random.nextDouble() - 0.5) * along * 0.7;
+            double hx = cx + fx * along + rx * side, hz = cz + fz * along + rz * side;
+            for (int n = 0, count = 3 + random.nextInt(4); n < count; n++) {
+                int x = (int) Math.floor(hx + random.nextGaussian() * 4), z = (int) Math.floor(hz + random.nextGaussian() * 4);
+                int[] floor = world.getServer().computeOnServer(server -> floor(server.getLevel(net.minecraft.world.level.Level.NETHER),
+                        x, z, eye + 10));
+                if (floor == null) continue;
+                // Striders on the lava, the others on solid ground.
+                String kind = floor[1] == 1 ? "strider" : kinds[h].equals("strider") ? "hoglin" : kinds[h];
+                Scene.command(world, in + "summon " + kind + " " + (x + 0.5) + " " + floor[0] + " " + (z + 0.5)
+                        + " {Rotation:[" + random.nextInt(360) + "f,0f]}");
+            }
         }
+        for (int n = 0; n < 4; n++) {
+            double along = 70 + random.nextDouble() * Math.max(60, free);
+            double side = (random.nextDouble() - 0.5) * along * 0.6;
+            Scene.command(world, String.format(Locale.ROOT, in + "summon ghast %.1f %d %.1f", cx + fx * along + rx * side,
+                    eye + 4 + random.nextInt(14), cz + fz * along + rz * side));
+        }
+        Scene.command(world, String.format(Locale.ROOT, in + "tp @a %.1f %d %.1f %.1f %s", cx, eye, cz, yaw,
+                env("LH_SHOW_NETHER_PITCH", "8")));
+        fly(world);
+        frame(context, world, both, "nether");
+    }
+
+    /** The top of the floor under a point (scanning down), and 1 when it is lava; null when none. */
+    private static int @org.jspecify.annotations.Nullable [] floor(ServerLevel level, int x, int z, int from) {
+        for (int y = from; y > level.getMinY() + 4; y--) {
+            var state = level.getBlockState(new BlockPos(x, y, z));
+            if (state.isAir()) continue;
+            boolean lava = state.getFluidState().is(net.minecraft.tags.FluidTags.LAVA);
+            if (!lava && !state.blocksMotion()) continue;
+            return new int[]{y + 1, lava ? 1 : 0};
+        }
+        return null;
+    }
+
+    /**
+     * The End's main island from out over the void: the dragon gone, endermen all over the
+     * island, near and far.
+     */
+    private void end(ClientGameTestContext context, TestSingleplayerContext world, boolean both) {
+        String in = "execute in minecraft:the_end run ";
+        int away = envInt("LH_SHOW_END_AWAY", 170), eye = envInt("LH_SHOW_END_Y", 85);
+        double angle = Math.toRadians(Double.parseDouble(env("LH_SHOW_END_ANGLE", "200")));
+        double cx = Math.cos(angle) * away, cz = Math.sin(angle) * away;
+        Scene.command(world, in + "tp @a 0 90 0");
+        fly(world);
+        context.waitTicks(200);
+        Scene.command(world, in + "kill @e[type=ender_dragon]");
+        Random random = new Random(5);
+        int placed = 0;
+        for (int n = 0; n < 400 && placed < envInt("LH_SHOW_ENDERMEN", 40); n++) {
+            int x = (int) (random.nextGaussian() * 60), z = (int) (random.nextGaussian() * 60);
+            int y = world.getServer().computeOnServer(server -> server.getLevel(net.minecraft.world.level.Level.END)
+                    .getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z));
+            if (y < 50 || y > 75) continue;
+            Scene.command(world, in + "summon enderman " + (x + 0.5) + " " + y + " " + (z + 0.5)
+                    + " {Rotation:[" + random.nextInt(360) + "f,0f]}");
+            placed++;
+        }
+        float yaw = (float) Math.toDegrees(Math.atan2(cx, -cz));
+        float pitch = (float) Math.toDegrees(Math.atan2(eye - 62, away)) + Float.parseFloat(env("LH_SHOW_TILT", "-2"));
+        Scene.log(String.format(Locale.ROOT, "showcase end camera %.0f %d %.0f yaw %.0f pitch %.1f, %d endermen", cx, eye, cz, yaw,
+                pitch, placed));
+        Scene.command(world, String.format(Locale.ROOT, in + "tp @a %.1f %d %.1f %.1f %.1f", cx, eye, cz, yaw, pitch));
+        fly(world);
+        frame(context, world, both, "end");
+    }
+
+    /** Waits for the chunks, then the shot with the mod on, and off. */
+    private void frame(ClientGameTestContext context, TestSingleplayerContext world, boolean both, String label) {
+        settle(context, world);
+        on(context);
+        context.waitTicks(60);
+        Scene.screenshot(context, this, label + "-on");
+        if (both) {
+            off(context);
+            context.waitTicks(40);
+            Scene.screenshot(context, this, label + "-off");
+            on(context);
+        }
+        Scene.log("showcase " + label + " " + context.computeOnClient(minecraft -> minecraft.getFps() + " fps"));
     }
 
     /** Distant Horizons' render distance, in chunks, through its API; what it holds afterwards. */
