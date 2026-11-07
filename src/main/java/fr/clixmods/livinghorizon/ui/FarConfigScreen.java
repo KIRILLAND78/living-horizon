@@ -102,7 +102,7 @@ public final class FarConfigScreen extends SideOptionsScreen {
         header(Component.translatable(KEY + "lodSection"));
         list.addSmall(
                 bool("mobLods", c.mobLods, v -> c.mobLods = v),
-                integer("lodLevels", 1, FarConfig.MAX_LOD_LEVELS, c.lodLevels, v -> c.lodLevels = v, false));
+                integer("lodLevels", 1, FarConfig.MAX_LOD_LEVELS, c.lodLevels, v -> c.lodLevels = v, 0));
         // The game draws its own entities through the feature renderers from 1.21.9 only.
         //? if >=1.21.9
         list.addSmall(bool("lodNearby", c.lodNearby, v -> c.lodNearby = v), null);
