@@ -11,7 +11,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
  * Cows in a sealed stone room, which has no sky light, and cows on the open ground beside
  * it; then left behind, so that the mod draws their copies. With "Hide underground mobs"
  * off every copy is drawn, on only those in the open. The copies' outlines show through
- * the room's walls, and a cross marks each one left out.
+ * the room's walls.
  */
 public final class UndergroundScenario implements Scenario {
     private static final int EACH = 4;
@@ -28,7 +28,6 @@ public final class UndergroundScenario implements Scenario {
             config.hideOccludedMobs = false;
             config.impostors = false;
             config.outlineCopies = true;
-            config.outlineLeftOut = true;
         });
         try (TestSingleplayerContext world = Scene.flatWorld(context)) {
             // Set once the world is made: the spawn area at 16 chunks takes too long to prepare here.
