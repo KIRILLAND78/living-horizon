@@ -62,8 +62,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -215,16 +213,17 @@ public final class MobMemory {
     private record Told(Remembered mob, CompletableFuture<CompoundTag> from, String nbt) {
     }
 
-    /** Writes the files, one save after another, off the game's thread. */
-    private static final ExecutorService SAVER = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "Living Horizon mob memory");
-        thread.setDaemon(true);
-        return thread;
-    });
     /** Seconds the save waits for the mobs' data to be read; closing waits twice that for the save. */
     private static final long SAVE_WAIT = 10;
 
-    private static final Gson GSON = new GsonBuilder().create();
+    /** Writes {@code <}, {@code >}, {@code =} and {@code '} as they are, not as {@code \u003c} and so on: saved data is full of them. */
+    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    /**
+     * What the game saves of a mob that never shows on it, left out of the file: a villager's
+     * memories, what villagers say of the players, its trades. A mob scanned from the world
+     * carries them all, several kilobytes for a villager.
+     */
+    private static final Set<String> UNSEEN = Set.of("Brain", "Gossips", "Offers");
     /** Where the game saves a pet's order to sit. */
     private static final String SITTING = "Sitting";
     /** Layout of the file: 1 is the list under {@code "mobs"}, with its version; 0 the bare list before it. */
@@ -278,6 +277,10 @@ public final class MobMemory {
     private final List<Remembered> arriving = new ArrayList<>();
     /** The file being written; null before the first save. */
     private @Nullable CompletableFuture<Void> saving;
+    /** The file, being read as the world opens: its mobs are taken in once it is read ({@link #adoptRead}). */
+    private @Nullable CompletableFuture<List<Remembered>> reading;
+    /** Mobs forgotten while the file was being read: not taken back from it. */
+    private final Set<UUID> forgottenWhileReading = new HashSet<>();
     /** Texts the save made, for their mobs to keep: not made again at the next save. */
     private final Queue<Told> told = new ConcurrentLinkedQueue<>();
     private @Nullable Path file;
@@ -427,10 +430,43 @@ public final class MobMemory {
         // No file yet: the mod has never been in this world.
         firstVisit = !Files.exists(file);
         if (firstVisit) return;
-        for (Remembered mob : read(file)) {
-            // A memory with no world cannot be told from another world's: dropped.
-            if (mob.world != null) mobs.put(mob.id, mob);
+        // Read off the game's thread, a few megabytes on a big server; taken in on a tick.
+        Path from = file;
+        reading = SaveThread.supply(() -> read(from));
+    }
+
+    /**
+     * The mobs of the file, once it is read; {@code wait} for it, as before a save, which must
+     * not write the file without them. A mob met, shared or forgotten since the world opened is
+     * newer than the file, which does not take it back. The file's come first, as the oldest.
+     */
+    private void adoptRead(boolean wait) {
+        CompletableFuture<List<Remembered>> read = reading;
+        if (read == null || (!wait && !read.isDone())) return;
+        reading = null;
+        List<Remembered> saved;
+        try {
+            saved = read.get(SAVE_WAIT, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            saved = List.of();
+        } catch (Exception e) {
+            LivingHorizonClient.LOGGER.warn("Living Horizon: could not read the remembered mobs", e);
+            saved = List.of();
         }
+        Map<UUID, Remembered> merged = new LinkedHashMap<>();
+        for (Remembered mob : saved) {
+            // A memory with no world cannot be told from another world's: dropped.
+            if (mob.world == null || mobs.containsKey(mob.id) || live.containsKey(mob.id)
+                    || forgottenWhileReading.contains(mob.id) || takenAway.contains(mob.id)) continue;
+            merged.put(mob.id, mob);
+        }
+        forgottenWhileReading.clear();
+        if (merged.isEmpty()) return;
+        merged.putAll(mobs);
+        mobs.clear();
+        mobs.putAll(merged);
+        chooseSoon = true;
     }
 
     /**
@@ -477,15 +513,10 @@ public final class MobMemory {
     void close() {
         save();
         // Written before the next world reads its file, or the game quits.
-        CompletableFuture<Void> written = saving;
+        SaveThread.await(saving, SAVE_WAIT * 2, "writing the remembered mobs");
         saving = null;
-        if (written != null) {
-            try {
-                written.get(SAVE_WAIT * 2, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                LivingHorizonClient.LOGGER.warn("Living Horizon: the remembered mobs were not written in time", e);
-            }
-        }
+        reading = null;
+        forgottenWhileReading.clear();
         told.clear();
         foresight.close();
         firstVisit = false;
@@ -568,6 +599,7 @@ public final class MobMemory {
 
     /** Dropped from memory, and from the frame at once rather than at the next choice. */
     private void forget(UUID id) {
+        if (reading != null) forgottenWhileReading.add(id);
         Remembered mob = mobs.remove(id);
         if (mob == null) return;
         if (mob.handover != null) joining.remove(mob.handover);
@@ -850,6 +882,7 @@ public final class MobMemory {
         renderBlocks = renderDistanceBlocks;
         builtNow = 0;
         clock++;
+        adoptRead(false);
         for (Told text; (text = told.poll()) != null; ) {
             // Still the data it was made from: changed since, the mob waits for the next save.
             if (text.mob().parsed == text.from() && text.mob().nbt == null) text.mob().nbt = text.nbt();
@@ -1606,6 +1639,9 @@ public final class MobMemory {
 
     /** Forgets every mob, here and in the file. */
     public void forgetAll() {
+        // What the file held is forgotten too, read or not.
+        reading = null;
+        forgottenWhileReading.clear();
         foresight.forgetAll();
         for (Remembered mob : mobs.values()) mob.gone = true;
         mobs.clear();
@@ -1621,10 +1657,12 @@ public final class MobMemory {
 
     /**
      * Writes the file off the game's thread: here, only what the file keeps of each mob is
-     * copied; the text of their saved data is made and the file written on {@link #SAVER}.
+     * copied; the text of their saved data is made and the file written on {@link SaveThread}.
      */
     private void save() {
         if (file == null) return;
+        // Still being read: its mobs first, or the file would be written without them.
+        adoptRead(true);
         dirty = false;
         List<Saving> kept = new ArrayList<>(mobs.size());
         for (Remembered mob : mobs.values()) {
@@ -1632,7 +1670,7 @@ public final class MobMemory {
             if (!SeedDraws.foreseen(mob.id)) kept.add(new Saving(mob.saved(), mob, mob.nbt == null ? mob.parsed : null));
         }
         Path to = file;
-        saving = CompletableFuture.runAsync(() -> writeFile(to, kept), SAVER);
+        saving = SaveThread.run(() -> writeFile(to, kept));
     }
 
     /**
@@ -1651,7 +1689,20 @@ public final class MobMemory {
         }
     }
 
-    /** On {@link #SAVER}: the mobs' texts, then the file. A mob whose data does not read is left out. */
+    /**
+     * The saved data a mob is written with: all of it but what never shows ({@link #UNSEEN}), in
+     * a copy: the mob's own is never changed. Any thread; the save's, as it is a full copy.
+     */
+    static CompoundTag written(CompoundTag tag) {
+        boolean unseen = false;
+        for (String key : UNSEEN) unseen |= tag.contains(key);
+        if (!unseen) return tag;
+        CompoundTag kept = tag.copy();
+        for (String key : UNSEEN) kept.remove(key);
+        return kept;
+    }
+
+    /** On {@link SaveThread}: the mobs' texts, then the file. A mob whose data does not read is left out. */
     private void writeFile(Path to, List<Saving> kept) {
         long started = System.nanoTime();
         long bytes = -1;
@@ -1662,7 +1713,7 @@ public final class MobMemory {
                 if (copy.nbt == null) {
                     CompoundTag tag = tagOf(saving.from(), started + TimeUnit.SECONDS.toNanos(SAVE_WAIT));
                     if (tag == null) continue;
-                    copy.nbt = tag.toString();
+                    copy.nbt = written(tag).toString();
                     told.add(new Told(saving.mob(), saving.from(), copy.nbt));
                 }
                 written.add(copy);

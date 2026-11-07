@@ -52,8 +52,9 @@ public final class RestingCrowdScenario implements Scenario {
             // Made a few a frame, not all in one: every puppet is there within a few seconds.
             int waited = 0;
             long missing = -1;
-            for (; waited < 400 && missing != 0; waited += 10) {
+            while (waited < 400 && missing != 0) {
                 context.waitTicks(10);
+                waited += 10;
                 missing = context.computeOnClient(minecraft -> {
                     RestingPlayers resting = FarPlayerTracker.get().resting();
                     return resting.shown().stream().filter(spot -> resting.made(spot) == null).count();

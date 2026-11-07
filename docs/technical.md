@@ -244,7 +244,7 @@ on this client: nothing is sent to the server, they block nobody, and nothing ca
 ### Where they come from
 
 - Remembered per server, across sessions, in `config/livinghorizon/resting/<server>.json`
-  (`track/RestingPlayers`), written every five seconds when something changed, not at each
+  (`track/RestingPlayers`), written off the game's thread every five seconds when something changed, not at each
   player the server reports. Each spot names its dimension by id (layout 2); a file of layout
   1 numbered them, and its spots in 3, a dimension of a mod, are left out.
 - On a server with the mod, even players who logged off before you joined are there: the
@@ -456,8 +456,13 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   look is put into text only when the server says something new of it.
 - **Saved data.** Kept as the game's tag, as it was saved or read, and never changed after:
   every copy is loaded from it, and a change (a pet sitting down) makes a new tag. It becomes
-  text only when the file is written, every minute and when the world closes, on a thread of
-  its own (`MobMemory.SAVER`): the game's thread only copies what the file keeps of each mob.
+  text only when the file is written, every minute and when the world closes, on the files'
+  thread (`track/SaveThread`): the game's thread only copies what the file keeps of each mob.
+  What never shows (`MobMemory.UNSEEN`: a villager's memories, gossip and trades, which a
+  scanned mob carries) is left out of the file, never out of the tag.
+- **Opening.** The file is read on the files' thread too, and its mobs taken in on the first
+  tick after (`MobMemory.adoptRead`): a mob met, shared or forgotten in between is newer than
+  the file, which never brings it back. A save waits for the read first.
   A mob that leaves joins the list drawn at once, all those that left in one go added together.
 - **Forgetting.** Coming back within range of a remembered mob that is not there forgets it.
 - **Every kind of mob**, the game's and other mods', is shown from the start, walking, then left
@@ -1546,6 +1551,8 @@ The settings, the remembered mobs and the players who logged off are written thr
 
 - into a temporary file beside the real one, then moved over it: a game that stops while
   saving leaves the old file whole;
+- the remembered mobs and the players who logged off on a thread of their own, one file after
+  another (`track/SaveThread`), which closing a world waits for, 20 seconds at most;
 - a file that does not read (a typo made by hand, a file cut short) is moved aside as
   `<name>.bad`, said in the log, and the mod starts from the defaults or an empty list;
 - the lists keep the version of their layout, `{"version": 1, "mobs": [...]}` and
