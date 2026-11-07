@@ -7,7 +7,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * How a remembered mob that flies keeps flying far away, where a walker plays one of the
  * {@link MobAnimations}: a phantom circles above the spot where it was last seen, a ghast
- * drifts about it, a bird of another mod ({@link ModdedMobs}) wheels over it. Like an
+ * drifts about it, the ender dragon soars round it, a bird of another mod ({@link ModdedMobs})
+ * wheels over it. Like an
  * animation, nothing is decided while it plays: where it is at a tick comes from its seed
  * and the clock alone, so each one flies its own way, and the same way every time. No
  * ground is read: what is around it in the air is not known.
@@ -21,7 +22,9 @@ public enum MobFlight {
     /** A ghast: slow loops through the air about its spot, never quite the same twice. */
     DRIFT,
     /** A bird: figures of eight over its spot, at a bird's pace, rising and dipping. */
-    WHEEL;
+    WHEEL,
+    /** The ender dragon: wide rounds about its spot, as it circles the island, climbing and diving. */
+    SOAR;
 
     /** Blocks a phantom's circle is above where it was last seen: down low, it had come for a player. */
     static final double CIRCLE_RISE = 5;
@@ -35,6 +38,10 @@ public enum MobFlight {
     static final double WHEEL_REACH_MIN = 6, WHEEL_REACH_MAX = 11;
     /** Blocks a tick a bird flies along its figure of eight, about: the pace Ambient Birds flies its own at. */
     static final double WHEEL_PACE = 0.22;
+    /** Blocks across the middle of the dragon's round, at least and at most: the pillars of the End stand 43 out. */
+    static final double SOAR_RADIUS_MIN = 30, SOAR_RADIUS_MAX = 45;
+    /** Blocks a tick the dragon flies round, near the pace the game gives it, and blocks up and down it goes. */
+    static final double SOAR_PACE = 0.45, SOAR_RISE = 5;
 
     /**
      * The flight of a remembered mob's type, null for one that walks or swims: the game's
@@ -44,6 +51,7 @@ public enum MobFlight {
         return switch (type) {
             case "minecraft:phantom" -> CIRCLE;
             case "minecraft:ghast", "minecraft:happy_ghast" -> DRIFT;
+            case "minecraft:ender_dragon" -> SOAR;
             default -> ModdedMobs.flight(type);
         };
     }
@@ -94,6 +102,18 @@ public enum MobFlight {
                 out[0] = along * Math.cos(line) - across * Math.sin(line);
                 out[1] = WHEEL_RISE + 2 * Math.sin(t * 0.027 + line * 1.3);
                 out[2] = along * Math.sin(line) + across * Math.cos(line);
+            }
+            case SOAR -> {
+                // Its own round, either way, wider and tighter now and then.
+                double radius = SOAR_RADIUS_MIN + Math.floorMod(seed >> 3, (long) (SOAR_RADIUS_MAX - SOAR_RADIUS_MIN + 1));
+                double turn = ((seed >> 9 & 1) == 0 ? 1 : -1) * SOAR_PACE / radius;
+                double phase = Math.floorMod(seed >> 13, 628L) / 100.0;
+                double r = radius + 6 * Math.sin(t * 0.004 + phase);
+                double angle = t * turn + phase;
+                out[0] = r * Math.cos(angle);
+                // Climbing on one side and diving on the other, the height changing as it goes.
+                out[1] = SOAR_RISE * Math.sin(angle * 2 + phase) + 2 * Math.sin(t * 0.017 + phase * 1.3);
+                out[2] = r * Math.sin(angle);
             }
         }
     }

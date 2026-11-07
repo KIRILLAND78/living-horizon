@@ -15,6 +15,7 @@ class MobFlightTest {
         assertEquals(MobFlight.CIRCLE, MobFlight.of("minecraft:phantom"));
         assertEquals(MobFlight.DRIFT, MobFlight.of("minecraft:ghast"));
         assertEquals(MobFlight.DRIFT, MobFlight.of("minecraft:happy_ghast"));
+        assertEquals(MobFlight.SOAR, MobFlight.of("minecraft:ender_dragon"));
         assertNull(MobFlight.of("minecraft:cow"));
         assertNull(MobFlight.of("minecraft:parrot"));
     }
@@ -85,6 +86,25 @@ class MobFlightTest {
             assertTrue(farthest >= MobFlight.WHEEL_REACH_MIN - 0.1, "reaches " + farthest);
             double pace = flown / 20_000;
             assertTrue(pace > 0.12 && pace < 0.3, "pace " + pace);
+        }
+    }
+
+    @Test
+    void theDragonSoarsInWideRoundsAboutItsSpot() {
+        double[] at = new double[3];
+        for (long seed : SEEDS) {
+            double low = Double.MAX_VALUE, high = -Double.MAX_VALUE;
+            for (int t = 0; t < 20_000; t += 7) {
+                MobFlight.SOAR.at(seed, t, at);
+                double across = Math.hypot(at[0], at[2]);
+                assertTrue(across >= MobFlight.SOAR_RADIUS_MIN - 6.001 && across <= MobFlight.SOAR_RADIUS_MAX + 6.001,
+                        "round of " + across);
+                assertTrue(Math.abs(at[1]) <= MobFlight.SOAR_RISE + 2.001, "up " + at[1]);
+                low = Math.min(low, at[1]);
+                high = Math.max(high, at[1]);
+            }
+            // It climbs and dives, never level all the way round.
+            assertTrue(high - low > MobFlight.SOAR_RISE, "rises " + (high - low));
         }
     }
 
