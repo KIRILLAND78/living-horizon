@@ -244,6 +244,8 @@ public final class RestingPlayers {
     /** Test players the host of this world placed, which its server shares: among {@link #fakes}. */
     private final Set<String> fromHost = new HashSet<>();
     private @Nullable Path file;
+    /** The file being written; null before the first save. */
+    private @Nullable CompletableFuture<Void> saving;
     private @Nullable Spot lookedAt;
     /** Who is drawn now ({@link #shown}). */
     private List<Spot> shown = List.of();
@@ -320,6 +322,9 @@ public final class RestingPlayers {
 
     void close() {
         if (dirty) save();
+        // Written before the next server reads its file, or the game quits.
+        SaveThread.await(saving, 20, "writing the offline players");
+        saving = null;
         // Asked again on the next server, if they rest there too.
         for (String name : queued) lookups.remove(key(name));
         queued.clear();
@@ -778,20 +783,27 @@ public final class RestingPlayers {
 
     // --- File --------------------------------------------------------------------------
 
+    /**
+     * Writes the file off the game's thread ({@link SaveThread}): here, only the list of spots is
+     * copied, which never change once made (a new one replaces them).
+     */
     private void save() {
         if (file == null) return;
         dirty = false;
-        long started = Profile.begin(Profile.Section.SAVE_RESTING);
-        long bytes = -1;
-        try {
-            List<Spot> kept = spots.values().stream().filter(spot -> !fakes.contains(key(spot.name()))).toList();
-            JsonStore.write(file, writer -> write(kept, writer));
-            bytes = Files.size(file);
-        } catch (IOException e) {
-            LivingHorizonClient.LOGGER.warn("Could not write {}", file, e);
-        } finally {
-            Profile.end(Profile.Section.SAVE_RESTING, started, bytes);
-        }
+        List<Spot> kept = spots.values().stream().filter(spot -> !fakes.contains(key(spot.name()))).toList();
+        Path to = file;
+        saving = SaveThread.run(() -> {
+            long started = System.nanoTime();
+            long bytes = -1;
+            try {
+                JsonStore.write(to, writer -> write(kept, writer));
+                bytes = Files.size(to);
+            } catch (IOException | RuntimeException e) {
+                LivingHorizonClient.LOGGER.warn("Could not write {}", to, e);
+            } finally {
+                Profile.record(Profile.Section.SAVE_RESTING, System.nanoTime() - started, bytes);
+            }
+        });
     }
 
     /**

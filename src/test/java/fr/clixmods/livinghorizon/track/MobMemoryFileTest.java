@@ -1,5 +1,7 @@
 package fr.clixmods.livinghorizon.track;
 
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -12,6 +14,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The file of the remembered mobs keeps its version, reads the older layout, and is kept aside when damaged. */
@@ -79,5 +82,35 @@ class MobMemoryFileTest {
         Files.writeString(other, "{\"players\": []}");
         assertEquals(List.of(), MobMemory.read(other));
         assertTrue(Files.exists(folder.resolve("other.json.bad")));
+    }
+
+    @Test
+    void writesSavedDataAsItIs() throws IOException {
+        MobMemory.Remembered mob = horse();
+        mob.nbt = "{CustomName:'<a=b>'}";
+        StringWriter out = new StringWriter();
+        MobMemory.write(List.of(mob), out);
+        assertTrue(out.toString().contains("<a=b>"), out.toString());
+        Path file = folder.resolve("plain.json");
+        Files.writeString(file, out.toString());
+        assertEquals(mob.nbt, MobMemory.read(file).get(0).nbt);
+    }
+
+    @Test
+    void leavesOutWhatNeverShows() {
+        CompoundTag villager = new CompoundTag();
+        villager.putInt("Variant", 3);
+        villager.put("Brain", new CompoundTag());
+        villager.put("Gossips", new ListTag());
+        villager.put("Offers", new CompoundTag());
+        CompoundTag written = MobMemory.written(villager);
+        assertTrue(written.contains("Variant"));
+        assertFalse(written.contains("Brain") || written.contains("Gossips") || written.contains("Offers"));
+        // The mob's own data is never changed: its copies are built from it.
+        assertTrue(villager.contains("Brain") && villager.contains("Gossips") && villager.contains("Offers"));
+
+        CompoundTag horse = new CompoundTag();
+        horse.putInt("Variant", 3);
+        assertSame(horse, MobMemory.written(horse));
     }
 }
