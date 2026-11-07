@@ -16,7 +16,8 @@ import java.util.List;
 /**
  * A crowd of players who logged off on rafts with a chest, more than the 128 sheets the players
  * once had room for, on a lake 150 blocks off, past the impostor distance: every one of them is
- * a picture, rider and raft together, none a model.
+ * a picture, rider and raft together, none a model. Their puppets are made a few a frame, and
+ * every one is there within a few seconds.
  */
 public final class RestingCrowdScenario implements Scenario {
     /** The flat world's grass is the block below this one. */
@@ -47,7 +48,21 @@ public final class RestingCrowdScenario implements Scenario {
             Scene.command(world, "ride @p dismount");
             Scene.command(world, "kill @e[type=bamboo_chest_raft]");
             Scene.command(world, "tp @a 0.5 " + GROUND + " 0.5 0 5");
-            context.waitTicks(60);
+
+            // Made a few a frame, not all in one: every puppet is there within a few seconds.
+            int waited = 0;
+            long missing = -1;
+            for (; waited < 400 && missing != 0; waited += 10) {
+                context.waitTicks(10);
+                missing = context.computeOnClient(minecraft -> {
+                    RestingPlayers resting = FarPlayerTracker.get().resting();
+                    return resting.shown().stream().filter(spot -> resting.made(spot) == null).count();
+                });
+            }
+            Scene.log("restingcrowd: " + (missing == 0 ? "every puppet made" : missing + " puppets never made")
+                    + " within " + waited + " ticks");
+            if (missing != 0) throw new AssertionError("restingcrowd: " + missing + " puppets never made");
+            context.waitTicks(Math.max(0, 60 - waited));
 
             List<String> models = new ArrayList<>();
             for (int i = 0; i < 120; i++) {

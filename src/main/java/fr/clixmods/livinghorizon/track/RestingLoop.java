@@ -22,6 +22,14 @@ import java.util.function.Supplier;
 final class RestingLoop {
     /** Ticks before a ground read with columns missing is read again. */
     private static final int READ_AGAIN = 600;
+    /**
+     * Grounds all the loops together start reading per tick, at most: each copies the blocks
+     * around it on the game's thread first. Joining a server with many players who logged off
+     * would read them all at once.
+     */
+    static final int READS_PER_TICK = 2;
+    /** Grounds still to be read this tick, by every loop: set again by {@link #nextTick()}. Game's thread. */
+    private static int readsLeft = READS_PER_TICK;
     /** On the spot: ticks one stance lasts, and how far it turns from the way it faced, at most. */
     private static final int STANCE = 160;
     private static final long TURN = 120;
@@ -67,12 +75,20 @@ final class RestingLoop {
         body = homeYaw;
     }
 
+    /** A new tick: the loops may read {@link #READS_PER_TICK} grounds again, the first to ask first. */
+    static void nextTick() {
+        readsLeft = READS_PER_TICK;
+    }
+
     /**
      * One tick of the loop; how far it moved. {@code free} is for a figure that flies or
      * floats: it keeps the spot's height instead of following the ground.
      */
     double tick(int clock, boolean free) {
-        if (pending == null && (choice == null || !choice.complete() && clock >= readAgain)) pending = planner.get();
+        if (pending == null && (choice == null || !choice.complete() && clock >= readAgain) && readsLeft > 0) {
+            readsLeft--;
+            pending = planner.get();
+        }
         if (pending != null && pending.isDone()) {
             MobPaths.Choice read = pending.getNow(null);
             pending = null;

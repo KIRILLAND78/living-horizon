@@ -599,6 +599,11 @@ public final class RestingPlayers {
 
     // --- Puppets -----------------------------------------------------------------------
 
+    /** The puppet of one of {@link #spots()}, or null when it was not made yet. */
+    public @Nullable RestingPuppet made(Spot spot) {
+        return puppets.get(spot);
+    }
+
     /** The puppet of one of {@link #spots()}, made the first time it is asked for. */
     public RestingPuppet puppet(ClientLevel level, Spot spot) {
         RestingPuppet puppet = puppets.get(spot);
@@ -683,6 +688,8 @@ public final class RestingPlayers {
         // Sections copied per tick by all of them together, to look around. Each tick another
         // goes first, so that the same few never take it all.
         int[] work = {WORK};
+        // The grounds their loops read, a few a tick: the one going first this tick reads first.
+        RestingLoop.nextTick();
         Minecraft minecraft = Minecraft.getInstance();
         Entity camera = minecraft.getCameraEntity();
         // The one you look at looks back.
