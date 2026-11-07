@@ -702,7 +702,10 @@ public final class GhostRenderer {
                 if (game) DebugMarks.mark(entity, Mark.GAME);
                 continue;
             }
-            if (entity.isRemoved() || entity.isInvisible() || entity.isPassenger() || entity.isVehicle()) continue;
+            if (entity.isRemoved() || entity.isInvisible()) continue;
+            // A mount with a player on it is drawn with that player; a villager in a minecart,
+            // a cow in a boat, each on its own.
+            if ((entity.isPassenger() || entity.isVehicle()) && carriesPlayer(entity.getRootVehicle())) continue;
             // Its copy is still walking up to it, and drawn in its place.
             if (memory.hides(entity)) continue;
             EntityType<?> type = entity.getType();
@@ -1288,6 +1291,15 @@ public final class GhostRenderer {
     public static boolean alwaysRender(Entity entity) {
         FarConfig config = FarConfig.get();
         return config.enabled && config.renderTrackedVehiclesFar && carriesOtherPlayer(entity, 0);
+    }
+
+    /** A player, or something carrying one, however deep. */
+    private static boolean carriesPlayer(Entity root) {
+        if (root instanceof AbstractClientPlayer) return true;
+        for (Entity passenger : root.getIndirectPassengers()) {
+            if (passenger instanceof AbstractClientPlayer) return true;
+        }
+        return false;
     }
 
     private static boolean carriesOtherPlayer(Entity entity, int depth) {

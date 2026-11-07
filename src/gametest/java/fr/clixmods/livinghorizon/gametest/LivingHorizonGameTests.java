@@ -30,6 +30,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.ImpostorTurnScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LanShareScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MannequinsScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.MinecartsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MoreEggsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LightingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.PhotonVoxyScenario;
@@ -146,7 +147,8 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new ServerWithoutModScenario(),
             new PerfScenario(),
             new BenchmarkScenario(),
-            new BenchmarkWorldScenario());
+            new BenchmarkWorldScenario(),
+            new MinecartsScenario());
 
     @Override
     public void runTest(ClientGameTestContext context) {
