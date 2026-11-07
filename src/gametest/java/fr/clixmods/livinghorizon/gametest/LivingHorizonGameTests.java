@@ -55,6 +55,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.RestingMountScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.RestingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.RestingSocialScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.RestingTouchScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.RestingEdgeScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SeedCrowdScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SeedMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ServerWithoutModScenario;
@@ -115,6 +116,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new RestingLoopScenario(),
             new RestingCrowdScenario(),
             new RestingTouchScenario(),
+            new RestingEdgeScenario(),
             new RestingSocialScenario(),
             new ShoreScenario(),
             new RestKeptScenario(),
