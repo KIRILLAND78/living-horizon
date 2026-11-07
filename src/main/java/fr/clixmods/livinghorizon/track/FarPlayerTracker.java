@@ -128,6 +128,7 @@ public final class FarPlayerTracker {
             resting.forgetPuppets();
             mobs.forgetPuppets();
             LodWorld.clear();
+            Underground.clear();
             level = current;
             String joined = serverKey(minecraft);
             if (!joined.equals(server)) {

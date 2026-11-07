@@ -136,6 +136,7 @@ public final class FarConfigScreen extends SideOptionsScreen {
         list.addSmall(
                 integer("maxDistantMobs", 0, FarConfig.MAX_MOBS, c.maxDistantMobs, v -> c.maxDistantMobs = v, FarConfig.UNLIMITED_MOBS),
                 bool("rememberNamedMobs", c.rememberNamedMobs, v -> c.rememberNamedMobs = v));
+        list.addSmall(bool("hideUndergroundMobs", c.hideUndergroundMobs, v -> c.hideUndergroundMobs = v));
         list.addBig(distance(Shape.AROUND, reach("mobMaxDistance", c.mobMaxDistance, v -> c.mobMaxDistance = v)));
         list.addBig(unit("animationMinPixels", "pixels", 0, 40, c.animationMinPixels, v -> c.animationMinPixels = v));
         list.addBig(distance(Shape.AROUND, reach("animationMaxDistance", c.animationMaxDistance, v -> c.animationMaxDistance = v)));
