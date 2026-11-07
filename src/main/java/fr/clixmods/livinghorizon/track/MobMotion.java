@@ -25,6 +25,9 @@ import org.jspecify.annotations.Nullable;
  * <p>Walks, or hops: a slime, a magma cube or a rabbit covers the same way in hops, as its
  * kind does ({@link MobGait}), and waits on the ground between two. A phantom or a ghast
  * flies instead, along its {@link MobFlight}, facing and tilted the way it goes.
+ *
+ * <p>Headings here are the way the mob faces. The ender dragon's yaw points behind it, so
+ * what is read from its yaw and written into it is turned round ({@link MobGait#backwards}).
  */
 final class MobMotion {
     /** Degrees a body turns in a tick, at most. */
@@ -53,6 +56,8 @@ final class MobMotion {
     /** Where the server last had a mob it moves, and how fast to walk to reach it by the next answer. */
     private double aimX = Double.NaN, aimZ = Double.NaN, pace;
     private @Nullable MobGait gait;
+    /** Degrees from the way it faces to its yaw: 180 for the dragon, 0 for any other. */
+    private float backwards;
     /** Ticks since it left the ground in a hop, -1 on the ground. */
     private int air = -1;
     /** Ticks still to wait before the next hop, and hops made so far. */
@@ -110,22 +115,36 @@ final class MobMotion {
      */
     void jump(LivingEntity puppet, MobMemory.Remembered mob) {
         settled = false;
+        fit(puppet);
         place(mob);
         air = -1;
         lift = 0;
         apply(puppet, 0);
         puppet.setOldPosAndRot();
-        puppet.yBodyRotO = body;
-        puppet.yHeadRotO = head;
+        puppet.yBodyRotO = body + backwards;
+        puppet.yHeadRotO = head + backwards;
+        MobGait.moved(puppet);
     }
 
     private void place(MobMemory.Remembered mob) {
         x = mob.x;
         y = mob.y;
         z = mob.z;
-        body = mob.yaw;
-        head = Float.isNaN(mob.head) ? mob.yaw : mob.head;
+        body = faces(mob.yaw);
+        head = faces(Float.isNaN(mob.head) ? mob.yaw : mob.head);
         placed = true;
+    }
+
+    /** What it is drawn as, read once from its first puppet: how it moves and how its yaw is turned. */
+    private void fit(LivingEntity puppet) {
+        if (gait != null) return;
+        gait = MobGait.of(puppet);
+        backwards = MobGait.backwards(puppet);
+    }
+
+    /** The way a mob faces, from its yaw. */
+    private float faces(float yaw) {
+        return yaw - backwards;
     }
 
     /**
@@ -134,12 +153,13 @@ final class MobMotion {
      * walking and turning to where its loop has got to rather than jumping.
      */
     void held(LivingEntity puppet, MobMemory.Remembered mob) {
+        fit(puppet);
         if (!placed) place(mob);
         x = puppet.getX();
         y = puppet.getY();
         z = puppet.getZ();
-        body = puppet.yBodyRot;
-        head = puppet.yHeadRot;
+        body = faces(puppet.yBodyRot);
+        head = faces(puppet.yHeadRot);
         pitch = puppet.getXRot();
         air = -1;
         lift = 0;
@@ -185,8 +205,8 @@ final class MobMotion {
      */
     void tick(LivingEntity puppet, MobMemory.Remembered mob, MobPaths.@Nullable Choice choice, int clock, boolean roam,
               boolean tiny, float home) {
+        fit(puppet);
         if (!placed) place(mob);
-        if (gait == null) gait = MobGait.of(puppet);
         following = 0;
         settled = false;
         if (flight != null && roam && !mob.simulated) {
@@ -207,7 +227,7 @@ final class MobMotion {
 
         // Where the animation has it now.
         double tx = mob.x, tz = mob.z;
-        float facing = mob.yaw;
+        float facing = faces(mob.yaw);
         boolean walking = false, grazing = false;
         boolean followed = mob.simulated;
         MobAnimations.Animation animation = roam && choice != null && !followed ? choice.animation() : null;
@@ -222,13 +242,13 @@ final class MobMotion {
         } else if (roam && choice != null && !followed) {
             // Nowhere to walk: a slow turn on the spot now and then, a different one each time.
             int round = Math.floorDiv(own + offset, TURN_ROUND);
-            facing = mob.yaw + (Math.floorMod(mix(seed, round), 5L) - 2) * 35f;
+            facing = faces(mob.yaw) + (Math.floorMod(mix(seed, round), 5L) - 2) * 35f;
         }
         if (home > 0) {
             // Close to the hand-over: back towards the spot where the real one was last seen.
             tx = Mth.lerp(home, tx, mob.x);
             tz = Mth.lerp(home, tz, mob.z);
-            if (home >= 1) facing = mob.yaw;
+            if (home >= 1) facing = faces(mob.yaw);
             grazing &= home < 0.01f;
         }
 
@@ -269,7 +289,7 @@ final class MobMotion {
         float turnTo = going ? (float) (Mth.atan2(z - fromZ, x - fromX) * Mth.RAD_TO_DEG) - 90f : facing;
         body = Mth.approachDegrees(body, turnTo, walking || going || followed ? TURN : 4f);
         if (followed) {
-            head = Mth.approachDegrees(head, Float.isNaN(mob.head) ? body : mob.head, TURN);
+            head = Mth.approachDegrees(head, Float.isNaN(mob.head) ? body : faces(mob.head), TURN);
         } else {
             float look = grazing ? 0 : glance(seed, own + offset) * (walking || catching ? 0.3f : 1f) * (1 - home);
             head = Mth.approachDegrees(head, body + look, 8f);
@@ -314,7 +334,7 @@ final class MobMotion {
             tiltTo = (float) (Mth.atan2(my, across) * Mth.RAD_TO_DEG);
         } else if (home >= 1) {
             // Waiting at its spot for the real one: turned as it was seen.
-            turnTo = mob.yaw;
+            turnTo = faces(mob.yaw);
             tiltTo = 0f;
         } else {
             // Hanging where its flight has it: the way its flight goes on.
@@ -338,8 +358,8 @@ final class MobMotion {
      */
     boolean follow(LivingEntity puppet, MobMemory.Remembered mob, Entity real) {
         settled = false;
+        fit(puppet);
         if (!placed) place(mob);
-        if (gait == null) gait = MobGait.of(puppet);
         double tx = real.getX(), ty = real.getY(), tz = real.getZ();
         double dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz);
         double pace = Math.hypot(real.getX() - real.xo, real.getZ() - real.zo);
@@ -355,11 +375,11 @@ final class MobMotion {
             y += (ty - y) * 0.5;
         }
         land(d - step);
-        float yaw = real instanceof LivingEntity living ? living.yBodyRot : real.getYRot();
+        float yaw = faces(real instanceof LivingEntity living ? living.yBodyRot : real.getYRot());
         // Facing the way it walks, and the way the real one faces on the last stretch.
         float turnTo = d > 1.5 ? (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90f : yaw;
         body = Mth.approachDegrees(body, turnTo, TURN);
-        float headTo = real instanceof LivingEntity living ? living.yHeadRot : yaw;
+        float headTo = real instanceof LivingEntity living ? faces(living.yHeadRot) : yaw;
         head = Mth.approachDegrees(head, d > 1.5 ? body : headTo, 10f);
         pitch = Mth.lerp(0.3f, pitch, real.getXRot());
         apply(puppet, Math.hypot(x - fromX, z - fromZ));
@@ -374,10 +394,10 @@ final class MobMotion {
         puppet.yHeadRotO = puppet.yHeadRot;
         // Where it already stands, the game would only make it the same box again.
         if (puppet.getX() != x || puppet.getY() != y + lift || puppet.getZ() != z) puppet.setPos(x, y + lift, z);
-        puppet.setYRot(body);
+        puppet.setYRot(body + backwards);
         puppet.setXRot(pitch);
-        puppet.yBodyRot = body;
-        puppet.yHeadRot = head;
+        puppet.yBodyRot = body + backwards;
+        puppet.yHeadRot = head + backwards;
         // Legs as it moves, even still: moved by the server or walking back to its spot, a mob
         // with its legs at rest slides. Standing, they are at rest anyway.
         Puppets.walk(puppet, (float) Math.min(moved * 4.0, 1.0), 0.4f, puppet.isBaby() ? 3f : 1f);

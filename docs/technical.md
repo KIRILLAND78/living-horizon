@@ -676,13 +676,19 @@ below), and other flyers and swimmers get a flat disc at their own height.
 - **Gaits** (`track/MobGait`): each kind covers the way as its real one does. Most walk.
   Slimes, magma cubes and rabbits hop: still on the ground between two hops and along an arc
   in the air, a slime stretching as it leaves the ground and squashing as it lands, a
-  rabbit's legs kicking. A chicken flaps while it steps up or down a block. Impostors are
-  baked with all of it at rest.
+  rabbit's legs kicking. A chicken flaps while it steps up or down a block. The ender dragon
+  beats its wings at the pace its own tick gives them (slower the faster it flies, quicker as
+  it climbs) and records its heights and headings each tick, which its renderer reads to turn
+  its body and bend its neck and tail; its yaw points behind it, so `MobMotion` turns what it
+  reads from it and writes into it by 180 degrees (`MobGait.backwards`). Impostors are baked
+  with all of it at rest; the dragon is never one (`GhostRenderer.unpictured`).
 - **Flying** (`track/MobFlight`): a phantom circles 5 blocks above where it was last seen, 7 to
   13 blocks out, either way round, now wider, now tighter, rising and dipping; a ghast drifts
   in slow loops within 10 blocks of its spot, 3 up or down; a bird of another mod
   (`ModdedMobs`) flies figures of eight 6 blocks above its spot, 6 to 11 blocks out, at a bird's
-  pace (0.22 blocks a tick, Ambient Birds' own), 2 up or down. Like an animation, where it is
+  pace (0.22 blocks a tick, Ambient Birds' own), 2 up or down; the ender dragon soars in rounds
+  30 to 45 blocks out, either way round, at 0.45 blocks a tick, climbing and diving 5 blocks on
+  either side. Like an animation, where it is
   comes from its UUID and the clock alone, and no ground is read. It faces where it flies and
   tilts as it climbs or dives, and flies back to its spot as the player comes near.
 - **No teleporting**: when the server reports a drawn mob somewhere else, its copy walks to

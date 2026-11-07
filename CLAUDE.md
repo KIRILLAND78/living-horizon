@@ -656,6 +656,11 @@ come back, add it here in the same pull request: this file is what the next sess
   answers. Far, resting and logged-off player puppets are not ticked
   either, on every version (`Player.xCloak` before 1.21.9): not covered yet, and `cape` cannot
   just take any `ClientAvatarEntity`, since live players go through the same `extract` and tick.
+- **The ender dragon frozen far away** (gliding with still wings, always facing one way): its
+  renderer reads its wing clock (`flapTime`) and the heights and yaws its tick records
+  (`flightHistory`, `positions` before 1.21.2), never its yaw, and a puppet never ticks.
+  `MobGait.fly` does that part of its tick; its yaw points behind it (`MobGait.backwards`), and
+  it is never a picture. The `dragon` scenario checks it.
 - **Distant pets standing up** (a cat or wolf told to sit, its copy far away standing and
   strolling): the game saves the order to sit from `orderedToSit`, which only the server sets, so a
   save made on the client says `Sitting:0b`. `MobMemory.onUnload` writes `isInSittingPose()` into

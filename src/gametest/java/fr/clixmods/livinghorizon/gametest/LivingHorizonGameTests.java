@@ -16,6 +16,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.DhFogScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.FarFogScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.FollowedMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.HandoverScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.DragonScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.FlyersScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.GaitsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MobFileScenario;
@@ -140,6 +141,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new GaitsScenario(),
             new StillMobsScenario(),
             new FlyersScenario(),
+            new DragonScenario(),
             new StrandedScenario(),
             new EasterEggsScenario(),
             new MoreEggsScenario(),

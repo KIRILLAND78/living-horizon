@@ -61,6 +61,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.Vec3;
@@ -586,6 +587,15 @@ public final class GhostRenderer {
         return MobFlight.pictured(entity) || !(entity instanceof LivingEntity) || IceAndFire.flies(entity);
     }
 
+    /**
+     * Never a picture: the ender dragon, whose body turns, bends and beats its wings along its
+     * flight, read from what it went through and not from where it faces, which no picture turned
+     * view by view shows. There is one at most, and it stays a model.
+     */
+    private static boolean unpictured(Entity entity) {
+        return entity instanceof EnderDragon;
+    }
+
     /** Past the distance set in the options; 0 is no limit. */
     private static boolean tooFar(Entity entity, Vec3 eye, int limit) {
         return limit > 0 && entity.distanceToSqr(eye) > (double) limit * limit;
@@ -1005,7 +1015,7 @@ public final class GhostRenderer {
         if (!config.distantMobs && !config.distantEntities) return;
         for (MobMemory.Remembered mob : FarPlayerTracker.get().mobs().shown()) {
             Entity puppet = mob.puppet();
-            if (puppet == null || !config.shows(creature(puppet))
+            if (puppet == null || !config.shows(creature(puppet)) || unpictured(puppet)
                     || !(creature(puppet) ? config.impostors : config.impostorEntities)) continue;
             ImpostorKey key = ImpostorKey.of(puppet);
             if (!fromHeights(puppet)) {
@@ -1070,7 +1080,7 @@ public final class GhostRenderer {
                                     double dx, double dy, double dz, float facing) {
         // A glider is tilted along its flight, which no picture baked standing shows.
         if (!ImpostorAtlas.usable() || entity.isPassenger() || entity.isVehicle()
-                || entity instanceof LivingEntity glider && glider.isFallFlying()
+                || entity instanceof LivingEntity glider && glider.isFallFlying() || unpictured(entity)
                 || !drawable(minecraft.getEntityRenderDispatcher(), entity)) {
             return false;
         }
