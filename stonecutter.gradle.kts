@@ -134,6 +134,8 @@ stonecutter parameters {
                 "\\bnet\\.minecraft\\.world\\.entity\\.npc\\.villager\\.AbstractVillager\\b", "net.minecraft.world.entity.npc.AbstractVillager")
         replace("\\bnet\\.minecraft\\.world\\.entity\\.vehicle\\.AbstractBoat\\b", "net.minecraft.world.entity.vehicle.boat.AbstractBoat",
                 "\\bnet\\.minecraft\\.world\\.entity\\.vehicle\\.boat\\.AbstractBoat\\b", "net.minecraft.world.entity.vehicle.AbstractBoat")
+        replace("\\bnet\\.minecraft\\.world\\.entity\\.vehicle\\.AbstractMinecart\\b", "net.minecraft.world.entity.vehicle.minecart.AbstractMinecart",
+                "\\bnet\\.minecraft\\.world\\.entity\\.vehicle\\.minecart\\.AbstractMinecart\\b", "net.minecraft.world.entity.vehicle.AbstractMinecart")
         replace("\\bnet\\.minecraft\\.world\\.entity\\.animal\\.Parrot\\b", "net.minecraft.world.entity.animal.parrot.Parrot",
                 "\\bnet\\.minecraft\\.world\\.entity\\.animal\\.parrot\\.Parrot\\b", "net.minecraft.world.entity.animal.Parrot")
         replace("\\bnet\\.minecraft\\.world\\.entity\\.animal\\.Chicken\\b", "net.minecraft.world.entity.animal.chicken.Chicken",

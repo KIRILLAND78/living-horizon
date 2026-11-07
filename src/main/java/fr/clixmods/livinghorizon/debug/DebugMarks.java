@@ -33,6 +33,8 @@ public final class DebugMarks {
     public enum Mark {
         /** A copy, drawn by the mod. */
         FAKE(0xFF55FF55),
+        /** A copy of an animal foreseen from the seed, in land nobody explored: supposed, not seen. */
+        FORESEEN(0xFFFF77AA),
         /** A real mob the server sends but the game does not draw, drawn by the mod. */
         LIVE(0xFF55FFFF),
         /** A distant player, drawn by the mod. */
@@ -76,6 +78,8 @@ public final class DebugMarks {
     private static final int[] LAST = new int[Mark.values().length];
     private static double eyeX, eyeY, eyeZ, pixelsPerRadian;
     private static boolean boxes, labels, crosses;
+    /** Which kinds get a box and a label, read at the start of each frame. */
+    private static final boolean[] BOXED = new boolean[Mark.values().length];
 
     private DebugMarks() {
     }
@@ -90,6 +94,18 @@ public final class DebugMarks {
     public static boolean gameMobs() {
         FarConfig config = FarConfig.get();
         return config.debugGameMobs && (config.debugBoxes || config.debugLabels);
+    }
+
+    /** Whether a kind of mark gets its box and label, as chosen in the Boxes screen. */
+    static boolean boxed(FarConfig config, Mark mark) {
+        return switch (mark) {
+            case GAME -> config.debugGameMobs;
+            case LIVE -> config.boxLiveMobs;
+            case FAKE -> config.boxCopies;
+            case FORESEEN -> config.boxForeseen;
+            case PLAYER -> config.boxPlayers;
+            default -> config.boxLeftOut;
+        };
     }
 
     /** Wants the mobs left out of the frame altogether, like the spare ones: only for boxes, labels and crosses. */
@@ -108,6 +124,7 @@ public final class DebugMarks {
             case GAME -> config.outlineGameMobs;
             case LIVE -> config.outlineLiveMobs;
             case FAKE -> config.outlineCopies;
+            case FORESEEN -> config.outlineForeseen;
             case PLAYER -> config.outlinePlayers;
             default -> false;
         };
@@ -127,6 +144,7 @@ public final class DebugMarks {
         pixelsPerRadian = pixels;
         boxes = config.debugBoxes;
         labels = config.debugLabels;
+        for (Mark mark : Mark.values()) BOXED[mark.ordinal()] = boxed(config, mark);
         crosses = config.outlineLeftOut;
         java.util.Arrays.fill(COUNTS, 0);
     }
@@ -140,6 +158,11 @@ public final class DebugMarks {
         return LAST[mark.ordinal()];
     }
 
+    /** Counted for the panel, with nothing drawn round it. */
+    public static void tally(Mark mark) {
+        COUNTS[mark.ordinal()]++;
+    }
+
     public static void mark(Entity entity, Mark mark) {
         mark(entity.getX(), entity.getY(), entity.getZ(), entity.getBbWidth(), entity.getBbHeight(), entity.getType(), mark);
     }
@@ -147,6 +170,7 @@ public final class DebugMarks {
     public static void mark(double x, double y, double z, double width, double height, EntityType<?> type, Mark mark) {
         COUNTS[mark.ordinal()]++;
         boolean cross = crosses && mark.leftOut;
+        boolean boxes = DebugMarks.boxes && BOXED[mark.ordinal()], labels = DebugMarks.labels && BOXED[mark.ordinal()];
         if (!boxes && !labels && !cross) return;
         double dx = x - eyeX, dy = y + height / 2 - eyeY, dz = z - eyeZ;
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);

@@ -35,6 +35,8 @@ public final class ServerConfig {
     public static final String FILE = "livinghorizon-server.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Logger LOGGER = LoggerFactory.getLogger("Living Horizon");
+    /** The farthest {@link #seedMobRange}. */
+    public static final int MAX_SEED_MOB_RANGE = 2048;
 
     /** Online players shared past the server's view distance. */
     public boolean sharePlayers = true;
@@ -54,6 +56,20 @@ public final class ServerConfig {
     public boolean shareOfflinePlayers = true;
     /** Remembered mobs shared past the server's view distance. */
     public boolean shareMobs = true;
+    /**
+     * The animals the world puts in the chunks not generated yet, worked out from the seed,
+     * shared with the remembered mobs ({@code track/SeedMobs}).
+     */
+    public boolean seedMobs = true;
+    /** How far from a player those animals are worked out and shared, in blocks: 0 to 2048. */
+    public int seedMobRange = 512;
+    /**
+     * The world's seed sent to the players with the mod, for their game to foresee those animals
+     * anywhere itself (where they look, where their far terrain reaches, a scan), where the
+     * dimension's generator is the game's own. Off by default: the seed tells everything about
+     * the world to whoever has it.
+     */
+    public boolean shareSeed = false;
 
     /** {@link #hiddenPlayers}, lower case. */
     public Set<String> hiddenNames() {
@@ -72,6 +88,7 @@ public final class ServerConfig {
     /** Values a hand made out of range, put back in it. */
     private void tidy() {
         if (playerRange < 0) playerRange = 0;
+        seedMobRange = Math.max(0, Math.min(seedMobRange, MAX_SEED_MOB_RANGE));
         if (hiddenPlayers == null) hiddenPlayers = new ArrayList<>();
         if (hiddenDimensions == null) hiddenDimensions = new ArrayList<>();
         hiddenPlayers.removeIf(name -> name == null || name.isBlank());

@@ -152,8 +152,8 @@ tasks {
         val id = project.property("mod.id")
         inputs.property("mod_id", id)
         from(rootProject.file("LICENSE")) { rename { "${it}_$id" } }
-        // The changelog the game shows in its own screen.
-        from(rootProject.file("changelog")) { include("en.md", "fr.md"); into("assets/livinghorizon/changelog") }
+        // The changelog the game shows in its own screen, the waiting entries in it (gradle/target.gradle.kts).
+        from(project.extra["lhChangelog"] as File) { into("assets/livinghorizon/changelog") }
     }
 
     register<Copy>("buildAndCollect") {

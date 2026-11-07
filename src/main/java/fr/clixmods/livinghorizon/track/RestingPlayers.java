@@ -13,6 +13,7 @@ import fr.clixmods.livinghorizon.JsonStore;
 import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.platform.Platform;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -22,6 +23,7 @@ import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -45,6 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
@@ -53,7 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 /**
- * Players who logged off, left where they were last, asleep or sitting.
+ * Players who logged off, left where they were last.
  *
  * <p>Remembered per server, across sessions, in
  * {@code config/livinghorizon/resting/<server>.json}: a friend who logged off yesterday
@@ -71,31 +74,46 @@ public final class RestingPlayers {
      *                 by the server alone, or saved by a version that did not keep it)
      * @param mount    what they rode when they logged off, or null
      * @param gear     what they wore and held ({@link Gear}), or null when not known
+     * @param rest     where they really rest when it is not their spot (in the air, in water), or
+     *                 null when it is, or not known yet
      */
     public record Spot(String name, @Nullable UUID id, @Nullable String textures, @Nullable String signature,
                        String dimension, double x, double y, double z, float yaw, long lastSeen,
-                       @Nullable Mount mount, @Nullable List<String> gear) {
+                       @Nullable Mount mount, @Nullable List<String> gear, @Nullable Rest rest) {
 
+        public Spot(String name, @Nullable UUID id, @Nullable String textures, @Nullable String signature,
+                    String dimension, double x, double y, double z, float yaw, long lastSeen,
+                    @Nullable Mount mount, @Nullable List<String> gear) {
+            this(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, null);
+        }
+
+        /** Somewhere else: where they rest there is found again. */
         Spot moved(String dimension, double x, double y, double z, float yaw, @Nullable Mount mount) {
-            return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear);
+            return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, null);
         }
 
         /** The same player, wearing this skin. */
         Spot skinned(Property skin) {
             return new Spot(name, id, Profiles.value(skin), Profiles.signature(skin), dimension, x, y, z, yaw, lastSeen,
-                    mount, gear);
+                    mount, gear, rest);
         }
 
         /** The same player, in this skin and this gear, logged off at {@code lastSeen} when it is known. */
         Spot looking(@Nullable String textures, @Nullable String signature, @Nullable List<String> gear, long lastSeen) {
             return new Spot(name, id, textures, signature, dimension, x, y, z, yaw,
-                    lastSeen != 0 ? lastSeen : this.lastSeen, mount, gear);
+                    lastSeen != 0 ? lastSeen : this.lastSeen, mount, gear, rest);
         }
 
         Spot dressed(GameProfile profile) {
             Property skin = skinOf(profile);
             return new Spot(name, Profiles.id(profile), skin == null ? textures : Profiles.value(skin),
-                    skin == null ? signature : Profiles.signature(skin), dimension, x, y, z, yaw, lastSeen, mount, gear);
+                    skin == null ? signature : Profiles.signature(skin), dimension, x, y, z, yaw, lastSeen, mount, gear,
+                    rest);
+        }
+
+        /** The same player, resting there. */
+        Spot resting(@Nullable Rest rest) {
+            return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, rest);
         }
 
         GameProfile profile() {
@@ -126,10 +144,22 @@ public final class RestingPlayers {
          * (in its frame); null when the game cannot save it on the client.
          */
         static @Nullable Mount of(Entity vehicle, Vec3 seat, float yaw, float riderYaw) {
+            return of(vehicle, seat, yaw, riderYaw, Vec3.ZERO, null);
+        }
+
+        /**
+         * The same, knowing how fast its rider last went ({@code going}, blocks a tick) and
+         * whether it was off the ground ({@code aloft}; null to take the entity's word): what
+         * the client sees of a vehicle the server moves says little of either.
+         */
+        static @Nullable Mount of(Entity vehicle, Vec3 seat, float yaw, float riderYaw, Vec3 going,
+                                  @Nullable Boolean aloft) {
             try {
-                return new Mount(EntityType.getKey(vehicle.getType()).toString(),
-                        EntityNbt.save(vehicle, vehicle.level()).toString(), RestingMount.dataOf(vehicle),
-                        seat.x, seat.y, seat.z, yaw, riderYaw);
+                CompoundTag saved = EntityNbt.save(vehicle, vehicle.level());
+                RestingMount.keepMotion(vehicle, saved, going);
+                if (aloft != null) saved.putBoolean("OnGround", !aloft);
+                return new Mount(EntityType.getKey(vehicle.getType()).toString(), saved.toString(),
+                        RestingMount.dataOf(vehicle), seat.x, seat.y, seat.z, yaw, riderYaw);
             } catch (RuntimeException e) {
                 // A modded mount the game cannot save from the client: they rest on foot.
                 return null;
@@ -149,7 +179,8 @@ public final class RestingPlayers {
 
         /** Whether a mount flies, as a happy ghast does: it stays in the air, at its height. */
         public static boolean flies(Entity vehicle) {
-            return RestingMount.kindOf(vehicle) == RestingMount.Kind.AIR;
+            RestingMount.Kind kind = RestingMount.kindOf(vehicle);
+            return kind == RestingMount.Kind.AIR || kind == RestingMount.Kind.HOVER || kind == RestingMount.Kind.CIRCLE;
         }
 
         /** The same mount, turned to {@code facing}, its rider turned with it. */
@@ -164,6 +195,21 @@ public final class RestingPlayers {
             Vec3 seat = rider.position().subtract(vehicle.position()).yRot((float) Math.toRadians(vehicle.getYRot()));
             float body = rider instanceof LivingEntity living ? living.yBodyRot : rider.getYRot();
             return of(vehicle, seat, vehicle.getYRot(), body - vehicle.getYRot());
+        }
+    }
+
+    /**
+     * Where a player who logged off in the air or in water really rests: the ground under them
+     * (they logged off flying, with an elytra or not), the nearest shore, or a boat on the water
+     * when there is none. Found once the blocks around are loaded, or guessed from the far world
+     * before; kept with the spot, so that it holds far away, when the figure is made again,
+     * and in the next game.
+     *
+     * @param boat in a boat, {@code y} being the water's surface
+     */
+    public record Rest(double x, double y, double z, boolean boat) {
+        Vec3 at() {
+            return new Vec3(x, y, z);
         }
     }
 
@@ -198,6 +244,8 @@ public final class RestingPlayers {
     /** Test players the host of this world placed, which its server shares: among {@link #fakes}. */
     private final Set<String> fromHost = new HashSet<>();
     private @Nullable Path file;
+    /** The file being written; null before the first save. */
+    private @Nullable CompletableFuture<Void> saving;
     private @Nullable Spot lookedAt;
     /** Who is drawn now ({@link #shown}). */
     private List<Spot> shown = List.of();
@@ -274,6 +322,9 @@ public final class RestingPlayers {
 
     void close() {
         if (dirty) save();
+        // Written before the next server reads its file, or the game quits.
+        SaveThread.await(saving, 20, "writing the offline players");
+        saving = null;
         // Asked again on the next server, if they rest there too.
         for (String name : queued) lookups.remove(key(name));
         queued.clear();
@@ -320,13 +371,13 @@ public final class RestingPlayers {
             Mount seen = known != null ? known.mount() : null;
             mount = seen != null && (shared == null || seen.type().equals(shared.type())) ? seen : Mount.of(shared);
         }
-        if (known != null && known.dimension().equals(report.dimension())
+        boolean there = known != null && known.dimension().equals(report.dimension())
                 && Math.abs(known.x() - report.x()) < 0.05 && Math.abs(known.y() - report.y()) < 0.05
-                && Math.abs(known.z() - report.z()) < 0.05 && (known.mount() == null) == (mount == null)
-                && (look == null || looksLike(known, look))) {
-            return;
-        }
-        Spot spot = known != null
+                && Math.abs(known.z() - report.z()) < 0.05 && (known.mount() == null) == (mount == null);
+        if (there && (look == null || looksLike(known, look))) return;
+        // Where they rest is kept while they stay put: only how they look changed.
+        Spot spot = there ? known
+                : known != null
                 ? known.moved(report.dimension(), report.x(), report.y(), report.z(), report.yaw(), mount)
                 : new Spot(name, null, null, null, report.dimension(), report.x(), report.y(), report.z(), report.yaw(),
                         report.lastSeen(), mount, null);
@@ -553,6 +604,11 @@ public final class RestingPlayers {
 
     // --- Puppets -----------------------------------------------------------------------
 
+    /** The puppet of one of {@link #spots()}, or null when it was not made yet. */
+    public @Nullable RestingPuppet made(Spot spot) {
+        return puppets.get(spot);
+    }
+
     /** The puppet of one of {@link #spots()}, made the first time it is asked for. */
     public RestingPuppet puppet(ClientLevel level, Spot spot) {
         RestingPuppet puppet = puppets.get(spot);
@@ -596,7 +652,7 @@ public final class RestingPlayers {
             double height = switch (puppet.look()) {
                 case STAND, RIDE -> 1.9;
                 case SIT -> 1.3;
-                case LIE, BED -> 0.5;
+                case BED -> 0.5;
             };
             // A sleeper is 1.8 blocks long, whichever way it lies.
             double half = height < 1 ? 1.0 : 0.4;
@@ -623,41 +679,131 @@ public final class RestingPlayers {
     void tick(ClientLevel level, FarConfig config) {
         choose(level, config);
         Set<BlockPos> beds = new HashSet<>();
+        // Where they fish, or walk to fish: one on a stretch of shore.
+        List<Vec3> fishers = new ArrayList<>();
         for (RestingPuppet puppet : puppets.values()) {
             if (puppet.bed() != null) beds.add(puppet.bed());
+            Vec3 fishing = puppet.fishing();
+            if (fishing != null) fishers.add(fishing);
         }
         boolean night = !level.isBrightOutside();
+        // The evening: from late afternoon until dark, when they gather by the fire.
+        boolean evening = !night && Math.floorMod(dayTime(level), 24000L) >= EVENING;
+        RestingPuppet.Around around = new RestingPuppet.Around(beds, fishers, puppets.values(), night, evening);
         // Sections copied per tick by all of them together, to look around. Each tick another
         // goes first, so that the same few never take it all.
         int[] work = {WORK};
-        Entity camera = Minecraft.getInstance().getCameraEntity();
-        List<RestingPuppet> order = new ArrayList<>(puppets.values());
+        // The grounds their loops read, a few a tick: the one going first this tick reads first.
+        RestingLoop.nextTick();
+        Minecraft minecraft = Minecraft.getInstance();
+        Entity camera = minecraft.getCameraEntity();
+        // The one you look at looks back.
+        Player you = minecraft.player;
+        RestingPuppet gazed = gazed(level, you);
+        if (gazed != null) gazed.lookedAt(you.getEyePosition(), you.isShiftKeyDown() || you.isCrouching());
+        List<Spot> order = new ArrayList<>(puppets.keySet());
+        List<Spot> rested = new ArrayList<>();
         int count = order.size();
         int first = count == 0 ? 0 : Math.floorMod(turn++, count);
         for (int i = 0; i < count; i++) {
-            RestingPuppet puppet = order.get((first + i) % count);
+            Spot spot = order.get((first + i) % count);
+            RestingPuppet puppet = puppets.get(spot);
             // Near the camera they live their life; away from it, they play a loop.
             if (camera != null) puppet.near(camera.getEyePosition());
-            puppet.tick(level, config, beds, night, work);
+            // You may shove them out of your way; they never push you.
+            puppet.tick(level, config, around, work, minecraft.player);
+            if (puppet.restFound()) rested.add(spot);
         }
+        for (Spot spot : rested) keepRest(spot, puppets.get(spot).rest());
+    }
+
+    /** Ticks into the day when the evening starts: an hour of the game's before sunset. */
+    private static final long EVENING = 11000;
+
+    /** The time of day in this level, in ticks from dawn, counted from the first day. */
+    private static long dayTime(ClientLevel level) {
+        //? if >=26.1 {
+        /*return level.getDefaultClockTime();
+        *///?} else {
+        return level.getDayTime();
+        //?}
+    }
+
+    /**
+     * Keeps where a player really rests with their spot, found by its puppet: the puppet made
+     * again, far away or in the next game, starts there. The puppet stays the same.
+     */
+    private void keepRest(Spot spot, @Nullable Rest rest) {
+        String key = key(spot.name());
+        if (spots.get(key) != spot || Objects.equals(spot.rest(), rest)) return;
+        Spot kept = spot.resting(rest);
+        spots.put(key, kept);
+        RestingPuppet puppet = puppets.remove(spot);
+        if (puppet != null) puppets.put(kept, puppet);
+        if (lookedAt == spot) lookedAt = kept;
+        shownStale = true;
+        if (!fakes.contains(key)) dirty = true;
+    }
+
+    /** Blocks within which one notices you looking at it: close by, as someone would. */
+    private static final double GAZE = 6;
+
+    /**
+     * The nearest of them under your crosshair, within {@link #GAZE} blocks, living its life
+     * near you, unless a block is in the way; null when none.
+     */
+    private @Nullable RestingPuppet gazed(ClientLevel level, @Nullable Player you) {
+        if (you == null || you.isSpectator()) return null;
+        Vec3 eye = you.getEyePosition();
+        Vec3 end = eye.add(you.getViewVector(1.0f).scale(GAZE));
+        RestingPuppet nearest = null;
+        double best = Double.MAX_VALUE;
+        for (RestingPuppet puppet : puppets.values()) {
+            if (puppet.away() || puppet.level() != level) continue;
+            double height = switch (puppet.look()) {
+                case STAND, RIDE -> 1.9;
+                case SIT -> 1.3;
+                case BED -> 0.6;
+            };
+            // A little wider than it is: a glance its way is enough.
+            AABB box = new AABB(puppet.getX() - 0.5, puppet.getY(), puppet.getZ() - 0.5,
+                    puppet.getX() + 0.5, puppet.getY() + height, puppet.getZ() + 0.5);
+            Optional<Vec3> hit = box.clip(eye, end);
+            if (hit.isEmpty()) continue;
+            double distance = eye.distanceToSqr(hit.get());
+            if (distance >= best) continue;
+            BlockHitResult wall = level.clip(new ClipContext(eye, hit.get(), ClipContext.Block.VISUAL,
+                    ClipContext.Fluid.NONE, you));
+            if (wall.getType() != HitResult.Type.MISS) continue;
+            best = distance;
+            nearest = puppet;
+        }
+        return nearest;
     }
 
     // --- File --------------------------------------------------------------------------
 
+    /**
+     * Writes the file off the game's thread ({@link SaveThread}): here, only the list of spots is
+     * copied, which never change once made (a new one replaces them).
+     */
     private void save() {
         if (file == null) return;
         dirty = false;
-        long started = Profile.begin(Profile.Section.SAVE_RESTING);
-        long bytes = -1;
-        try {
-            List<Spot> kept = spots.values().stream().filter(spot -> !fakes.contains(key(spot.name()))).toList();
-            JsonStore.write(file, writer -> write(kept, writer));
-            bytes = Files.size(file);
-        } catch (IOException e) {
-            LivingHorizonClient.LOGGER.warn("Could not write {}", file, e);
-        } finally {
-            Profile.end(Profile.Section.SAVE_RESTING, started, bytes);
-        }
+        List<Spot> kept = spots.values().stream().filter(spot -> !fakes.contains(key(spot.name()))).toList();
+        Path to = file;
+        saving = SaveThread.run(() -> {
+            long started = System.nanoTime();
+            long bytes = -1;
+            try {
+                JsonStore.write(to, writer -> write(kept, writer));
+                bytes = Files.size(to);
+            } catch (IOException | RuntimeException e) {
+                LivingHorizonClient.LOGGER.warn("Could not write {}", to, e);
+            } finally {
+                Profile.record(Profile.Section.SAVE_RESTING, System.nanoTime() - started, bytes);
+            }
+        });
     }
 
     /**

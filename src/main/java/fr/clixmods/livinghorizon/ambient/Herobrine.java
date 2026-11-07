@@ -28,18 +28,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Easter egg 4: from the second or third day the player lives in a world, every night, a
- * figure in Steve's skin with white eyes stands somewhere far off around them - up to 400
- * blocks - and watches them. Once they look him in the eyes he is gone three to five seconds
- * later, and does not come back for two to four days; until then he comes back every night. He goes
- * as well at dawn, or if they come near. Only on this screen.
+ * Easter egg 4: from the second or third day the player lives in a world, once a day, at any
+ * moment of it, by day or by night, a figure in Steve's skin with white eyes stands somewhere
+ * far off around them - up to 400 blocks - and watches them. Once they look him in the eyes he
+ * is gone three to five seconds later, and does not come back for one to three days; until then
+ * he comes back every day. He goes as well after ten minutes, or if they come near. Only on
+ * this screen.
  *
  * <p>The figure is a player of no one, in the default skin the game picks from its id:
  * Steve's for {@link #STEVE}. The white eyes are two small boxes drawn over its face, the
  * size of the eyes of the skin, however far he stands. His
  * spot is read in the loaded chunks or the far world ({@link Columns}), and must be in
  * sight: through the loaded blocks, or past the far world's terrain ({@link LodWorld#blocked}).
- * His nights are kept by the {@link EggCalendar}; he keeps out of the other easter eggs' way.
+ * His days are kept by {@link Daily}; he may come while another easter egg is under way.
  *
  * <p>Secret: nothing a player reads (settings, README, changelog) says what it is.
  */
@@ -57,6 +58,8 @@ public final class Herobrine {
     private static final int SEARCH = 400;
     /** Ticks he waits, when called, to be seen before he goes anyway. */
     private static final int PATIENCE = 1800;
+    /** Ticks he stands there, not looked at, before he goes: about a night. */
+    private static final int LINGER = 12000;
     /** Glowing and unshaded, the way the game draws a spider's eyes: the white texel of the bird sheet. */
     private static final RenderType EYES = RenderTypes.eyes(Ufo.SHEET);
     /** A pixel of the player model, drawn at 15/16 of its size, in blocks. */
@@ -68,7 +71,7 @@ public final class Herobrine {
     private record Search(List<Vec3> clear, List<Vec3> far) {
     }
 
-    private final EggCalendar calendar;
+    private final Daily daily;
     private final RandomSource random = RandomSource.create();
     private final AtomicReference<Columns.Column @Nullable []> found = new AtomicReference<>();
     private final AtomicReference<boolean @Nullable []> farSight = new AtomicReference<>();
@@ -77,12 +80,15 @@ public final class Herobrine {
     private @Nullable Search search;
     private @Nullable RemotePlayer figure;
     private boolean searching, called;
-    /** Ticks into the night before he comes; -1 by day. */
-    private int wait = -1;
     private int age, leaveIn, searchAge;
 
     Herobrine(EggCalendar calendar) {
-        this.calendar = calendar;
+        this.daily = new Daily(calendar, 4);
+    }
+
+    /** For the game tests: he comes in a second, if today is one of his days. */
+    public void soon() {
+        daily.soon();
     }
 
     /** On his way or there. */
@@ -96,7 +102,7 @@ public final class Herobrine {
     }
 
     /**
-     * Looks for a spot in sight, and stands there once it is read: by night, or because the
+     * Looks for a spot in sight, and stands there once it is read: on his day, or because the
      * player asked ({@code called}: more in front of them, anywhere from {@link #CALLED} to
      * {@link #MAX} blocks off; called again, he goes and stands somewhere else). False if the
      * easter eggs are off.
@@ -134,8 +140,7 @@ public final class Herobrine {
         return true;
     }
 
-    /** {@code free}: no other easter egg under way, so he may come by night. */
-    public void tick(ClientLevel level, LocalPlayer self, boolean enabled, boolean free) {
+    public void tick(ClientLevel level, LocalPlayer self, boolean enabled) {
         RemotePlayer him = figure;
         if (!enabled) {
             figure = null;
@@ -145,13 +150,6 @@ public final class Herobrine {
         if (him != null && him.level() != level) figure = him = null;
         // Gone with the ground under him, once it is no longer drawn.
         if (him != null && !Columns.drawn(level, self, him.getX(), him.getZ())) figure = him = null;
-        boolean night = !level.isBrightOutside();
-        if (!night) {
-            wait = -1;
-        } else if (wait < 0) {
-            // A while into the night: half a minute to a minute and a half.
-            wait = 600 + random.nextInt(1200);
-        }
         if (searching) {
             if (++searchAge > SEARCH) {
                 generation.incrementAndGet();
@@ -163,11 +161,7 @@ public final class Herobrine {
             return;
         }
         if (him == null) {
-            if (night && free && calendar.watcherTonight() && --wait <= 0) {
-                // Tried again in ten seconds if nowhere in sight is found.
-                wait = 200;
-                summon(level, self, false);
-            }
+            if (daily.due()) summon(level, self, false);
             return;
         }
         age++;
@@ -180,14 +174,14 @@ public final class Herobrine {
 
         Vec3 head = new Vec3(him.getX(), him.getY() + 1.6, him.getZ());
         double across = Math.hypot(head.x - self.getX(), head.z - self.getZ());
-        if (across < NEAR || across > LOST || (!called && !night)) {
+        if (across < NEAR || across > LOST || (!called && age > LINGER)) {
             figure = null;
             return;
         }
         if (leaveIn < 0 && lookedAt(level, self, head)) {
             // Seen: three to five seconds more, and not back for days.
             leaveIn = 60 + random.nextInt(41);
-            if (!called) calendar.watcherSeen();
+            if (!called) daily.seen();
         }
         if (leaveIn >= 0 ? --leaveIn <= 0 : called && age > PATIENCE) figure = null;
     }
@@ -248,7 +242,7 @@ public final class Herobrine {
         EggLog.came(4, made.getX(), made.getY(), made.getZ(), self, called);
         age = 0;
         leaveIn = -1;
-        if (!called) calendar.watcherCame();
+        if (!called) daily.came();
     }
 
     /**

@@ -33,7 +33,7 @@ public final class FakeEntitiesDebugEntry implements DebugScreenEntry {
         displayer.addLine(I18n.get("livinghorizon.debug.f3.lod", PolygonStats.triangles(), PolygonStats.fullTriangles(),
                 PolygonStats.gain(), PolygonStats.polygons()));
         displayer.addLine(I18n.get("livinghorizon.debug.f3.levels", DebugHud.levels()));
-        if (config.impostors) {
+        if (config.anyImpostors()) {
             displayer.addLine(I18n.get(ImpostorAtlas.failed() ? "livinghorizon.debug.f3.impostorsFailed"
                     : "livinghorizon.debug.f3.impostors", ImpostorAtlas.sheets(), ImpostorAtlas.waiting()));
         }

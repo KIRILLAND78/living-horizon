@@ -17,8 +17,13 @@ see a living world.
 ### Mobs on the horizon
 
 All mobs are visible from far away, on the game's terrain and **on Voxy and Distant
-Horizons terrain**. This works for any entity Minecraft can draw, mobs from other mods
-included. Choose which ones in *Mobs & Entities...*.
+Horizons terrain**. This works for any entity Minecraft can draw, mobs and vehicles from
+other mods included. Choose which ones in *Mobs & Entities...*.
+
+Land nobody has explored yet has its mobs too. The mod guesses from the world's seed which
+mobs the game will put there, and where. A guessed mob may not be there when you arrive.
+This needs the mod on the server, and works in single player. Look through a spyglass to
+see them farther away, or press *Guess Nearby Mobs* to show them up to 1024 chunks around.
 
 ### Players at any distance
 
@@ -52,10 +57,11 @@ through them, they cannot block or push you, and mobs ignore them.
 ### Simplified Entities
 
 Many games draw far objects as **impostors**: a flat picture instead of a 3D model. Living
-Horizon does the same for far mobs and players. It costs much less to draw, so you can show
-many more entities.
+Horizon does the same for far mobs, vehicles and players, each with its own switch:
+*Simplified Mobs*, *Simplified Entities* and *Simplified Players*. It costs much less to draw,
+so you can show many more entities.
 
-Keep *Simplified Entities* on if you raise *Mob Render Distance* or *Max Mobs*. A *Preset*
+Keep *Simplified Mobs* on if you raise *Mob Render Distance* or *Max Mobs*. A *Preset*
 (*Low*, *Normal*, *High*, *Ultra*) sets everything at once.
 
 **Careful:** *Max Mobs* and *Mob Render Distance* both on *Unlimited* can crash the game.
@@ -100,14 +106,17 @@ choose what it shares. Changes apply after a few seconds, without a restart.
 | `hiddenDimensions` | `[]` | Dimensions where nothing is shared, such as `["minecraft:the_nether"]` |
 | `shareOfflinePlayers` | `true` | Shares players who logged off where they left |
 | `shareMobs` | `true` | Shares the remembered mobs past the view distance |
+| `seedMobs` | `true` | Shares the mobs of land nobody has explored yet, guessed from the seed |
+| `seedMobRange` | `512` | How far from a player those mobs are shared, in blocks, up to `2048` |
+| `shareSeed` | `false` | Sends the world's seed to the players with the mod, so their game guesses those mobs anywhere. Whoever has the seed knows the whole world |
 
 These settings only change what the server sends. Within the view distance, players see
 each other as usual. What a player's game saw on its own stays in its memory.
 
 ## Getting started
 
-1. Install the file for your game version and loader (see *Requirements*). Voxy and Distant
-   Horizons are optional.
+1. Install the file for your game version and loader (see *Requirements*). Voxy, Distant
+   Horizons, Lodistance and Ecstatic are optional.
 2. Keep the default settings. *Restore Defaults* puts them back.
 
 Open the settings from the Options screen, Mod Menu, Sodium's *Video Settings* (Sodium 0.8
@@ -124,7 +133,7 @@ and later) or `/livinghorizon config`.
 
 - Minecraft 1.20 to 1.21.11 and 26.1 to 26.3.
 - Fabric or Quilt (with [Fabric API](https://modrinth.com/mod/fabric-api)), NeoForge or Forge.
-- [Voxy](https://modrinth.com/mod/voxy) or [Distant Horizons](https://modrinth.com/mod/distanthorizons): optional.
+- [Voxy](https://modrinth.com/mod/voxy), [Distant Horizons](https://modrinth.com/mod/distanthorizons), [Lodistance](https://www.curseforge.com/minecraft/mc-mods/lodistance) or [Ecstatic](https://modrinth.com/mod/ecstatic): optional.
 - [Mod Menu](https://modrinth.com/mod/modmenu): optional, on Fabric and Quilt.
 
 Download from the [releases](https://github.com/MC-Skin-Creator/living-horizon/releases)
@@ -151,9 +160,16 @@ page, one file per game version and loader:
 |---|---|
 | [Voxy](https://modrinth.com/mod/voxy) | Mobs and players are visible on its terrain. |
 | [Distant Horizons](https://modrinth.com/mod/distanthorizons) | From 2.3 on. Mobs and players are visible on its terrain. |
-| Iris and shader packs | Photon and Complementary checked. |
+| [Lodistance](https://www.curseforge.com/minecraft/mc-mods/lodistance) | Fabric, 26.3. Mobs and players are visible on its terrain, with OpenGL and without shaders. |
+| [Ecstatic](https://modrinth.com/mod/ecstatic) | NeoForge, 1.21.1, single player. Mobs are visible on its terrain, without shaders. |
+| [Bobby](https://modrinth.com/mod/bobby) | Mobs and players are visible on the terrain it keeps past the server's view distance. |
+| [Iris](https://modrinth.com/mod/iris) | Shader packs work, such as the two below. |
+| [Photon](https://modrinth.com/shader/photon-shader) | Shader pack. Checked: it works. |
+| [Complementary Unbound](https://modrinth.com/shader/complementary-unbound) | Shader pack. Checked: it works. |
 | [Sodium](https://modrinth.com/mod/sodium) | From 0.8, the settings are also in Sodium's *Video Settings*. |
 | GeckoLib | Works. From 1.21.2 to 1.21.8 its mobs are not drawn far away yet ([#67](https://github.com/MC-Skin-Creator/living-horizon/issues/67)). |
+| [Immersive Aircraft](https://modrinth.com/mod/immersive-aircraft) | Its aircraft stay visible far away, where you left them. |
+| [Ambient Birds](https://modrinth.com/mod/ambient-birds) | Its birds keep flying far away. |
 
 Mobs from other mods should work. Mods not tested yet are listed under the
 [`mod compatibility`](https://github.com/MC-Skin-Creator/living-horizon/labels/mod%20compatibility)
@@ -192,9 +208,9 @@ Entities*).
 <details>
 <summary>How far does it show mobs and players?</summary>
 
-Mobs: 512 blocks by default, up to *Unlimited* with *Mob Render Distance*. Players: any
-distance by default, which *Player Render Distance* can limit. A mob only shows once your
-game or the server has seen it.
+Mobs: 512 blocks by default, up to *Unlimited* with *Mob Render Distance*. Players, boats and
+vehicles: any distance by default, which *Player Render Distance* and *Entity Render Distance*
+can limit. A mob only shows once your game or the server has seen it.
 
 </details>
 
@@ -203,7 +219,7 @@ game or the server has seen it.
 <details>
 <summary>Does it work with my mod?</summary>
 
-Most likely. Voxy, Distant Horizons, Sodium, Iris and shader packs work with it (see
+Most likely. Voxy, Distant Horizons, Lodistance, Ecstatic, Bobby, Sodium, Iris and shader packs work with it (see
 *Compatibility*). Living Horizon only adds its own figures: it does not change how other
 mods draw the world. Mods not tested yet are listed under the
 [`mod compatibility`](https://github.com/MC-Skin-Creator/living-horizon/labels/mod%20compatibility)
@@ -224,7 +240,7 @@ differently, ask me to add support for it, in an
 </details>
 
 <details>
-<summary>Do I need Voxy or Distant Horizons?</summary>
+<summary>Do I need Voxy, Distant Horizons, Lodistance or Ecstatic?</summary>
 
 No. Without them, distant mobs and players show on the game's own terrain, out to your
 render distance. With one of them, they also show on its far terrain.
@@ -236,8 +252,8 @@ render distance. With one of them, they also show on its far terrain.
 <details>
 <summary>Will it lower my frame rate?</summary>
 
-Drawing more entities costs frame rate. If your game slows down, keep *Simplified Entities*
-on and pick a lower *Preset*. *Max Mobs* and *Mob Render Distance* both on *Unlimited* can
+Drawing more entities costs frame rate. If your game slows down, keep *Simplified Mobs* and
+*Simplified Entities* on and pick a lower *Preset*. *Max Mobs* and *Mob Render Distance* both on *Unlimited* can
 crash the game.
 
 </details>

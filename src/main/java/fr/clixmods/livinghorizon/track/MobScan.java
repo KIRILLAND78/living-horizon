@@ -39,7 +39,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class MobScan {
     /** One mob found, as the game saves it, ready to be remembered. */
-    public record Found(UUID id, String type, double x, double y, double z, float yaw, CompoundTag nbt, boolean named) {
+    public record Found(UUID id, String type, double x, double y, double z, float yaw, CompoundTag nbt, boolean named,
+                        @Nullable UUID vehicle) {
     }
 
     /** What a scan found, and the chunks it covered: a remembered mob in those that was not found is gone. */
@@ -114,7 +115,7 @@ public final class MobScan {
         ChunkPos center = client.player.chunkPosition();
         int r = Math.max(radius, MIN_RADIUS);
         FarConfig config = FarConfig.get();
-        Filter filter = new Filter(Set.copyOf(config.mobTypes), config.rememberNamedMobs);
+        Filter filter = new Filter(Set.copyOf(config.mobTypes), Set.copyOf(config.hiddenMobs), config.rememberNamedMobs);
         String dimension = key.identifier().toString();
 
         // The world belongs to the server's thread: everything it holds is read there.
@@ -151,11 +152,14 @@ public final class MobScan {
         }).thenCompose(future -> future);
     }
 
-    private record Filter(Set<String> types, boolean named) {
+    /** Read on the server's thread: a copy of the lists, never the config itself. */
+    private record Filter(Set<String> types, Set<String> hidden, boolean named) {
         boolean wants(Entity entity) {
             if (!MobMemory.rememberable(entity)) return false;
+            String type = EntityType.getKey(entity.getType()).toString();
+            if (hidden.contains(type) || hidden.contains(FarConfig.wholeMod(type))) return false;
             if (named && entity.hasCustomName()) return true;
-            return types.contains(EntityType.getKey(entity.getType()).toString());
+            return types.contains(type);
         }
     }
 
@@ -178,7 +182,7 @@ public final class MobScan {
         try {
             found.add(new Found(entity.getUUID(), EntityType.getKey(entity.getType()).toString(),
                     entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), EntityNbt.save(entity, level),
-                    entity.hasCustomName()));
+                    entity.hasCustomName(), entity.isPassenger() ? entity.getRootVehicle().getUUID() : null));
         } catch (RuntimeException e) {
             seen.remove(entity.getUUID());
         }

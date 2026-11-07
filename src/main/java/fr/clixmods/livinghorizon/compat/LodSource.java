@@ -6,10 +6,11 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * A mod that keeps the world past the render distance, read through {@link LodWorld}:
- * Voxy or Distant Horizons. Neither is required, and neither is linked against: each
- * source reaches its mod at runtime, so the mod loads with either, both or none.
+ * Voxy, Distant Horizons, Lodistance, Far View or Ecstatic. None is required, and none is
+ * linked against: each source reaches its mod at runtime, so the mod loads with any of them or none.
  *
- * <p>Every method but the first three runs on a reader thread, never on the game's.
+ * <p>Every method but the first three and {@link #tick()} runs on a reader thread, never on
+ * the game's.
  */
 interface LodSource {
     String name();
@@ -46,8 +47,20 @@ interface LodSource {
     default void cancel() {
     }
 
+    /** Every client tick with a level, on the game's thread, for a source installed. */
+    default void tick() {
+    }
+
     /** The world to read on this thread, or null while the mod has none loaded. */
     @Nullable Object open() throws Throwable;
+
+    /**
+     * Whether the mod holds terrain anywhere in the chunk of the block {@code (x, z)}, known
+     * without reading its blocks; null where it cannot tell that way, and the column is read.
+     */
+    default @Nullable Boolean holds(Object world, int x, int z) throws Throwable {
+        return null;
+    }
 
     /** The highest block of a column and its biome; null where the mod knows nothing. */
     LodWorld.@Nullable Surface column(Object world, int x, int z) throws Throwable;
@@ -58,7 +71,13 @@ interface LodSource {
      * block is known: that block, solid ground under it, air over it.
      */
     default BlockState @Nullable [] slice(Object world, int x, int z, int bottom, int height) throws Throwable {
-        LodWorld.Surface surface = column(world, x, z);
+        LodWorld.Surface surface;
+        try {
+            surface = column(world, x, z);
+        } catch (LodWorld.Unanswered unanswered) {
+            // Not answered: nothing known, never a failure that pauses every read.
+            return null;
+        }
         if (surface == null) return null;
         BlockState top = surface.block() != null ? surface.block()
                 : surface.water() ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState();

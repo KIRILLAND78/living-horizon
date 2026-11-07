@@ -49,6 +49,15 @@ class ImpostorKeyTest {
     }
 
     @Test
+    void sizesAFewPercentApartShareAStep() {
+        assertEquals(ImpostorKey.size(1.2f), ImpostorKey.size(1.22f));
+        // An Ice and Fire dragon's box from hatchling to adult: no two ages a quarter apart share one.
+        assertNotEquals(ImpostorKey.size(1.2f), ImpostorKey.size(1.5f));
+        assertNotEquals(ImpostorKey.size(1.2f), ImpostorKey.size(8.4f));
+        assertEquals(ImpostorKey.size(0f), ImpostorKey.size(-1f));
+    }
+
+    @Test
     void aValueAtZeroCountsAsUnset() {
         assertEquals(ImpostorKey.hash(17, Map.of(), Map.of()), ImpostorKey.hash(17, Map.of(5, 0), Map.of()));
         assertEquals(ImpostorKey.hash(17, Map.of(), Map.of()), ImpostorKey.hash(17, Map.of(5, false), Map.of()));

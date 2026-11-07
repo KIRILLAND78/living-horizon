@@ -4,6 +4,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.DoorBlock;
@@ -69,7 +70,7 @@ final class Footing {
 
         @Override
         public boolean loaded(BlockPos at) {
-            return level.hasChunkAt(at);
+            return Footing.loaded(level, at);
         }
 
         @Override
@@ -91,6 +92,19 @@ final class Footing {
         public int top() {
             return level.getMinY() + level.getHeight();
         }
+    }
+
+    /**
+     * Whether the client holds the blocks of this column. Never {@code level.hasChunk}: the
+     * client's level answers yes for every chunk, loaded or not, and an unloaded one reads as air.
+     */
+    static boolean loaded(ClientLevel level, double x, double z) {
+        return level.getChunkSource().hasChunk(Mth.floor(x) >> 4, Mth.floor(z) >> 4);
+    }
+
+    /** {@link #loaded(ClientLevel, double, double)} for the column of a block. */
+    static boolean loaded(ClientLevel level, BlockPos at) {
+        return level.getChunkSource().hasChunk(at.getX() >> 4, at.getZ() >> 4);
     }
 
     /** Half a player's width. */

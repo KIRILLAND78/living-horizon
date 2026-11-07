@@ -67,6 +67,16 @@ public final class DepthMath {
         return new float[]{a, b};
     }
 
+    /**
+     * {@code {a, b}} of the depth Lodistance writes for its terrain with Sodium, from the
+     * {@code m32} of the projection it was given: its vertex shader replaces the depth by
+     * {@code A + 0.5 * m32 / w}, A 0 when the projection is reversed ({@code m32 > 0}) and 1
+     * otherwise. Half the game's {@code b}: each point lies at twice its distance.
+     */
+    public static float[] lodistance(float m32) {
+        return new float[]{m32 > 0f ? 0f : -1f, 0.5f * m32};
+    }
+
     /** The depth stored for a point {@code distance} in front of the camera, by a projection with these terms. */
     public static float depth(float a, float b, boolean zeroToOne, float distance) {
         float ndc = b / distance - a;
@@ -160,5 +170,61 @@ public final class DepthMath {
             found++;
         }
         return found;
+    }
+
+    /**
+     * The one rectangle of a {@code width} by {@code height} picture that holds every sphere seen
+     * through {@code viewProjection}, {@code margin} pixels wider all round, into {@code out} as
+     * {@code x, y, w, h}: empty, {@code w} and {@code h} 0, when none is on screen. {@code spheres}
+     * holds {@code x, y, z, radius} each, from the camera. A sphere wholly behind the camera is not
+     * seen; one reaching from in front of it to behind it has no rectangle that can be told, and
+     * the answer is false: the caller takes the whole picture.
+     */
+    public static boolean bounds(Matrix4fc viewProjection, float[] spheres, int count, int[] out, int width, int height,
+                                 int margin) {
+        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+        Vector4f corner = new Vector4f();
+        for (int f = 0; f < count; f++) {
+            float x = spheres[f * 4], y = spheres[f * 4 + 1], z = spheres[f * 4 + 2], r = spheres[f * 4 + 3];
+            float lowX = Float.MAX_VALUE, lowY = Float.MAX_VALUE, highX = -Float.MAX_VALUE, highY = -Float.MAX_VALUE;
+            int behind = 0, near = 0;
+            for (int c = 0; c < 8; c++) {
+                viewProjection.transform(corner.set(x + ((c & 1) == 0 ? -r : r), y + ((c & 2) == 0 ? -r : r),
+                        z + ((c & 4) == 0 ? -r : r), 1f));
+                if (corner.w <= 0f) behind++;
+                if (corner.w <= 0.05f) {
+                    near++;
+                    continue;
+                }
+                lowX = Math.min(lowX, corner.x / corner.w);
+                lowY = Math.min(lowY, corner.y / corner.w);
+                highX = Math.max(highX, corner.x / corner.w);
+                highY = Math.max(highY, corner.y / corner.w);
+            }
+            if (behind == 8) continue;
+            if (near > 0) return false;
+            // Held to the screen: a sphere off to one side does not stretch the others' rectangle.
+            lowX = Math.max(lowX, -1f);
+            lowY = Math.max(lowY, -1f);
+            highX = Math.min(highX, 1f);
+            highY = Math.min(highY, 1f);
+            if (highX < lowX || highY < lowY) continue;
+            minX = Math.min(minX, lowX);
+            minY = Math.min(minY, lowY);
+            maxX = Math.max(maxX, highX);
+            maxY = Math.max(maxY, highY);
+        }
+        out[0] = out[1] = out[2] = out[3] = 0;
+        if (maxX < minX || maxY < minY) return true;
+        int x0 = Math.max(0, (int) Math.floor((minX * 0.5f + 0.5f) * width) - margin);
+        int y0 = Math.max(0, (int) Math.floor((minY * 0.5f + 0.5f) * height) - margin);
+        int x1 = Math.min(width, (int) Math.ceil((maxX * 0.5f + 0.5f) * width) + margin);
+        int y1 = Math.min(height, (int) Math.ceil((maxY * 0.5f + 0.5f) * height) + margin);
+        if (x1 <= x0 || y1 <= y0) return true;
+        out[0] = x0;
+        out[1] = y0;
+        out[2] = x1 - x0;
+        out[3] = y1 - y0;
+        return true;
     }
 }

@@ -7,45 +7,53 @@ import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The game's own "Open link?" question for the mod's Discord server, where players come with a
- * problem or a question. Opened from the mod's screen and from Sodium's page; back to where it
- * came from, on yes and on no.
+ * The game's own "Open link?" question for one of the {@link ProjectLink}s: the Discord server,
+ * the store pages or the website. Opened from the mod's screen and from Sodium's page; back to
+ * where it came from, on yes and on no.
  */
-public final class DiscordLink extends ConfirmLinkScreen {
-    public static final String URL = "https://discord.gg/THSV9dexNj";
-
+public final class LinkScreen extends ConfirmLinkScreen {
     /** Escape pressed over Sodium's screen: closed when it is released, see {@link SodiumReturn}. */
     private boolean closeOnRelease;
 
     private final @Nullable Screen parent;
+    private final ProjectLink link;
+
+    private LinkScreen(@Nullable Screen parent, ProjectLink link) {
+        super(yes -> {
+            if (yes) browse(link);
+            Minecraft minecraft = Minecraft.getInstance();
+            minecraft.setScreen(parent);
+        }, uri(link), true);
+        this.parent = parent;
+        this.link = link;
+    }
+
+    public static void open(@Nullable Screen from, ProjectLink link) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.setScreen(new LinkScreen(from, link));
+    }
+
+    public ProjectLink link() {
+        return link;
+    }
 
     /** The link as the game's screen takes it: from 26.3, a URI. */
     //? if >=26.3 {
-    /*private static final java.net.URI LINK = java.net.URI.create(URL);
+    /*private static java.net.URI uri(ProjectLink link) {
+        return java.net.URI.create(link.url);
+    }
     *///?} else {
-    private static final String LINK = URL;
+    private static String uri(ProjectLink link) {
+        return link.url;
+    }
     //?}
 
-    private DiscordLink(@Nullable Screen parent) {
-        super(yes -> {
-            if (yes) browse();
-            Minecraft minecraft = Minecraft.getInstance();
-            minecraft.setScreen(parent);
-        }, LINK, true);
-        this.parent = parent;
-    }
-
-    public static void open(@Nullable Screen from) {
-        Minecraft minecraft = Minecraft.getInstance();
-        minecraft.setScreen(new DiscordLink(from));
-    }
-
     /** Opens the link in the browser: from 26.3, through the GPU library's window code. */
-    private static void browse() {
+    private static void browse(ProjectLink link) {
         //? if >=26.3 {
-        /*com.mojang.blaze3d.Blaze3D.openUri(LINK);
+        /*com.mojang.blaze3d.Blaze3D.openUri(uri(link));
         *///?} else {
-        Util.getPlatform().openUri(LINK);
+        Util.getPlatform().openUri(uri(link));
         //?}
     }
 

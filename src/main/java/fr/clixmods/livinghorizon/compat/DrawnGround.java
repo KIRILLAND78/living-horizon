@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Whether terrain is drawn under a distant mob, for {@link FarConfig#onlyOverTerrain}: the
- * game's own chunk, or the far world's terrain (Voxy or Distant Horizons). A mob remembered
+ * game's own chunk, or the far world's terrain (Voxy, Distant Horizons or Lodistance). A mob remembered
  * where neither draws anything yet would stand in the void.
  *
  * <p>Chunks the game holds within its render distance are answered at once. The others are
@@ -32,7 +32,19 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class DrawnGround {
     /** The first wait before a chunk found empty is asked again, and the longest. */
-    private static final long RETRY_NANOS = 1_000_000_000L, RETRY_MAX_NANOS = 30_000_000_000L;
+    private static final long RETRY_NANOS = 1_000_000_000L, RETRY_MAX_NANOS = 10_000_000_000L;
+    /**
+     * Chunks asked in one read, and waiting to be: a read answers all its chunks at its end, and
+     * one of thousands of columns (as many guessed mobs ask) kept every mob waiting, hidden, for
+     * seconds. The mobs drawn first, the nearest, ask first.
+     */
+    private static final int BATCH = 256;
+    /** A read is on its way since then: the next waits for it, 30 s at most (a read that never came back). */
+    private static volatile boolean reading;
+    private static volatile long readingSince;
+    private static final long READ_STUCK_NANOS = 30_000_000_000L;
+    /** The least time between two calls asking every chunk found empty again. */
+    private static final long REVISIT_NANOS = 1_000_000_000L;
     private static final int CHUNKS_KEPT = 20_000;
     /** Chunks from the edge of the game's render distance asked of the far world ahead. */
     private static final int AHEAD = 3;
@@ -58,6 +70,14 @@ public final class DrawnGround {
     private static int[] askedX = new int[64], askedZ = new int[64];
     private static final Decisions DECISIONS = new Decisions();
 
+    /**
+     * A chunk found empty turned out to hold terrain: the far world is filling in (Distant
+     * Horizons answers "nothing" for a while as a world opens), and every chunk found empty is
+     * asked again at once rather than after its wait.
+     */
+    private static volatile boolean revisit;
+    private static long revisitedAt = Long.MIN_VALUE;
+
     private static double farDrawn;
     private static long farDrawnAt = Long.MIN_VALUE;
 
@@ -66,8 +86,12 @@ public final class DrawnGround {
 
     /** Another world, or none: every chunk is asked again, and every mob starts hidden. */
     static void clear() {
+        // Chunks waiting in the read on its way are another world's: let them go.
+        ASKED.clear();
+        reading = false;
         CHUNKS.clear();
         DECISIONS.clear();
+        revisit = false;
     }
 
     /**
@@ -76,7 +100,15 @@ public final class DrawnGround {
      * Asks the far world when needed; {@link #ask()} sends the questions.
      */
     public static boolean shown(ClientLevel level, Vec3 eye, Object key, double x, double z) {
-        return DECISIONS.decide(key, answer(level, eye, x, z), System.nanoTime());
+        long now = System.nanoTime();
+        if (revisit && (revisitedAt == Long.MIN_VALUE || now - revisitedAt >= REVISIT_NANOS)) {
+            revisit = false;
+            revisitedAt = now;
+            for (Chunk chunk : CHUNKS.values()) {
+                if (!chunk.ground) chunk.next = now;
+            }
+        }
+        return DECISIONS.decide(key, answer(level, eye, x, z), now);
     }
 
     private static Answer answer(ClientLevel level, Vec3 eye, double x, double z) {
@@ -118,7 +150,7 @@ public final class DrawnGround {
     private static Chunk chunk(int cx, int cz, int bx, int bz) {
         if (CHUNKS.size() > CHUNKS_KEPT) CHUNKS.clear();
         Chunk chunk = CHUNKS.computeIfAbsent((long) cx << 32 | (cz & 0xFFFFFFFFL), key -> new Chunk());
-        if (!chunk.ground && !chunk.asking && System.nanoTime() >= chunk.next) {
+        if (!chunk.ground && !chunk.asking && ASKED.size() < BATCH && System.nanoTime() >= chunk.next) {
             chunk.asking = true;
             int i = ASKED.size();
             if (i == askedX.length) {
@@ -132,26 +164,68 @@ public final class DrawnGround {
         return chunk;
     }
 
+    /**
+     * For {@code /livinghorizon lod}: the chunks known with terrain, found empty, waiting for an
+     * answer and never answered, and how fast the far world answers.
+     */
+    public static String status() {
+        int terrain = 0, empty = 0, asking = 0, none = 0;
+        for (Chunk chunk : CHUNKS.values()) {
+            if (chunk.ground) terrain++;
+            else if (chunk.asking) asking++;
+            else if (chunk.misses > 0) empty++;
+            else none++;
+        }
+        return "ground under mobs: " + terrain + " chunks with terrain, " + empty + " empty, " + asking
+                + " waiting for an answer, " + none + " not asked yet; " + LodWorld.groundTimes();
+    }
+
+    /**
+     * A read of the far world found blocks at this column, for whatever it was read (the ground a
+     * mob walks on, most often): its chunk has terrain, without a question of its own. Most mobs
+     * have their ground read anyway; asked again here, their answer waited behind those reads.
+     */
+    static void noted(int x, int z) {
+        int cx = x >> 4, cz = z >> 4;
+        Chunk chunk = CHUNKS.computeIfAbsent((long) cx << 32 | (cz & 0xFFFFFFFFL), key -> new Chunk());
+        if (chunk.ground) return;
+        if (chunk.misses > 0) revisit = true;
+        chunk.ground = true;
+    }
+
     /** Sends the far world this frame's questions, in one read. */
     public static void ask() {
-        if (ASKED.isEmpty()) return;
+        long started = System.nanoTime();
+        if (ASKED.isEmpty() || reading && started - readingSince < READ_STUCK_NANOS) return;
+        reading = true;
+        readingSince = started;
         Chunk[] chunks = ASKED.toArray(new Chunk[0]);
         int[] xs = Arrays.copyOf(askedX, chunks.length), zs = Arrays.copyOf(askedZ, chunks.length);
         ASKED.clear();
-        LodWorld.fresh(xs, zs).whenComplete((found, error) -> {
-            long now = System.nanoTime();
-            for (int i = 0; i < chunks.length; i++) {
-                Chunk chunk = chunks[i];
-                if (error == null && found != null && found[i] != null) {
-                    chunk.ground = true;
-                } else {
-                    int misses = Math.min(chunk.misses, 5);
-                    chunk.next = now + Math.min(RETRY_MAX_NANOS, RETRY_NANOS << misses);
-                    chunk.misses = misses + 1;
-                }
-                chunk.asking = false;
-            }
-        });
+        LodWorld.ground(xs, zs, (i, terrain) -> answered(chunks[i], terrain, System.nanoTime()))
+                .whenComplete((found, error) -> {
+                    // Any chunk still waiting got no answer (no world, a failed read): asked again soon.
+                    long now = System.nanoTime();
+                    for (Chunk chunk : chunks) {
+                        if (chunk.asking) answered(chunk, null, now);
+                    }
+                    reading = false;
+                });
+    }
+
+    /** One chunk's answer: terrain, nothing, or none (not void, asked again soon). */
+    private static void answered(Chunk chunk, @Nullable Boolean terrain, long now) {
+        if (terrain == null) {
+            chunk.next = now + RETRY_NANOS;
+        } else if (terrain) {
+            if (chunk.misses > 0) revisit = true;
+            chunk.ground = true;
+        } else {
+            int misses = Math.min(chunk.misses, 5);
+            chunk.next = now + Math.min(RETRY_MAX_NANOS, RETRY_NANOS << misses);
+            chunk.misses = misses + 1;
+        }
+        chunk.asking = false;
     }
 
     /** {@link LodWorld#drawnDistance}, read again once a second: the settings it reads seldom change. */

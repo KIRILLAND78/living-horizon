@@ -18,8 +18,13 @@ public final class LastSeen {
      * zone; null when unknown (0).
      */
     public static @Nullable String format(long millis, String language, ZoneId zone) {
+        return format(millis, language, zone, FormatStyle.MEDIUM);
+    }
+
+    /** The same, the date written {@code style} ({@link FormatStyle#SHORT}: in figures). */
+    public static @Nullable String format(long millis, String language, ZoneId zone, FormatStyle style) {
         if (millis <= 0) return null;
-        DateTimeFormatter format = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        DateTimeFormatter format = DateTimeFormatter.ofLocalizedDateTime(style, FormatStyle.SHORT)
                 .withLocale(locale(language)).withZone(zone);
         return format.format(Instant.ofEpochMilli(millis));
     }

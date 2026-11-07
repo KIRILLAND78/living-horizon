@@ -30,6 +30,7 @@ public final class OutlinesScreen extends SideOptionsScreen {
                 bool("outlineGameMobs", c.outlineGameMobs, v -> c.outlineGameMobs = v),
                 bool("outlineLiveMobs", c.outlineLiveMobs, v -> c.outlineLiveMobs = v),
                 bool("outlineCopies", c.outlineCopies, v -> c.outlineCopies = v),
+                bool("outlineForeseen", c.outlineForeseen, v -> c.outlineForeseen = v),
                 bool("outlinePlayers", c.outlinePlayers, v -> c.outlinePlayers = v),
                 bool("outlineImpostors", c.outlineImpostors, v -> c.outlineImpostors = v));
 

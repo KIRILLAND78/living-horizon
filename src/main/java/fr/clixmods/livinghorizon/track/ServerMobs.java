@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
 
@@ -35,8 +36,11 @@ final class ServerMobs {
     record Asked(UUID id, double x, double y, double z, boolean simulated) {
     }
 
-    /** Where the server has a mob, which way it faces, and whether it moves it now (its chunk ticks). */
-    record Where(double x, double y, double z, float body, float head, boolean simulated) {
+    /**
+     * Where the server has a mob, which way it faces, whether it moves it now (its chunk ticks),
+     * and whether it sits, for a pet: null for any other mob.
+     */
+    record Where(double x, double y, double z, float body, float head, boolean simulated, @Nullable Boolean sitting) {
     }
 
     /** The mobs found, and those that died, despawned or left the dimension where the server was moving them. */
@@ -83,8 +87,9 @@ final class ServerMobs {
                 }
                 float body = entity instanceof LivingEntity living ? living.yBodyRot : entity.getYRot();
                 float head = entity instanceof LivingEntity living ? living.yHeadRot : body;
+                Boolean sitting = entity instanceof TamableAnimal pet ? pet.isInSittingPose() : null;
                 found.put(mob.id(), new Where(entity.getX(), entity.getY(), entity.getZ(), body, head,
-                        level.isPositionEntityTicking(entity.blockPosition())));
+                        level.isPositionEntityTicking(entity.blockPosition()), sitting));
             }
             return new Answer(found, gone);
         });

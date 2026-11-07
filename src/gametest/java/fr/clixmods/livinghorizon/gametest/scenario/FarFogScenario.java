@@ -48,20 +48,10 @@ public final class FarFogScenario implements Scenario {
             Scene.row(world, MOBS, 1, 100, 3);
             context.waitTicks(100);
             context.runOnClient(minecraft -> minecraft.options.fov().set(30));
-            // From 1.21.11 the sky and the fog ease into their colours after a world opens: the
-            // view must hold still before the fog of the mobs is compared.
-            Path game = Scene.screenshot(context, this, "game");
-            for (int tries = 0; tries < 15; tries++) {
-                context.waitTicks(20);
-                Path again = Scene.screenshot(context, this, "game");
-                int[] moved = differences(game, again);
-                game = again;
-                if (moved[0] + moved[2] == 0) break;
-                Scene.log("farfog view still changing: " + (moved[0] + moved[2]) + " pixels");
-            }
+            Path game = still(context, "game");
             context.runOnClient(minecraft -> FarFog.limitForTests(0));
             Path limited = Scene.screenshot(context, this, "limited");
-            compare(game, limited);
+            compare("models", game, limited);
             // Voxy Fog Fix off: the game's fog again, everywhere.
             Scene.configure(context, config -> config.optVoxyFog = false);
             Path off = Scene.screenshot(context, this, "off");
@@ -70,10 +60,25 @@ public final class FarFogScenario implements Scenario {
             if (moved[0] + moved[2] > 0) {
                 throw new AssertionError("Voxy Fog Fix off still changed " + (moved[0] + moved[2]) + " pixels");
             }
+
+            // The same mobs as flat pictures: drawn with the world's entities, they get the fog too.
+            context.runOnClient(minecraft -> FarFog.limitForTests(Float.NaN));
+            Scene.configure(context, config -> {
+                config.optVoxyFog = true;
+                config.impostors = true;
+                config.impostorDistance = 32;
+            });
+            context.waitTicks(100);
+            Path pictures = still(context, "pictures");
+            context.runOnClient(minecraft -> FarFog.limitForTests(0));
+            compare("pictures", pictures, Scene.screenshot(context, this, "pictures-limited"));
+            Scene.log("farfog status: " + context.computeOnClient(minecraft -> FarFog.status()));
         } finally {
             context.runOnClient(minecraft -> {
                 FarFog.limitForTests(Float.NaN);
-                fr.clixmods.livinghorizon.FarConfig.get().optVoxyFog = true;
+                fr.clixmods.livinghorizon.FarConfig config = fr.clixmods.livinghorizon.FarConfig.get();
+                config.optVoxyFog = true;
+                config.impostorDistance = new fr.clixmods.livinghorizon.FarConfig().impostorDistance;
                 minecraft.options.fov().set(70);
                 minecraft.options.entityDistanceScaling().set(1.0);
                 minecraft.options.cloudStatus().set(CloudStatus.FANCY);
@@ -84,11 +89,28 @@ public final class FarFogScenario implements Scenario {
         *///?}
     }
 
+    /**
+     * A picture once the view holds still: from 1.21.11 the sky and the fog ease into their
+     * colours after a world opens, and pictures are baked a few frames after they are asked for.
+     */
+    private Path still(ClientGameTestContext context, String name) {
+        Path view = Scene.screenshot(context, this, name);
+        for (int tries = 0; tries < 15; tries++) {
+            context.waitTicks(20);
+            Path again = Scene.screenshot(context, this, name);
+            int[] moved = differences(view, again);
+            view = again;
+            if (moved[0] + moved[2] == 0) break;
+            Scene.log("farfog view still changing: " + (moved[0] + moved[2]) + " pixels");
+        }
+        return view;
+    }
+
     /** The mobs' pixels nearer the fog colour in the first, every other pixel the same in both. */
-    private static void compare(Path game, Path limited) {
+    static void compare(String what, Path game, Path limited) {
         int[] counts = differences(game, limited);
         int changed = counts[0], clearer = counts[1], elsewhere = counts[2];
-        Scene.log("farfog pixels changed on the mobs=" + changed + " farther from the fog=" + clearer
+        Scene.log("farfog " + what + ": pixels changed on the mobs=" + changed + " farther from the fog=" + clearer
                 + " changed elsewhere=" + elsewhere);
         if (changed < MIN_CHANGED) throw new AssertionError("The mobs' fog did not change: " + changed + " pixels");
         if (clearer < changed * 9 / 10) {
@@ -101,7 +123,7 @@ public final class FarFogScenario implements Scenario {
      * Pixels that differ between two screenshots: on the mobs, those of them farther from the
      * fog colour in the second, and everywhere else.
      */
-    private static int[] differences(Path first, Path second) {
+    static int[] differences(Path first, Path second) {
         try {
             BufferedImage a = ImageIO.read(first.toFile()), b = ImageIO.read(second.toFile());
             int changed = 0, clearer = 0, elsewhere = 0;

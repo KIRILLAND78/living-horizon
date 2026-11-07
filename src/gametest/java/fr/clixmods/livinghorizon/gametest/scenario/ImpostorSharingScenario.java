@@ -4,12 +4,14 @@ import fr.clixmods.livinghorizon.gametest.Scenario;
 import fr.clixmods.livinghorizon.gametest.Scene;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorAtlas;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorKey;
+import fr.clixmods.livinghorizon.ui.ImpostorScreen;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -20,7 +22,8 @@ import java.util.Set;
  * Then a crowd of zombies, each in a helmet of its own colour, asked for again and again:
  * each is baked once, and the zombies' pages grow to hold them all. Last, a pig met again
  * in another world finds its sheet already baked, and after a reload with the same packs,
- * reads it back from disk.
+ * reads it back from disk: the impostor screen then says so, with the date and the world it
+ * was baked in.
  */
 public final class ImpostorSharingScenario implements Scenario {
     /** More looks than the largest page of a kind holds: 32. */
@@ -39,6 +42,7 @@ public final class ImpostorSharingScenario implements Scenario {
             config.impostorPixels = 0;
         });
         ImpostorKey pig;
+        ImpostorAtlas.Origin origin;
         try (TestSingleplayerContext world = Scene.flatWorld(context)) {
             Scene.command(world, "execute at @p run summon pig ~-12 ~ ~20 {NoAI:1b,PersistenceRequired:1b}");
             for (int i = 0; i < 8; i++) {
@@ -91,6 +95,12 @@ public final class ImpostorSharingScenario implements Scenario {
                 }
                 throw new AssertionError("No pig");
             });
+            ImpostorAtlas.Origin baked = context.computeOnClient(minecraft -> origin(pig));
+            Scene.log("sharing pig origin=" + baked);
+            if (baked == null || baked.source() != ImpostorAtlas.Source.SAVED || baked.bakedAt() <= 0 || baked.world().isEmpty()) {
+                throw new AssertionError("The pig's sheet should be baked in this game and saved, with its date and world: " + baked);
+            }
+            origin = baked;
             // Gone before the world closes: a crowd left behind upset the next worlds' tests.
             Scene.command(world, "kill @e[type=zombie]");
             context.waitTicks(40);
@@ -122,6 +132,15 @@ public final class ImpostorSharingScenario implements Scenario {
                 return ImpostorAtlas.loads() > loads && ImpostorAtlas.sheet(pig) != null;
             });
             if (!read) throw new AssertionError("The pig's sheet was not read back from disk");
+            ImpostorAtlas.Origin back = context.computeOnClient(minecraft -> origin(pig));
+            Scene.log("sharing pig origin from disk=" + back);
+            if (back == null || back.source() != ImpostorAtlas.Source.DISK || back.bakedAt() != origin.bakedAt()
+                    || !back.world().equals(origin.world())) {
+                throw new AssertionError("The pig's sheet should come from disk, baked " + origin + ", not " + back);
+            }
+            context.setScreen(() -> new ImpostorScreen(null));
+            Scene.screenshot(context, this, "screen");
+            context.setScreen(() -> null);
         }
     }
 
@@ -129,6 +148,13 @@ public final class ImpostorSharingScenario implements Scenario {
         for (Entity entity : minecraft.level.entitiesForRendering()) {
             if (entity instanceof LivingEntity && entity != minecraft.player) ImpostorAtlas.request(ImpostorKey.of(entity), entity);
         }
+    }
+
+    private static ImpostorAtlas.@Nullable Origin origin(ImpostorKey key) {
+        for (ImpostorAtlas.Baked baked : ImpostorAtlas.baked()) {
+            if (baked.key().equals(key)) return baked.origin();
+        }
+        return null;
     }
 
     private static Set<ImpostorKey> baked() {

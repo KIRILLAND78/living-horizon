@@ -15,6 +15,7 @@ public final class Profile {
     public enum Section {
         TICK_MOBS_FOLLOW("tickMobsFollow"),
         TICK_MOBS_CHOOSE("tickMobsChoose"),
+        TICK_MOBS_FORESEE("tickMobsForesee"),
         TICK_MOBS_BUILD("tickMobsBuild"),
         TICK_MOBS_GROUND("tickMobsGround"),
         TICK_MOBS_MOTION("tickMobsMotion"),
@@ -127,7 +128,12 @@ public final class Profile {
 
     /** A time measured by hand, added up over a tick or a frame: counts once. */
     public static void record(Section section, long nanos) {
-        section.cpuStat.record(nanos, -1, System.nanoTime());
+        record(section, nanos, -1);
+    }
+
+    /** A time measured by hand, with what it wrote: from any thread, since the game's profiler is not told. */
+    public static void record(Section section, long nanos, long bytes) {
+        section.cpuStat.record(nanos, bytes, System.nanoTime());
     }
 
     /** What the GPU took for a section, once its query has an answer. */

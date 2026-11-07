@@ -22,12 +22,14 @@ public final class SharedPositions {
 
     /**
      * Where a player is, as the server last said. {@code lastSeen} is when they logged off (0
-     * when online or not known); {@code test} marks a test player the host placed.
+     * when online or not known); {@code test} marks a test player the host placed;
+     * {@code gliding} a player flying with an elytra, {@code pitch} the way they look up or down
+     * then (0 otherwise, and from a server that does not say).
      */
     public record Report(double x, double y, double z, float yaw, String dimension, boolean riding, long lastSeen,
-                         boolean test) {
+                         boolean test, boolean gliding, float pitch) {
         public Report(double x, double y, double z, float yaw, String dimension, boolean riding) {
-            this(x, y, z, yaw, dimension, riding, 0, false);
+            this(x, y, z, yaw, dimension, riding, 0, false, false, 0f);
         }
     }
 
@@ -42,6 +44,8 @@ public final class SharedPositions {
     /** The last word on each player that came with their look and mount, which come every few seconds only. */
     private final Map<String, PositionsMessage.Player> dressed = new HashMap<>();
     private PositionsMessage.@Nullable Mobs lastMobs;
+    /** The world's seed, when the server shares it, for this client to foresee the first animals itself. */
+    private PositionsMessage.@Nullable Seed seed;
     private int ticksSinceNews = STALE_TICKS;
     private boolean active;
     /** The format of the last message from a version of the mod this one cannot read; null when none came. */
@@ -70,6 +74,7 @@ public final class SharedPositions {
         if (message.kind() == PositionsMessage.OFFLINE && message.players() != null && message.part() != null) {
             offlinePart(message.players(), message.part());
         }
+        if (message.seed() != null) seed = message.seed().dimensions().isEmpty() ? null : message.seed();
         if (message.mobs() != null) {
             mobs.clear();
             for (PositionsMessage.Mob mob : message.mobs().mobs()) {
@@ -116,6 +121,7 @@ public final class SharedPositions {
         mobs.clear();
         dressed.clear();
         lastMobs = null;
+        seed = null;
         comingOffline = null;
         ticksSinceNews = STALE_TICKS;
         active = false;
@@ -139,7 +145,7 @@ public final class SharedPositions {
         PositionsMessage.Player player = active ? players.getOrDefault(name, offline.get(name)) : null;
         return player == null ? null
                 : new Report(player.x(), player.y(), player.z(), player.yaw(), player.dimension(), player.riding(),
-                        player.lastSeen(), player.test());
+                        player.lastSeen(), player.test(), player.gliding(), player.pitch());
     }
 
     /** Every player the server has a position for, online or not. */
@@ -173,6 +179,11 @@ public final class SharedPositions {
     }
 
     /** Every mob the server last published around this client. */
+    /** The seed the server shares, and where its generator is the game's own; null when it shares none. */
+    public PositionsMessage.@Nullable Seed seed() {
+        return active ? seed : null;
+    }
+
     public List<UUID> mobs() {
         return new ArrayList<>(mobs.keySet());
     }

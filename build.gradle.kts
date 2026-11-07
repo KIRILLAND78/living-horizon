@@ -90,6 +90,8 @@ loom {
         property("fabric.client.gametest.testModResourcesPath", rootProject.file("src/gametest/resources").absolutePath)
         // Which scenarios to run: -Plh.scenario=impostors,... (all of them by default).
         property("livinghorizon.scenario", (findProperty("lh.scenario") ?: "all").toString())
+        // Which easter eggs the eggs2 scenario runs: -Plh.eggs=9,12 or LH_EGGS=9,12 (all by default).
+        (findProperty("lh.eggs") ?: System.getenv("LH_EGGS"))?.let { property("livinghorizon.eggs", it.toString()) }
         // Other mods to load with it (Sodium...): -Plh.mods=<folder of jars>.
         findProperty("lh.mods")?.let { property("fabric.addMods", it.toString()) }
         // A shader pack folder to turn on through Iris, which -Plh.mods must hold: -Plh.shaderpack=<folder>.
@@ -142,8 +144,8 @@ tasks {
 
         // The license and the credits travel with the jar.
         from(rootProject.file("LICENSE"))
-        // The changelog the game shows in its own screen.
-        from(rootProject.file("changelog")) { include("en.md", "fr.md"); into("assets/livinghorizon/changelog") }
+        // The changelog the game shows in its own screen, the waiting entries in it (gradle/target.gradle.kts).
+        from(project.extra["lhChangelog"] as File) { into("assets/livinghorizon/changelog") }
         from(rootProject.file("CREDITS.md"))
     }
 

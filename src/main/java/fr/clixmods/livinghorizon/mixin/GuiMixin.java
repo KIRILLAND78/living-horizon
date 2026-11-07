@@ -1,8 +1,7 @@
 package fr.clixmods.livinghorizon.mixin;
 
 import com.llamalad7.mixinextras.sugar.Local;
-import fr.clixmods.livinghorizon.debug.DebugHud;
-import fr.clixmods.livinghorizon.ui.OfflineHud;
+import fr.clixmods.livinghorizon.LivingHorizonClient;
 //? if >=26.2 {
 /*import net.minecraft.client.gui.Hud;
 *///?} else {
@@ -16,7 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * The debug panel and depth view, over the world and under the screens; and who a player
- * who logged off is, under the crosshair.
+ * who logged off is, under the crosshair. Forge before 1.20.6 never calls {@code Gui.render}
+ * (its {@code ForgeGui} replaces it): there {@code Events.hud} draws them instead.
  */
 // From 26.2 the game's own overlay is a part of the GUI of its own, the HUD.
 //? if >=26.2 {
@@ -32,7 +32,6 @@ abstract class GuiMixin {
     //?}
     // What the method takes besides changed in 1.21: only the first is asked for.
     private void livinghorizon$debug(CallbackInfo ci, @Local(argsOnly = true) GuiGraphics graphics) {
-        OfflineHud.draw(graphics);
-        DebugHud.draw(graphics);
+        LivingHorizonClient.drawHud(graphics);
     }
 }

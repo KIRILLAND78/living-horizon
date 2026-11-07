@@ -25,9 +25,12 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Easter egg 3, very rare: some night, a pale glowing figure walks a few steps somewhere in
- * sight, anywhere around the player up to a few hundred blocks off, then stops, turns to look at
- * them, and is gone - at once if the player comes near. Only on this screen.
+ * Easter egg 3: from the second or third day the player lives in a world, once a day, at any
+ * moment of it, by day or by night, a pale glowing figure walks a few steps somewhere in sight,
+ * anywhere around the player up to a few hundred blocks off, then stops, turns to look at them,
+ * and is gone - at once if the player comes near. Once it has been looked at it does not come
+ * back for one to three days; until then it comes back every day ({@link Daily}). Only on this
+ * screen.
  *
  * <p>Its way is read in the loaded chunks or the far world ({@link Columns}), on dry ground
  * all along, and must start in sight ({@link Sight}). The figure is drawn of glowing,
@@ -50,23 +53,28 @@ public final class Ghosts {
     /** Ticks it stands looking at the player before it vanishes; ticks a search may take. */
     private static final int STARE = 50, SEARCH = 400;
 
-    private final EggCalendar calendar;
+    private final Daily daily;
     private final RandomSource random = RandomSource.create();
     /** Counts the searches: a read that comes back for one given up or replaced is dropped. */
     private final AtomicInteger generation = new AtomicInteger();
     private @Nullable ClientLevel level;
-    private boolean searching, active, called;
+    private boolean searching, active, called, seen;
     private double x, y, z, xo, yo, zo, dirX, dirZ, floor, walked, length;
     /** The ground along its way, where it is not loaded: {@link #ALONG} stretches. */
     private double[] heights = new double[0];
     private float yaw, yawO, phase;
-    private int age, walk, idle, searchAge;
+    private int age, walk, searchAge;
 
     Ghosts(EggCalendar calendar) {
-        this.calendar = calendar;
+        this.daily = new Daily(calendar, 3);
     }
 
-    /** On its way or under way: no other easter egg starts meanwhile. */
+    /** For the game tests: it comes in a second, if today is one of its days. */
+    public void soon() {
+        daily.soon();
+    }
+
+    /** On its way or under way. */
     public boolean busy() {
         return searching || active;
     }
@@ -77,8 +85,8 @@ public final class Ghosts {
     }
 
     /**
-     * Looks for a way in sight anywhere around the player, and walks it once it is read: by
-     * chance, or because the player asked ({@code called}: in front of them; called again, it
+     * Looks for a way in sight anywhere around the player, and walks it once it is read: on
+     * its day, or because the player asked ({@code called}: in front of them; called again, it
      * starts over). False if the easter eggs are off.
      */
     public boolean summon(ClientLevel current, LocalPlayer self, boolean called) {
@@ -155,7 +163,7 @@ public final class Ghosts {
     }
 
     private void begin(Columns.Column start, double dx, double dz, double[] ys, double way, int steps) {
-        if (!called) calendar.shown(3);
+        if (!called) daily.came();
         x = xo = start.x();
         z = zo = start.z();
         heights = ys;
@@ -169,11 +177,11 @@ public final class Ghosts {
         walked = 0;
         age = 0;
         phase = random.nextFloat() * 6.28f;
+        seen = false;
         active = true;
     }
 
-    /** {@code quiet}: no other easter egg under way, so this one may start by chance. */
-    public void tick(ClientLevel current, LocalPlayer self, boolean enabled, boolean quiet) {
+    public void tick(ClientLevel current, LocalPlayer self, boolean enabled) {
         if (busy() && (!enabled || current != level)) clear();
         if (!enabled) return;
         if (searching) {
@@ -181,11 +189,7 @@ public final class Ghosts {
             return;
         }
         if (!active) {
-            // Very rare, and only at night: about once in eight hours of night.
-            if (++idle > 6000 && quiet && !current.isBrightOutside() && random.nextInt(576000) == 0) {
-                idle = 0;
-                summon(current, self, false);
-            }
+            if (daily.due()) summon(current, self, false);
             return;
         }
         age++;
@@ -215,6 +219,11 @@ public final class Ghosts {
         }
         // Not quite touching the ground.
         y = floor + 0.2 + 0.08 * Math.sin(age * 0.08 + phase);
+        if (!seen && !called && Herobrine.lookedAt(current, self, new Vec3(x, y + 1.5, z))) {
+            // Looked at: not back for days.
+            seen = true;
+            daily.seen();
+        }
         if (age > walk + STARE) clear();
     }
 

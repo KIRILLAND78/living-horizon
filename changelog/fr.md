@@ -2,273 +2,356 @@
 
 ## Prochaine version
 
+## 0.16.0 — 2026-11-05
+
 ### Client
 
 #### Nouveautés
-- **Mobs et joueurs lointains aux formes simplifiées** — plus les mobs et les joueurs lointains sont loin, plus leur forme est simple et lisse, les plus loin immobiles, avant de devenir des images plates : les foules lointaines coûtent bien moins à dessiner ; *Entités proches* fait de même pour les mobs que le jeu dessine lui-même (Minecraft 1.21.9 et suivants), *Niveaux de détail* dans les réglages choisit à quelle distance et à quel point, et *Niveaux de détail...* montre l'allure de chaque mob.
-- **Bouton du journal des modifications** — les réglages du mod ont maintenant un bouton du journal des modifications à côté du logo Discord, pour lire ce qui a changé à chaque version (un bouton *Lire le journal des modifications* sur la page de Sodium).
+- **Prise en charge du terrain de Lodistance** — Les créatures et joueurs lointains se cachent maintenant derrière le terrain lointain de Lodistance comme derrière n'importe quelle colline et se fondent dans son brouillard, et les créatures lointaines marchent sur son sol, comme avec Voxy et Distant Horizons. (Minecraft 26.3, avec OpenGL, sans shaders.)
+- **Prise en charge du terrain de Far View** — Les créatures lointaines s'affichent et marchent maintenant sur le terrain lointain de Far View et se cachent derrière ses collines, au lieu d'être masquées au-delà de la distance d'affichage. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
+- **Prise en charge du terrain d'Ecstatic** — Les créatures lointaines apparaissent maintenant sur le terrain d'Ecstatic et marchent sur son sol, au lieu de disparaître au-delà de la distance d'affichage. Elles se cachent correctement derrière ses collines, restent visibles devant elles et se fondent dans son brouillard. (NeoForge, Minecraft 1.21.1, solo ; le brouillard sans shaders.)
+- **Créatures simplifiées éclairées par les shaders** — Avec un pack de shaders qui lit les normal maps, comme Photon avec *Normal Mapping* activé, les images simplifiées des créatures lointaines sont maintenant éclairées par le pack comme leurs modèles 3D, un côté au soleil et l'autre à l'ombre, au lieu de paraître plates et plus sombres. Ces images prennent deux fois plus de mémoire vidéo ; le nouveau réglage *Éclairage des shaders* permet de le désactiver. (Minecraft 1.21.6 et plus.)
+- **Pousser les joueurs déconnectés** — Vous pouvez maintenant écarter un joueur déconnecté de votre chemin en avançant dans lui. Lui ne vous repousse jamais, puisqu'il n'existe que dans votre jeu.
+- **Les joueurs déconnectés vont pêcher** — Les joueurs déconnectés près de l'eau peuvent maintenant s'arrêter au bord pour pêcher un moment. Un seul pêche à la fois sur un même bout de rive.
+- **Les joueurs déconnectés s'abritent de la pluie** — Quand il pleut, certains joueurs déconnectés vont maintenant se mettre sous un toit ou un arbre à leur portée, et y attendent la fin de l'averse. Les autres continuent comme si de rien n'était.
+- **Les joueurs déconnectés se réunissent près du feu** — Le soir, les joueurs déconnectés vont maintenant se tenir devant un feu de camp ou un four à leur portée, chacun à sa place.
+- **Les joueurs déconnectés discutent entre eux** — Deux joueurs déconnectés proches l'un de l'autre peuvent maintenant se rejoindre et discuter un moment, face à face. Jamais plus de deux à la fois, et une seule conversation dans un même coin.
+- **Les joueurs déconnectés vous regardent** — Les joueurs déconnectés se tournent maintenant vers vous quand vous les regardez de près. Si l'un d'eux vous fait face et que vous vous accroupissez, il s'accroupit aussi.
 
 #### Améliorations
-- **Serveurs sans le mod** — en rejoignant un serveur sans Living Horizon, ou avec une version trop ancienne ou trop récente du mod, le tchat dit maintenant que les joueurs lointains n'y sont pas affichés ; avec *Afficher les joueurs* désactivé, rien n'est dit.
+- **Des nuits plus naturelles pour les joueurs déconnectés** — Les joueurs déconnectés dorment maintenant dans un lit à leur portée, ou restent debout, au lieu de s'allonger par terre.
+- **Navires lointains plus nets** — Les images simplifiées des bateaux et véhicules élevés, comme les voiliers de Shippy Ships, sont maintenant plus nettes. Les plus grands, comme le galion, en ont maintenant une aussi, au lieu d'être toujours affichés en modèle complet, plus coûteux en performances.
+- **Passage plus doux aux images simplifiées** — Les créatures et les joueurs lointains se tournent maintenant peu à peu vers l'angle sous lequel leur image simplifiée les montre, à l'approche de la distance où elle les remplace, au lieu de pivoter d'un coup au moment du passage. La transition du modèle 3D à l'image se remarque ainsi moins.
+- **Versions NeoForge 1.21.4 et 1.21.11 plus faciles à trouver** — Les versions NeoForge pour Minecraft 1.21.4 et 1.21.11 sont maintenant publiées en bêta. Elles apparaissent ainsi sur CurseForge et dans les launchers qui masquent les versions alpha.
+
+#### Corrections
+- **Créatures affichées une seule fois avec Far View** — Les créatures que Far View dessine en boîtes entre 128 blocs et la distance d'affichage ne sont maintenant affichées qu'une fois, au lieu de deux fois l'une sur l'autre. (Forge et NeoForge, Minecraft 1.20.1 à 1.21.4.)
+- **Nom des joueurs déconnectés affiché sur Forge** — Viser un joueur déconnecté affiche maintenant son nom et quand il a été vu pour la dernière fois, au lieu de ne rien afficher. (Forge, Minecraft 1.20.1 à 1.20.4.)
+- **Meilleure intégration avec Bobby** — Les créatures lointaines restent maintenant visibles juste au-delà de la distance jusqu'où le serveur les envoie, sur le terrain que Bobby conserve, au lieu de disparaître. Les joueurs lointains ne s'arrêtent plus net non plus en sortant de cette distance.
+- **Galion de Shippy Ships visible au loin** — Le galion de Shippy Ships reste maintenant visible au loin, là où vous l'avez laissé, comme les autres navires du mod, au lieu de disparaître dès qu'il sort de la distance d'affichage.
+- **Les joueurs déconnectés restent animés au loin** — Quand vous vous éloignez, les joueurs déconnectés continuent maintenant de se promener là où ils sont, au lieu de revenir à l'endroit où ils se sont déconnectés ou de rester parfaitement immobiles. Là où ils n'ont pas la place de se promener, ils font quelques pas, se retournent ou s'assoient un moment.
+
+## 0.15.0 — 2026-10-31
+
+### Serveur
+
+#### Nouveautés
+- **Créatures dans les terres inexplorées** — Living Horizon montre maintenant aux joueurs d'un serveur les créatures que le monde placerait dans les régions que personne n'a encore explorées, jusqu'à 512 blocs autour de chacun par défaut. Leur position est estimée à partir de la seed : elles peuvent être différentes ou absentes une fois sur place. Cette fonctionnalité peut être désactivée ou sa portée modifiée dans les réglages du serveur.
+- **Partage de la seed** — Les serveurs peuvent maintenant autoriser Living Horizon à partager la seed du monde avec les joueurs qui ont le mod, pour que leur jeu estime lui-même les créatures partout, à la longue-vue ou avec *Deviner les créatures*. Cette option est désactivée par défaut, car connaître la seed permet de tout savoir du monde.
+
+#### Améliorations
+- **Vol en élytres visible au loin** — Le serveur indique maintenant quels joueurs volent avec des élytres, afin qu'ils soient correctement affichés en train de planer à longue distance.
+
+### Client
+
+#### Nouveautés
+- **Accès rapide aux pages de Living Horizon** — Les réglages du mod proposent maintenant des raccourcis vers Modrinth, CurseForge, Nexus Mods et le site officiel, en plus de Discord.
+- **Créatures dans les zones inexplorées** — Les régions que personne n'a encore explorées ne sont plus vides : Living Horizon estime à partir de la seed les créatures que le monde y placerait, jusqu'à la *Distance d'affichage des créatures*. Comme elles sont seulement estimées, elles peuvent être différentes ou absentes une fois sur place. Disponible en solo et sur les serveurs équipés du mod ; le réglage *Créatures devinées* permet de les masquer.
+- **Créatures estimées à la longue-vue** — Regarder dans une longue-vue affiche maintenant les créatures estimées des zones inexplorées là où vous visez, quelle que soit la distance. Sur un serveur, celui-ci doit partager sa seed.
+- **Estimation des créatures alentour** — Le nouveau bouton *Deviner les créatures* affiche d'un coup les créatures estimées jusqu'à 1024 chunks autour de vous, et les conserve pour vos prochaines sessions. Sur un serveur, celui-ci doit partager sa seed.
+- **Saisie des valeurs au clavier** — Les curseurs des réglages du mod qui se terminent par *Illimité* (nombres maximum et distances d'affichage) acceptent maintenant une valeur tapée au clavier, même au-delà de leur dernier cran, et la page de Sodium l'affiche aussi. Faites un clic droit sur un curseur pour saisir une valeur précise ; les flèches du clavier ajustent aussi chaque curseur cran par cran.
+- **Aperçu des distances dans le monde** — Lorsque vous survolez ou modifiez un réglage de distance, sa limite s'affiche maintenant directement dans le monde, derrière le menu. Vous voyez ainsi d'un coup d'œil jusqu'où porte la valeur choisie.
+
+#### Améliorations
+- **Distance de simplification facultative** — La *Distance de simplification* peut maintenant être désactivée. Les créatures, entités, joueurs et oiseaux ne deviennent alors des images simplifiées que lorsqu'ils paraissent assez petits à l'écran.
+- **Jusqu'à 4000 créatures lointaines** — Le réglage *Créatures max* va maintenant jusqu'à 4000 avant *Illimité*.
+- **Illimité en bout de curseur** — *Illimitée* se trouve maintenant tout à droite des curseurs de distance d'affichage, après 4000 blocs, au lieu de tout à gauche. Les curseurs se lisent ainsi de la plus courte à la plus longue distance.
+- **Confirmation avant Illimité** — Le jeu demande maintenant confirmation avant de régler sur *Illimité* un nombre de créatures, d'entités ou de joueurs déconnectés, ou une distance d'affichage. Ces valeurs peuvent faire fortement chuter les FPS, voire faire planter le jeu. Sur la page de Sodium, la question s'affiche au moment d'*Appliquer*.
+- **Limites par défaut plus raisonnables** — Plus aucun réglage n'est illimité par défaut, pour éviter les grosses chutes de performances : *Distance d'affichage des joueurs*, *Distance des animations* et *Distance d'affichage des entités* s'arrêtent à 4000 blocs. Les préréglages *Élevé* et *Ultra* affichent au plus 1500 et 3000 créatures, *Ultra* jusqu'à 2048 blocs, et les réglages restés sur les anciennes valeurs par défaut passent aux nouvelles.
+- **Vol en élytres plus naturel** — Les joueurs lointains qui volent avec des élytres sont maintenant affichés ailes déployées, dans une vraie posture de vol, au lieu de courir debout dans les airs.
+- **Changement de pack de ressources plus fluide** — Les images simplifiées des créatures ne sont plus recréées inutilement quand un pack de ressources est désactivé puis réactivé. Le chargement des ressources ne fige plus non plus le jeu pendant leur recherche.
+- **Créatures volantes d'Ice and Fire vues sous tous les angles** — Les dragons, amphithères et hippogriffes d'Ice and Fire ont maintenant des images simplifiées vues d'en dessous et d'au-dessus, comme les phantoms et les avions, au lieu d'être vus seulement de côté. Ils restent ainsi fidèles quand ils vous survolent ou que vous les regardez d'en haut.
+- **Créatures géantes plus nettes au loin** — Les très grandes créatures gardent maintenant leur modèle 3D complet tant qu'elles paraissent grandes à l'écran, au lieu de devenir une image simplifiée pixelisée.
+
+#### Corrections
+- **Créatures lointaines visibles sur le terrain lointain** — Les créatures lointaines, estimées comprises, restent maintenant visibles sur le terrain lointain, au lieu d'être masquées comme s'il n'y avait rien sous elles : un moment après l'ouverture d'un monde, parmi des milliers de créatures estimées, ou quand Voxy ou Distant Horizons tarde à répondre.
+- **Brouillard de Distant Horizons appliqué aux créatures** — Les créatures lointaines reçoivent maintenant le même brouillard que le terrain de Distant Horizons et s'estompent avec lui, au lieu de ressortir nettement sur le paysage. (Sans shaders.)
+- **Créatures d'Ice and Fire correctement simplifiées** — Les dragons lointains d'Ice and Fire ont maintenant des images simplifiées entières à leur vraie taille, au lieu d'un gros plan de leurs pattes ou d'une aile. Des dragons d'âges différents ne partagent plus la même image, et les serpents de mer gardent leur modèle 3D au lieu d'une image coupée.
+- **Les joueurs déconnectés gardent leur bateau** — Un joueur déconnecté au milieu de l'eau ne perd plus le bateau où il se repose quand vous vous éloignez : il le garde de près comme de loin, et la prochaine fois que vous jouez.
+- **Les joueurs déconnectés ne flottent plus dans les airs** — Un joueur déconnecté en l'air, en vol plané avec des élytres ou en pleine chute, n'y remonte plus quand vous vous éloignez : il se repose sur le sol sous lui. Avec Voxy ou Distant Horizons, il est au sol avant même que vous vous approchiez.
+- **Créatures lointaines au repos naturel** — Les créatures lointaines au-delà de la *Distance des animations*, ou plus petites que la *Taille min. animée*, restent maintenant à leur place, au lieu de glisser d'avant en arrière les pattes immobiles en tremblant. Elles reprennent leur marche là où elles s'étaient arrêtées une fois suffisamment proches.
+
+## 0.14.0 — 2026-10-29
+
+### Client
+
+#### Nouveautés
+- **Véhicules des autres mods visibles au loin** — Les véhicules ajoutés par d'autres mods, comme les avions d'Immersive Aircraft, restent maintenant visibles au-delà de la distance d'affichage, là où ils ont été laissés, comme les bateaux. Ceux qu'on monte sans les diriger, comme les wagonnets, sont désactivés par défaut et peuvent être activés dans *Créatures et entités...*.
+- **Réglages dédiés aux entités** — Les bateaux, véhicules et mannequins ont maintenant leurs propres réglages, séparés de ceux des créatures : affichage, nombre maximum et distance d'affichage. Leur distance est illimitée par défaut.
+- **Simplification séparée pour les créatures et les entités** — *Entités simplifiées* devient deux options : *Créatures simplifiées* et *Entités simplifiées*. Les bateaux, véhicules et mannequins peuvent ainsi devenir eux aussi des images simplifiées au loin, y compris vus d'au-dessus et d'en dessous. *Joueurs simplifiés* devient indépendant, et l'écran des images s'appelle désormais *Aperçu des images...*, avec un onglet pour les entités.
+- **Journal des modifications en jeu** — Un nouveau bouton dans les réglages du mod affiche les nouveautés de chaque version, sans quitter le jeu. Il est aussi disponible sur la page de Sodium.
+
+#### Améliorations
+- **Message sur les serveurs incompatibles** — En rejoignant un serveur sans Living Horizon, ou avec une version trop ancienne ou trop récente, un message dans le tchat vous prévient maintenant que les joueurs lointains n'y seront pas affichés. Ce message n'apparaît pas si *Afficher les joueurs* est désactivé.
+- **Créatures et entités en deux onglets** — L'écran *Créatures et entités...* sépare maintenant les créatures et les autres entités dans deux onglets, pour s'y retrouver plus facilement. Les bateaux et véhicules s'y affichent ou se masquent simplement.
+- **Choix des créatures appliqués immédiatement** — Afficher ou masquer un type dans *Créatures et entités...* se voit maintenant aussitôt dans le monde derrière le menu, sans avoir à le fermer.
+- **Réglages des créatures mieux organisés** — Les réglages *Créatures et entités lointaines* sont maintenant répartis en trois parties : *Général*, *Créatures* et *Entités*.
+- **Joueurs montés plus fidèles au loin** — Avec *Joueurs simplifiés*, un joueur lointain en bateau, en wagonnet, en avion ou sur un ghast joyeux est maintenant correctement représenté vu d'en haut et d'en bas, au lieu d'apparaître toujours de profil.
+- **Avions qui restent en vol** — Un joueur qui se déconnecte en plein vol reste maintenant en l'air dans son avion, qui fait du surplace ou tourne en rond selon qu'il était à l'arrêt ou en mouvement.
+- **Origine des images visible** — L'écran *Aperçu des images* indique maintenant d'où vient chaque image (partagée, reprise d'une session précédente, nouvelle ou non sauvegardée), ainsi que la date et le monde où elle a été créée.
+- **Animaux assis qui restent assis** — Les chats, loups et perroquets à qui vous avez ordonné de s'asseoir restent maintenant assis au loin, au lieu de se lever et de partir se promener.
+
+#### Corrections
+- **Plantage de Créatures et entités corrigé** — Ouvrir *Créatures et entités...* depuis l'écran titre ne fait plus planter le jeu. (Minecraft 26.x.)
+- **Véhicules moddés qui gardent leurs couleurs** — Les véhicules et créatures lointains de certains mods, comme les avions d'Immersive Aircraft, gardent maintenant leurs couleurs quand vous vous en approchez, au lieu de devenir noirs un instant.
+- **Montures affichées une seule fois** — La monture ou le véhicule d'un joueur lointain, comme un avion moddé, n'apparaît plus en double à côté de lui.
 
 ## 0.13.0 — 2026-10-28
 
 ### Client
 
 #### Améliorations
-- **Jeu plus fluide parmi les mobs lointains et les joueurs déconnectés** — chercher où les mobs lointains et les joueurs déconnectés peuvent marcher ne prend plus de temps au jeu : c'est fait en arrière-plan.
-- **Images plus fluides avec les mobs lointains** — le jeu attend moins le pilote graphique à chaque image avec des mobs lointains sur Voxy ou Distant Horizons, surtout sur les cartes NVIDIA avec l'*Optimisation threadée* activée.
-- **Phantoms et ghasts lointains qui volent** — les phantoms lointains tournent maintenant en rond dans le ciel et les ghasts lointains dérivent lentement, au lieu de rester figés en l'air.
-- **Phantoms et ghasts vus d'en dessous** — en *Entités simplifiées* (des images plates des mobs lointains), les phantoms et les ghasts sont maintenant dessinés vus d'en dessous et d'au-dessus aussi, comme les oiseaux, et plus seulement de côté.
-- **Plus fluide avec beaucoup de mobs lointains sous Vulkan** — le jeu ne perd plus de temps sur chaque mob lointain, à chaque image, quand il dessine avec Vulkan (Minecraft 26.2 et plus) ou sur Distant Horizons (Minecraft 26.3).
-- **Tous les mobs visibles de loin** — les monstres, les chauves-souris, les poissons et tous les autres mobs sont maintenant affichés au loin dès le départ, en balade comme les animaux : les endermen restent en vue à travers l'End ; les animaux que tu avais masqués le restent.
+- **Jeu plus fluide avec les créatures lointaines** — Living Horizon calcule maintenant en arrière-plan où les créatures lointaines et les joueurs déconnectés peuvent marcher, sans ralentir le jeu.
+- **Rendu plus fluide avec Voxy et Distant Horizons** — Le jeu attend moins le pilote graphique à chaque image quand des créatures lointaines sont affichées sur le terrain de Voxy ou de Distant Horizons. Le gain est surtout visible sur les cartes NVIDIA avec l'*Optimisation threadée* activée.
+- **Phantoms et ghasts qui volent au loin** — Les phantoms lointains tournent maintenant en rond dans le ciel et les ghasts dérivent lentement, au lieu de rester figés en l'air.
+- **Phantoms et ghasts vus d'en dessous** — En images simplifiées, les phantoms et les ghasts sont maintenant aussi représentés vus d'en dessous et d'au-dessus, comme les oiseaux, et plus seulement de profil.
+- **Plus fluide avec beaucoup de créatures lointaines** — Le jeu ne perd plus de temps sur chaque créature lointaine à chaque image. (Vulkan sur Minecraft 26.2 et plus, Distant Horizons sur Minecraft 26.3.)
+- **Toutes les créatures visibles au loin** — Les monstres, chauves-souris, poissons et toutes les autres créatures sont maintenant affichés au loin par défaut et s'y promènent comme les animaux. Les endermen restent ainsi visibles à travers l'End. Les animaux que vous aviez masqués le restent.
 
 #### Corrections
-- **Boutons empilés les uns sur les autres** — les boutons en bas de *Créatures et entités lointaines* ne se chevauchent plus, et *Réinitialiser* est de retour à gauche de *Terminé* dans les réglages (Minecraft 1.20.1).
-- **Jeu figé en changeant de dimension ou en quittant un monde** — le jeu ne se fige plus pour de bon quand tu passes un portail ou quittes un monde (avec Distant Horizons).
+- **Boutons des réglages remis en ordre** — Les boutons en bas de *Créatures et entités lointaines* ne se chevauchent plus, et *Réinitialiser* retrouve sa place à gauche de *Terminé*. (Minecraft 1.20.1.)
+- **Blocage en changeant de dimension corrigé** — Le jeu ne se bloque plus définitivement lorsque vous traversez un portail ou quittez un monde. (Avec Distant Horizons.)
 
 ## 0.12.1 — 2026-10-27
 
 ### Client
 
 #### Corrections
-- **Benchmark ouvert à tous les joueurs** — `/livinghorizon benchmark` n'est plus proposé aux joueurs ; il est réservé aux tests du mod.
+- **Commande de benchmark réservée aux tests** — `/livinghorizon benchmark` n'est plus proposée aux joueurs : elle sert uniquement à tester le mod.
 
 ## 0.12.0 — 2026-10-23
 
 ### Serveur
 
 #### Nouveautés
-- **Réglages du serveur** — `config/livinghorizon-server.json`, écrit au premier démarrage du serveur, choisit ce que le serveur partage : joueurs connectés, joueurs déconnectés et mobs, jusqu'à quelle distance, avec les coéquipiers seulement, et quels joueurs et quelles dimensions ne sont jamais partagés ; les changements s'appliquent en quelques secondes, sans redémarrer.
+- **Réglages du serveur** — Les propriétaires de serveur peuvent maintenant choisir ce que Living Horizon partage : joueurs connectés, joueurs déconnectés et créatures, jusqu'à quelle distance, uniquement entre coéquipiers si vous le souhaitez, et quels joueurs ou quelles dimensions ne sont jamais partagés. Les réglages se trouvent dans `config/livinghorizon-server.json` et s'appliquent en quelques secondes, sans redémarrage.
 
 #### Corrections
-- **Joueurs éjectés des serveurs Forge** — un serveur Forge avec le mod n'éjecte plus les joueurs qui l'ont aussi dès qu'ils se connectent, avec « mismatched mod channel list » (Forge 1.20.2 et plus).
-- **Spectateurs et joueurs invisibles visibles de loin** — les joueurs en mode spectateur ou invisibles ne sont plus montrés aux autres joueurs au loin, ni là où ils se sont déconnectés.
+- **Connexion aux serveurs Forge corrigée** — Les joueurs qui ont le mod ne sont plus éjectés d'un serveur Forge qui l'a aussi, avec le message « mismatched mod channel list ». (Forge 1.20.2 et plus.)
+- **Spectateurs et joueurs invisibles bien cachés** — Les joueurs en mode spectateur ou invisibles ne sont plus visibles au loin par les autres joueurs, ni à l'endroit où ils se sont déconnectés.
 
 ### Client
 
 #### Nouveautés
-- **Bouton Discord** — les réglages du mod ont maintenant un logo Discord à côté du titre, pour rejoindre le serveur, poser une question ou signaler un problème (un bouton *Rejoindre le Discord* sur la page de Sodium).
-- **Version du mod affichée** — les écrans de réglages et le panneau de debug affichent maintenant la version de Living Horizon, pratique à donner avec un signalement de bug.
-- **Taille de simplification** — un nouveau réglage transforme aussi les mobs, joueurs et oiseaux lointains en *Entités simplifiées* (des images plates d'eux) quand ils paraissent plus petits à l'écran qu'un nombre de pixels, même avant la *Distance de simplification* (10 pixels par défaut).
+- **Bouton Discord** — Les réglages du mod permettent maintenant de rejoindre le Discord de Living Horizon en un clic, pour poser une question ou signaler un problème. Le bouton est aussi disponible sur la page de Sodium.
+- **Version du mod affichée** — Les écrans de réglages et le panneau de debug indiquent maintenant la version de Living Horizon, pratique à préciser dans un signalement de bug.
+- **Taille de simplification** — Un nouveau réglage transforme les créatures, joueurs et oiseaux lointains en images simplifiées dès qu'ils paraissent plus petits qu'une certaine taille à l'écran (10 pixels par défaut), même avant la *Distance de simplification*. Ce qui est à peine visible coûte ainsi beaucoup moins cher à afficher.
 
 #### Améliorations
-- **Plus fluide avec des centaines de mobs lointains** — *Ignorer cachés* coûte bien moins cher avec beaucoup de mobs et de joueurs lointains à l'écran, le terrain lointain est copié moins souvent en coulisses, et la lumière sur les silhouettes est lue moins souvent.
-- **Minecraft 1.21.1 plus facile à trouver** — les builds Fabric, Quilt et NeoForge pour Minecraft 1.21 et 1.21.1 sont maintenant publiés en bêta : ils apparaissent sur CurseForge et dans les launchers qui masquent les versions alpha.
-- **Moins de saccades avec beaucoup de silhouettes lointaines** — les mobs, joueurs et oiseaux au loin demandent beaucoup moins de mémoire au jeu à chaque image, qui saccade donc moins.
-- **Plus fluide avec beaucoup d'oiseaux** — les oiseaux derrière toi ou trop petits pour être vus ne sont plus dessinés.
+- **Plus fluide avec des centaines de créatures lointaines** — *Ignorer cachés* coûte beaucoup moins cher quand de nombreuses créatures et de nombreux joueurs lointains sont à l'écran, et Living Horizon effectue moins de travail en coulisses.
+- **Versions pour Minecraft 1.21.1 plus faciles à trouver** — Les versions Fabric, Quilt et NeoForge pour Minecraft 1.21 et 1.21.1 sont maintenant publiées en bêta. Elles apparaissent ainsi sur CurseForge et dans les launchers qui masquent les versions alpha.
+- **Moins de saccades avec beaucoup de monde au loin** — Les créatures, joueurs et oiseaux lointains demandent beaucoup moins de mémoire au jeu à chaque image, ce qui réduit les saccades.
+- **Plus fluide avec beaucoup d'oiseaux** — Les oiseaux situés derrière vous ou trop petits pour être vus ne sont plus dessinés.
 
 #### Corrections
-- **Mobs lointains qui flottent dans le vide** — les mobs lointains ne sont plus dessinés là où aucun terrain n'est encore dessiné sous eux, ni celui du jeu, ni celui de Voxy ou de Distant Horizons.
-- **Mondes solo qui se ferment aussitôt sur Forge** — un monde solo ne se ferme plus dès qu'il s'ouvre, avec « mismatched mod channel list » (Forge 1.20.2 et plus).
-- **Mobs lointains disparus sur le terrain de Distant Horizons** — en solo, les mobs lointains ne disparaissent plus et ne s'arrêtent plus de marcher sur les collines et montagnes de Distant Horizons.
+- **Créatures toujours posées sur le terrain** — Les créatures lointaines ne sont plus affichées là où aucun terrain n'est encore visible sous elles, qu'il s'agisse de celui du jeu, de Voxy ou de Distant Horizons. Elles ne flottent donc plus dans le vide.
+- **Mondes solo qui s'ouvrent de nouveau sur Forge** — Un monde solo ne se ferme plus dès son ouverture avec le message « mismatched mod channel list ». (Forge 1.20.2 et plus.)
+- **Créatures stables sur le terrain de Distant Horizons** — En solo, les créatures lointaines ne disparaissent plus et continuent de marcher sur les collines et les montagnes de Distant Horizons.
 
 ## 0.11.0 — 2026-10-22
 
 ### Serveur
 
 #### Améliorations
-- **Plus léger sur les gros serveurs** — le serveur passe moins de temps à choisir à qui envoyer skin et monture, et envoie une longue liste de joueurs déconnectés en plusieurs fois au lieu d'un seul message trop gros pour le jeu.
-- **Les joueurs ont aussi besoin de cette version** — sur un serveur qui a cette version, les joueurs doivent l'avoir aussi pour voir les joueurs lointains.
+- **Plus léger sur les gros serveurs** — Le serveur passe moins de temps à choisir les skins et montures à envoyer à chaque joueur. Les longues listes de joueurs déconnectés sont maintenant envoyées en plusieurs fois, au lieu d'un seul message trop volumineux pour le jeu.
+- **Mise à jour requise pour les joueurs** — Sur un serveur qui utilise cette version, les joueurs doivent aussi l'installer pour voir les joueurs lointains.
 
 #### Corrections
-- **Joueurs déconnectés perdus quand le fichier du monde ne se lit pas** — un `livinghorizon-positions.dat` que le serveur ne sait pas lire n'est plus écrasé : il est gardé en `livinghorizon-positions.dat.bad`, et la console le signale.
+- **Fichier des joueurs déconnectés protégé** — Si le serveur ne parvient pas à lire `livinghorizon-positions.dat`, le fichier n'est plus écrasé : il est conservé sous le nom `livinghorizon-positions.dat.bad` et la console le signale.
 
 ### Client
 
 #### Nouveautés
-- **Benchmark** — `/livinghorizon benchmark` mesure ce que le mod coûte dans ton monde, partie par partie, et écrit un rapport à joindre à un signalement de bug.
-- **Monde de benchmark** — `/livinghorizon benchmark world` crée un nouveau monde de test, toujours le même, où le benchmark part du même endroit à chaque fois, au milieu de mobs et de joueurs déconnectés ; ton propre monde reste tel quel.
-- **Déconnectés max** — un nouveau réglage choisit combien de joueurs déconnectés sont affichés en même temps, les plus proches d'abord (256 par défaut) ; les autres réapparaissent quand tu t'en approches.
+- **Benchmark** — La commande `/livinghorizon benchmark` mesure ce que coûte chaque partie du mod dans votre monde et produit un rapport à joindre à un signalement de bug.
+- **Monde de benchmark** — `/livinghorizon benchmark world` crée un monde de test toujours identique, peuplé de créatures et de joueurs déconnectés, pour que les mesures puissent être comparées d'une fois sur l'autre. Votre propre monde n'est pas modifié.
+- **Déconnectés max** — Un nouveau réglage limite le nombre de joueurs déconnectés affichés en même temps, en commençant par les plus proches (256 par défaut). Les autres réapparaissent quand vous vous en approchez.
 
 #### Améliorations
-- **Message plus clair quand les versions diffèrent** — quand le mod du serveur est trop ancien ou trop récent pour le tien, le journal dit lequel mettre à jour, au lieu de dire que le serveur n'a pas le mod.
-
-#### Améliorations
-- **Plus fluide avec beaucoup de joueurs déconnectés** — les joueurs déconnectés coûtent moins cher à afficher au loin, et ceux cachés derrière les collines sont ignorés.
+- **Message plus clair quand les versions diffèrent** — Quand le mod du serveur est trop ancien ou trop récent par rapport au vôtre, le journal indique maintenant lequel mettre à jour, au lieu d'affirmer que le serveur n'a pas le mod.
+- **Plus fluide avec beaucoup de joueurs déconnectés** — Les joueurs déconnectés coûtent moins cher à afficher au loin, et ceux cachés derrière les collines ne sont plus dessinés.
 
 #### Corrections
-- **Joueurs déconnectés au-delà de la Distance d'affichage des joueurs** — les joueurs déconnectés ne s'affichent plus au-delà du réglage *Distance d'affichage des joueurs*.
-- **Mannequins lointains avec le skin par défaut** — les mannequins au loin ne perdent plus leur skin pour apparaître en Alex : ils gardent celui qu'ils portent de près, celui d'un joueur ou d'un pack de ressources (Minecraft 1.21.9 et plus).
-- **Eau disparue sous Photon avec Distant Horizons** — avec *Masquer par le relief*, l'eau ne se change plus en son fond nu et ombré dès qu'un mob ou un joueur lointain est en vue (Minecraft 26.3).
-- **Capes dressées des mannequins lointains** — les capes des mannequins au loin ne se dressent plus en l'air : elles pendent comme de près (Minecraft 1.21.9 et plus).
-- **Fichier de réglages perdu après une faute de frappe** — une erreur en modifiant `livinghorizon.json` à la main n'efface plus le fichier : il est gardé en `livinghorizon.json.bad`, et le journal le signale.
-- **Mobs mémorisés et joueurs déconnectés perdus** — un jeu qui se ferme pendant une sauvegarde n'abîme plus les fichiers des mobs mémorisés et des joueurs déconnectés, et un fichier abîmé est gardé en `.bad` au lieu d'être vidé.
-- **Saccades en rejoignant un gros serveur** — rejoindre un serveur avec beaucoup de joueurs déconnectés ne fait plus saccader le jeu.
-- **Manque de mémoire à cause d'une image abîmée** — une image sauvegardée abîmée d'un mob lointain (*Entités simplifiées*) ne peut plus faire manquer de mémoire au jeu : elle est redessinée à la place.
-- **Mobs lointains cachés par le terrain de Distant Horizons sous shaders** — avec Oculus et un shader pack, les mobs lointains ne disparaissent plus derrière le terrain de Distant Horizons, de plus en plus à mesure que la distance de rendu augmente (Forge).
-- **Mobs lointains qui secouent la tête** — les mobs et les joueurs au loin ne secouent plus la tête à toute vitesse avec Entity Culling, seul ou avec Chloride.
-- **Joueurs affichés dans la mauvaise dimension moddée** — les joueurs connectés ou déconnectés dans une dimension moddée, comme l'Aether, ne sont plus dessinés dans une autre, comme la Twilight Forest (sur un serveur, il lui faut aussi cette version).
-- **Mobs lointains délavés par le brouillard** — les mobs au loin sur le terrain de Voxy ne pâlissent plus jusqu'à se fondre dans la couleur du brouillard passé une certaine distance : ils prennent le même brouillard que le terrain autour d'eux (sans shader pack).
+- **Distance d'affichage des joueurs respectée** — Les joueurs déconnectés ne sont plus affichés au-delà de la *Distance d'affichage des joueurs*.
+- **Mannequins lointains avec leur vrai skin** — Les mannequins lointains gardent maintenant le skin qu'ils portent de près, qu'il vienne d'un joueur ou d'un pack de ressources, au lieu d'apparaître en Alex. (Minecraft 1.21.9 et plus.)
+- **Eau préservée sous Photon avec Distant Horizons** — Avec *Masquer par le relief* activé, l'eau reste maintenant normale quand une créature ou un joueur lointain est en vue, au lieu de laisser voir son fond nu et ombré. (Minecraft 26.3.)
+- **Capes des mannequins qui pendent normalement** — Les capes des mannequins lointains pendent maintenant comme de près, au lieu de se dresser en l'air. (Minecraft 1.21.9 et plus.)
+- **Fichier de réglages protégé** — Une erreur en modifiant `livinghorizon.json` à la main n'efface plus le fichier : il est conservé sous le nom `livinghorizon.json.bad` et le journal le signale.
+- **Sauvegardes protégées** — Si le jeu se ferme pendant une sauvegarde, les fichiers des créatures mémorisées (celles que Living Horizon continue d'afficher au loin) et des joueurs déconnectés ne sont plus abîmés. Un fichier abîmé est conservé en `.bad` au lieu d'être vidé.
+- **Connexion plus fluide aux gros serveurs** — Rejoindre un serveur avec beaucoup de joueurs déconnectés ne fait plus saccader le jeu.
+- **Images abîmées recréées automatiquement** — Une image simplifiée sauvegardée et abîmée ne peut plus faire manquer de mémoire au jeu : elle est simplement recréée.
+- **Créatures visibles devant le terrain de Distant Horizons avec Oculus** — Avec Oculus et un pack de shaders, les créatures lointaines ne disparaissent plus derrière le terrain de Distant Horizons, un problème qui s'aggravait avec la distance d'affichage. (Forge.)
+- **Mouvements de tête naturels avec Entity Culling** — Les créatures et joueurs lointains ne secouent plus la tête à toute vitesse avec Entity Culling, seul ou avec Chloride.
+- **Joueurs dans la bonne dimension moddée** — Les joueurs, connectés ou déconnectés, d'une dimension moddée comme l'Aether ne sont plus affichés dans une autre, comme la Twilight Forest. Sur un serveur, celui-ci doit aussi utiliser cette version.
+- **Brouillard de Voxy appliqué aux créatures** — Les créatures lointaines sur le terrain de Voxy reçoivent maintenant le même brouillard que le paysage autour d'elles, au lieu de pâlir jusqu'à la couleur du brouillard au-delà d'une certaine distance. (Sans shaders.)
 
 ## 0.10.0 — 2026-10-20
 
 ### Serveur
 
 #### Nouveautés
-- **Le mod sur un serveur** — mets le jar dans le dossier `mods` du serveur, sur Fabric, Quilt, NeoForge ou Forge (plus la Fabric API sur Fabric et Quilt). Rien d'autre à régler. Il remplace le datapack.
-- **Positions des joueurs** — le serveur envoie où est chaque joueur, cinq fois par seconde, aux joueurs qui ont le mod. Il envoie aussi leur skin, leur armure, ce qu'ils tiennent et leur monture.
-- **Mobs** — le serveur envoie les mobs jusqu'à 2 048 blocs autour de chaque joueur, même ceux qu'il n'a jamais croisés : animaux, villageois, golems, allays et bateaux, avec leur selle, leur harnais, leur armure ou leur coffre.
-- **Joueurs déconnectés** — le serveur garde l'endroit où chaque joueur s'est déconnecté, son apparence, sa monture et l'heure de son départ, et l'envoie à tout le monde, même aux joueurs qui arrivent après.
-- **Joueurs d'avant le mod** — au premier démarrage, le serveur lit les joueurs que le monde avait déjà (le dossier `playerdata`, leurs noms dans `usercache.json`) et les affiche comme déconnectés, là où ils sont partis, avec ce qu'ils portaient.
-- **Fichier du monde** — le serveur sauvegarde tout cela dans `livinghorizon-positions.dat`, dans le dossier du monde. Un mob est oublié quand son chunk se charge et qu'il n'y est plus.
-- **Mondes LAN** — un monde ouvert au LAN partage tout par le jeu de l'hôte. Rien à installer.
-- **Joueurs sans le mod** — ils peuvent toujours rejoindre. Le serveur ne leur envoie rien.
-- **Même mod des deux côtés** — garde le mod à jour sur le serveur et chez les joueurs : un jeu qui ne sait pas lire les messages du serveur les ignore.
-- **Positions partagées** — le serveur partage la position de chaque joueur avec tous les joueurs qui ont le mod. Préviens tes joueurs.
-- **Fini le datapack** — le mod ne le lit plus : retire-le du dossier `datapacks` du monde. Plus rien ne passe par le scoreboard, donc les coordonnées ne sont plus lisibles dans les scores ni dans la barre latérale.
+- **Living Horizon sur les serveurs** — Le mod s'installe maintenant aussi sur le serveur : placez le jar dans son dossier `mods` (Fabric, Quilt, NeoForge ou Forge, avec la Fabric API sur Fabric et Quilt). Aucune configuration n'est nécessaire, et il remplace le data pack.
+- **Joueurs partagés en temps réel** — Le serveur envoie la position de chaque joueur cinq fois par seconde aux joueurs qui ont le mod, avec son skin, son armure, ses objets en main et sa monture.
+- **Créatures partagées** — Le serveur envoie les créatures situées jusqu'à 2048 blocs autour de chaque joueur, même celles qu'il n'a jamais croisées : animaux, villageois, golems, allays et bateaux, avec leur selle, harnais, armure ou coffre.
+- **Joueurs déconnectés partagés** — Le serveur retient où chaque joueur s'est déconnecté, son apparence, sa monture et l'heure de son départ, et les transmet à tous, y compris aux joueurs qui arrivent plus tard.
+- **Joueurs d'avant l'installation** — Au premier démarrage, le serveur retrouve les joueurs que le monde connaissait déjà et les affiche comme joueurs déconnectés, là où ils sont partis, avec leur équipement.
+- **Sauvegarde dans le monde** — Tout est enregistré dans `livinghorizon-positions.dat`, dans le dossier du monde. Une créature est oubliée lorsque son chunk se charge et qu'elle n'y est plus.
+- **Mondes en LAN** — Un monde ouvert en LAN partage tout depuis le jeu de l'hôte, sans rien installer de plus.
+- **Joueurs sans le mod bienvenus** — Les joueurs qui n'ont pas le mod peuvent toujours se connecter ; le serveur ne leur envoie simplement rien.
+- **Même version des deux côtés** — Gardez le mod à jour sur le serveur comme chez les joueurs : un jeu qui ne comprend pas les messages du serveur les ignore.
+- **Confidentialité : positions partagées** — Le serveur partage la position de chaque joueur avec tous les joueurs qui ont le mod, quelle que soit la distance. Pensez à prévenir vos joueurs.
+- **Fin du data pack** — Le data pack n'est plus utilisé : retirez-le du dossier `datapacks` du monde. Les coordonnées ne passent plus par le tableau des scores et n'apparaissent donc plus dans les scores ni dans la barre latérale.
 
 #### Corrections
-- **Joueurs qui disparaissent à la fermeture d'un monde** — quand un serveur ou un monde LAN se ferme, les joueurs présents restent là où ils étaient, en joueurs déconnectés.
+- **Joueurs conservés à la fermeture d'un monde** — Quand un serveur ou un monde en LAN se ferme, les joueurs encore présents restent maintenant là où ils étaient, en tant que joueurs déconnectés, au lieu de disparaître.
 
 ### Client
 
 #### Nouveautés
-- **Tous les joueurs, à n'importe quelle distance** — sur un serveur avec le mod, tu vois tous les autres joueurs, avec leur skin, leur armure, ce qu'ils tiennent et leur monture.
-- **Mobs jamais croisés** — sur un serveur avec le mod, les mobs lointains apparaissent tout de suite, même ceux près desquels tu n'es jamais passé, avec leur selle, leur harnais, leur armure ou leur coffre.
-- **Joueurs déconnectés, même avant ton arrivée** — tu les vois là où ils sont partis, avec leur apparence et ce qu'ils montaient.
-- **Ton propre monde** — en solo, les joueurs déconnectés de ton monde apparaissent dès que tu l'ouvres, même ceux d'avant le mod.
-- **Tout dès l'arrivée** — les mobs lointains et les joueurs déconnectés apparaissent dès que tu rejoins, et non quelques secondes plus tard.
-- **Serveurs sans le mod** — tu peux toujours les rejoindre. Aucun joueur lointain n'est affiché, seulement les mobs que tu as croisés, et le journal le signale une fois.
+- **Tous les joueurs, à n'importe quelle distance** — Sur un serveur équipé du mod, vous voyez maintenant tous les autres joueurs, où qu'ils soient, avec leur skin, leur armure, leurs objets en main et leur monture.
+- **Créatures jamais croisées** — Sur un serveur équipé du mod, les créatures lointaines apparaissent immédiatement, même celles dont vous ne vous êtes jamais approché, avec leur selle, harnais, armure ou coffre.
+- **Joueurs déconnectés visibles dès votre arrivée** — Vous voyez les joueurs déconnectés là où ils sont partis, avec leur apparence et leur monture, même s'ils sont partis avant votre arrivée.
+- **Joueurs déconnectés en solo** — En solo, les joueurs déconnectés de votre monde apparaissent dès son ouverture, y compris ceux d'avant l'installation du mod.
+- **Horizon vivant dès la connexion** — Les créatures lointaines et les joueurs déconnectés apparaissent dès que vous rejoignez, et non quelques secondes plus tard.
+- **Serveurs sans le mod** — Vous pouvez toujours les rejoindre. Seules les créatures que vous avez déjà croisées y sont affichées, sans joueurs lointains, et le journal le signale une fois.
 
 #### Améliorations
-- **Position des joueurs lointains** — elle vient uniquement de ce que partage le serveur. L'estimation par la barre de localisation disparaît, et le réglage *Délai joueur perdu* avec.
+- **Position des joueurs lointains plus fiable** — Les joueurs lointains sont maintenant placés uniquement d'après les positions partagées par le serveur. L'estimation par la barre de localisation disparaît, ainsi que le réglage *Délai joueur perdu*.
 
 #### Corrections
-- **Joueurs sur un ghast joyeux** — un joueur lointain qui chevauche un ghast joyeux n'a plus de second ghast à côté de lui, et celui qui le chevauchait déjà quand tu arrives ne flotte plus dans le vide.
-- **Ghast joyeux qui revient après la descente de son cavalier** — le ghast joyeux dont descend un joueur lointain ne réapparaît plus là où il a été monté pour revenir en volant : il reste là où il a été laissé.
-- **Anciens skins au loin** — un joueur lointain qui change de skin ne garde plus l'ancien au loin.
-- **Joueurs de travers dans les bateaux** — un joueur qui se déconnecte dans un bateau n'est plus assis tourné sur le côté : il regarde dans le sens du bateau.
-- **Cavaliers assis dans leur cheval** — un joueur lointain à cheval n'est plus assis dans le cheval ou sur sa croupe, en modèle complet comme en image plate.
-- **Cheval en double après la déconnexion de son cavalier** — un joueur qui se déconnecte à cheval ne laisse plus une seconde copie du cheval à côté de celui sur lequel il reste.
-- **Boutons Website et Issues grisés** — les boutons Website et Issues de la page du mod dans Mod Menu ne sont plus grisés (Fabric).
+- **Ghast joyeux affiché correctement** — Un joueur lointain sur un ghast joyeux n'a plus de second ghast à côté de lui, et celui qui le chevauchait déjà à votre arrivée ne flotte plus dans le vide.
+- **Ghast joyeux qui reste où il a été laissé** — Quand un joueur lointain descend de son ghast joyeux, celui-ci reste maintenant là où il a été laissé, au lieu de réapparaître à son point de départ pour revenir en volant.
+- **Nouveau skin visible au loin** — Un joueur lointain qui change de skin apparaît maintenant avec le nouveau, au lieu de garder l'ancien au loin.
+- **Joueurs bien assis dans les bateaux** — Un joueur qui se déconnecte dans un bateau regarde maintenant dans le sens du bateau, au lieu d'être assis de travers.
+- **Cavaliers bien en selle** — Un joueur lointain à cheval est maintenant assis correctement, en modèle complet comme en image simplifiée, au lieu de s'enfoncer dans le cheval ou de s'asseoir sur sa croupe.
+- **Un seul cheval après la déconnexion** — Un joueur qui se déconnecte à cheval ne laisse plus une copie du cheval à côté de celui sur lequel il reste.
+- **Boutons Website et Issues actifs** — Les boutons Website et Issues de la page du mod dans Mod Menu ne sont plus grisés. (Fabric.)
 
 ## 0.9.0 — 2026-10-19
 
 ### Corrections
-- **Joueurs déconnectés debout dans l'eau** — les joueurs partis en nageant ne restent plus debout dans l'eau : ils attendent sur le rivage le plus proche, ou rament dans un bateau quand le rivage est à plus de 10 blocs.
-- **Eau qui disparaît autour des bateaux** — l'eau ne devient plus transparente autour des joueurs déconnectés qui rament, avec un pack de shaders comme Photon, et ne disparaît plus en un grand carré autour des bateaux au loin.
-- **Rameurs qui perdent leur bateau au loin** — au loin, les joueurs déconnectés qui rament n'apparaissent plus debout sans leur bateau le temps que leur image soit faite.
+- **Joueurs déconnectés sortis de l'eau** — Les joueurs qui se sont déconnectés en nageant ne restent plus debout dans l'eau : ils attendent sur le rivage le plus proche, ou rament dans un bateau si celui-ci est à plus de 10 blocs.
+- **Eau intacte autour des bateaux** — L'eau ne devient plus transparente autour des joueurs déconnectés qui rament avec un pack de shaders comme Photon, et ne disparaît plus en un grand carré autour des bateaux lointains.
+- **Rameurs toujours dans leur bateau** — Au loin, les joueurs déconnectés qui rament gardent maintenant leur bateau pendant que leur image simplifiée est créée, au lieu d'apparaître debout sans lui.
 
 ## 0.8.0 — 2026-10-18
 
 ### Nouveautés
-- **Réglage Joueurs simplifiés** — garde les joueurs lointains en modèles complets, tandis que les créatures lointaines deviennent toujours des images plates au loin.
-- **12 nouvelles langues** — allemand, espagnol, italien, portugais du Brésil, polonais, turc, russe, ukrainien, chinois simplifié et traditionnel, japonais et coréen.
-- **Réglages dans le menu de Sodium** — les réglages de Living Horizon apparaissent aussi dans les *Paramètres vidéo* de Sodium, sur des pages à eux (Sodium 0.8 et plus).
-- **Les joueurs déconnectés gardent leur monture** — un joueur parti sur un cheval, un bateau ou un ghast joyeux continue de le monter autour de l'endroit où il s'est déconnecté.
-- **Réglages de mémoire vidéo** — l'écran *Entités simplifiées...* montre la mémoire vidéo prise par les images des créatures et des joueurs, et *Mémoire des images de créatures* et *Mémoire des images de joueurs* fixent une limite pour chacun.
+- **Joueurs simplifiés** — Un nouveau réglage permet de garder les joueurs lointains en modèles 3D complets, tandis que les créatures lointaines continuent de devenir des images simplifiées.
+- **12 nouvelles langues** — Living Horizon est maintenant disponible en allemand, espagnol, italien, portugais du Brésil, polonais, turc, russe, ukrainien, chinois simplifié et traditionnel, japonais et coréen.
+- **Réglages dans Sodium** — Les réglages de Living Horizon sont maintenant accessibles depuis les *Paramètres vidéo* de Sodium, sur leurs propres pages. (Sodium 0.8 et plus.)
+- **Joueurs déconnectés avec leur monture** — Un joueur parti à cheval, en bateau ou sur un ghast joyeux continue de le monter autour de l'endroit où il s'est déconnecté.
+- **Contrôle de la mémoire vidéo** — L'écran *Entités simplifiées...* indique la mémoire vidéo utilisée par les images des créatures et des joueurs, et deux nouveaux réglages fixent une limite pour chacun.
 
 ### Améliorations
-- **Réglages plus clairs** — chaque réglage a un nom et une description plus clairs, dans le style des options de Minecraft, et les curseurs de distance prennent toute la largeur.
-- **Joueurs déconnectés** — les joueurs déconnectés font une petite ronde autour de l'endroit où ils sont partis, et deviennent des images plates au loin comme les joueurs connectés, debout, assis, couchés ou dans un lit.
-- **Cavaliers** — au loin, un joueur sur un cheval, dans un bateau, un wagonnet ou tout autre monture devient une seule image plate avec elle, bien plus légère que deux modèles complets.
-- **Grandes foules de joueurs** — au-delà d'une centaine de joueurs lointains, les suivants deviennent eux aussi des images plates au lieu de rester en modèles complets.
+- **Réglages plus clairs** — Chaque réglage a maintenant un nom et une description plus clairs, dans le style des options de Minecraft, et les curseurs de distance occupent toute la largeur de l'écran.
+- **Joueurs déconnectés plus vivants** — Les joueurs déconnectés font maintenant une petite ronde autour de l'endroit où ils sont partis. Au loin, ils deviennent des images simplifiées comme les joueurs connectés, qu'ils soient debout, assis, allongés ou dans un lit.
+- **Cavaliers plus légers à afficher** — Au loin, un joueur sur un cheval, dans un bateau, un wagonnet ou toute autre monture forme maintenant une seule image simplifiée avec elle, bien plus légère que deux modèles complets.
+- **Grandes foules de joueurs plus fluides** — Au-delà d'une centaine de joueurs lointains, les suivants deviennent eux aussi des images simplifiées au lieu de rester en modèles complets.
 
 ### Corrections
-- **Créatures visibles à travers les collines après avoir redimensionné la fenêtre** — les créatures lointaines ne traversent plus les collines, celles de Voxy et de Distant Horizons comprises, quand la fenêtre du jeu change de taille.
-- **Joueurs et slimes qui disparaissent avec Distant Horizons** — les joueurs lointains, les joueurs déconnectés et les slimes ne disparaissent plus sous le terrain de Distant Horizons (Minecraft 26.1 et plus).
-- **Terrain de Distant Horizons qui mord sur les créatures** — le terrain de Distant Horizons ne mord plus sur les créatures et les joueurs placés devant lui (Minecraft 26.1 et plus).
-- **Créatures lointaines qui clignotent en marchant** — avec le balancement de la vue, les créatures lointaines ne clignotent plus et le terrain de Distant Horizons ne vacille plus devant elles à chaque pas (Minecraft 26.1 et plus).
+- **Créatures bien cachées après un redimensionnement** — Les créatures lointaines ne traversent plus les collines, y compris celles de Voxy et de Distant Horizons, après un changement de taille de la fenêtre du jeu.
+- **Joueurs et slimes visibles avec Distant Horizons** — Les joueurs lointains, les joueurs déconnectés et les slimes ne disparaissent plus sous le terrain de Distant Horizons. (Minecraft 26.1 et plus.)
+- **Créatures entières devant le terrain de Distant Horizons** — Le terrain de Distant Horizons ne mord plus sur les créatures et les joueurs placés devant lui. (Minecraft 26.1 et plus.)
+- **Créatures stables avec le balancement de la vue** — Avec le balancement de la vue activé, les créatures lointaines ne clignotent plus et le terrain de Distant Horizons ne vacille plus devant elles à chaque pas. (Minecraft 26.1 et plus.)
 
 ## 0.7.0 — 2026-10-17
 
 ### Nouveautés
-- **Les joueurs déconnectés prennent vie** — les joueurs déconnectés vivent autour de l'endroit où ils sont partis : ils se promènent, s'assoient, regardent les coffres et les blocs de métier, vont au lit la nuit, et lèvent un bouclier quand on les frappe ou que des monstres approchent. Ils restent au sol : casse le bloc sous eux et ils tombent, enterre-les et ils remontent.
-- **Noms hors ligne** — les joueurs déconnectés affichent *(hors ligne)* après leur nom, et en viser un de près indique quand il a été vu pour la dernière fois. Des réglages masquent leurs noms, ou les joueurs eux-mêmes.
-- **Oiseaux en 3D** — les oiseaux sont maintenant de petits modèles 3D comme les mobs de Minecraft, qui battent des ailes et se posent sur leurs pattes, et deviennent des images plates au loin. Le réglage *Style des oiseaux* remet les anciens oiseaux en 2D.
-- **Hmm…** — j'ai cru voir quelque chose dans le ciel. 😉
+- **Les joueurs déconnectés prennent vie** — Les joueurs déconnectés vivent maintenant autour de l'endroit où ils sont partis : ils se promènent, s'assoient, regardent les coffres et les blocs de métier, vont se coucher la nuit et lèvent leur bouclier quand on les frappe ou que des monstres approchent. Ils restent toujours au sol : ils tombent si vous cassez le bloc sous eux, et remontent si vous les enterrez.
+- **Mention « hors ligne »** — Les joueurs déconnectés affichent *(hors ligne)* après leur pseudo, et en viser un de près indique quand il a été vu pour la dernière fois. Leurs pseudos, ou les joueurs déconnectés eux-mêmes, peuvent être masqués dans les réglages.
+- **Oiseaux en 3D** — Les oiseaux sont maintenant de petits modèles 3D, comme les créatures de Minecraft : ils battent des ailes, se posent sur leurs pattes et deviennent des images simplifiées au loin. Le réglage *Style des oiseaux* permet de retrouver les anciens oiseaux en 2D.
+- **Hmm…** — J'ai cru voir quelque chose dans le ciel. 😉
 
 ### Améliorations
-- **Créatures qui sautent** — les slimes, cubes de magma et lapins lointains se déplacent maintenant par bonds au lieu de glisser, les slimes s'écrasent en retombant, et les poules battent des ailes en descendant d'un bloc.
-- **Canards** — les canards s'envolent maintenant ensemble quand tu approches et se reposent plus loin sur l'eau, au lieu de partir pour de bon.
+- **Créatures qui sautent** — Les slimes, cubes de magma et lapins lointains se déplacent maintenant par bonds au lieu de glisser. Les slimes s'écrasent en retombant, et les poules battent des ailes en descendant d'un bloc.
+- **Canards plus naturels** — Les canards s'envolent maintenant ensemble à votre approche et se posent plus loin sur l'eau, au lieu de partir pour de bon.
 
 ### Corrections
-- **Créatures figées à la longue-vue** — les créatures lointaines vues à la longue-vue comptent maintenant à leur taille zoomée, et continuent donc de marcher quand elles paraissent grosses (réglage *Taille min. animée*).
-- **Créatures qui tournent sur place à l'ouverture d'un monde** — les créatures lointaines marchent et broutent maintenant dès le début.
-- **Oiseaux posés au comportement étrange** — les mésanges, rouges-gorges et canards ne font plus de va-et-vient, ne flottent plus dans le vide, ne se posent plus dans les feuilles et ne nagent plus sur la terre ferme, et les canards n'apparaissent plus juste à côté de toi pour s'envoler aussitôt. Les canards nagent maintenant sur leur mare, et les rouges-gorges et mésanges sautillent plus et s'envolent moins.
-- **Mauvaise licence dans la liste des mods** — Living Horizon n'affiche plus la mauvaise licence dans la liste des mods (Forge, NeoForge et Quilt).
+- **Créatures animées à la longue-vue** — Les créatures lointaines vues à la longue-vue sont maintenant prises en compte à leur taille zoomée et continuent de marcher quand elles paraissent grandes, au lieu de se figer. (Réglage *Taille min. animée*.)
+- **Créatures animées dès l'ouverture d'un monde** — Les créatures lointaines marchent et broutent maintenant dès le début, au lieu de tourner sur place.
+- **Oiseaux posés plus naturels** — Les mésanges, rouges-gorges et canards ne font plus de va-et-vient, ne flottent plus dans le vide, ne se posent plus dans les feuilles et ne nagent plus sur la terre ferme. Les canards n'apparaissent plus juste à côté de vous pour s'envoler aussitôt et nagent maintenant sur leur mare, et les rouges-gorges et mésanges sautillent davantage et s'envolent moins.
+- **Bonne licence dans la liste des mods** — Living Horizon affiche maintenant la bonne licence dans la liste des mods. (Forge, NeoForge et Quilt.)
 
 ## 0.6.0 — 2026-10-15
 
 ### Nouveautés
-- **Images des créatures gardées entre les parties** — les images plates des créatures lointaines sont enregistrées sur le disque et réutilisées à la partie suivante ; elles ne sont refaites qu'après un changement de packs de ressources, de mods ou de version du jeu.
+- **Images des créatures conservées** — Les images simplifiées des créatures lointaines sont maintenant enregistrées sur le disque et réutilisées d'une session à l'autre. Elles ne sont recréées qu'après un changement de packs de ressources, de mods ou de version du jeu.
 
 ### Améliorations
-- **Nouvelle icône du mod** — une nouvelle icône en pixel art : Steve au premier plan, et des créatures, des villageois, des joueurs et des oiseaux jusqu'aux montagnes derrière lui.
-- **Créatures lointaines à ton retour** — en solo, les créatures lointaines se téléportent ou foncent bien moins souvent vers un autre endroit quand tu reviens : elles suivent les vraies créatures tant que le jeu les fait bouger, et disparaissent quand celles-ci meurent.
+- **Nouvelle icône** — Living Horizon a une nouvelle icône en pixel art : Steve au premier plan, entouré de créatures, de villageois, de joueurs et d'oiseaux jusqu'aux montagnes.
+- **Créatures lointaines plus cohérentes à votre retour** — En solo, les créatures lointaines se téléportent ou foncent beaucoup moins souvent vers un autre endroit quand vous revenez : elles suivent les vraies créatures tant que le jeu les fait bouger, et disparaissent quand celles-ci meurent.
 
 ### Corrections
-- **Clignotement dans l'écran Entités simplifiées** — deux créatures du même nom, comme des villageois aux tenues différentes, n'échangent plus leur place en clignotant.
-- **Traits sombres sur les créatures lointaines** — les créatures lointaines dessinées en images plates n'ont plus de fins traits sombres ni de points noirs en haut ou en bas, et les créatures longues comme les chevaux et les renifleurs ne sont plus coupées au museau ou à la queue.
-- **Plantage avec les créatures GeckoLib** — un monde ne plante plus quelques secondes après son chargement quand une créature d'un mod GeckoLib a été vue au loin (Minecraft 1.21.2 à 1.21.8). Ces créatures ne sont pas encore montrées au loin.
-- **Jeu ralenti par les entités simplifiées** — le jeu ne ralentit plus quand les créatures lointaines sont dessinées en images plates : les mêmes créatures ne sont plus redessinées en boucle, et celles qui se ressemblent partagent une seule image.
+- **Écran Entités simplifiées sans clignotement** — Deux créatures du même nom, comme des villageois aux tenues différentes, n'échangent plus leur place en clignotant.
+- **Images des créatures plus propres** — Les créatures lointaines en images simplifiées n'ont plus de fins traits sombres ni de points noirs en haut ou en bas. Les créatures longues comme les chevaux et les renifleurs ne sont plus coupées au museau ou à la queue.
+- **Plantage avec les créatures GeckoLib corrigé** — Un monde ne plante plus quelques secondes après son chargement quand une créature d'un mod utilisant GeckoLib a été vue au loin. Ces créatures ne sont pas encore affichées au loin. (Minecraft 1.21.2 à 1.21.8.)
+- **Entités simplifiées plus rapides** — Le jeu ne ralentit plus avec les images simplifiées : les mêmes créatures ne sont plus redessinées en boucle, et celles qui se ressemblent partagent une seule image.
 
 ## 0.5.0 — 2026-10-13
 
 ### Nouveautés
-- **Entités simplifiées sur Minecraft 1.20.1 à 1.21.8** — les créatures et joueurs très lointains peuvent maintenant être dessinés en images plates sur ces versions aussi, ce qui est bien plus léger pour ton ordinateur.
+- **Entités simplifiées sur Minecraft 1.20.1 à 1.21.8** — Les créatures et joueurs très lointains peuvent maintenant être affichés en images simplifiées sur ces versions aussi, ce qui allège beaucoup le travail de votre ordinateur.
 
 ### Corrections
-- **Plantage au démarrage** — le jeu ne plante plus au démarrage avec le mod installé (Forge, Minecraft 1.20.1 à 1.20.4).
-- **Plantage de l'écran Entités simplifiées** — l'ouvrir ne fait plus planter le jeu (Minecraft 1.21.8 et avant).
-- **Créatures absentes en rejoignant un monde** — les créatures déjà autour de toi à ton arrivée apparaissent elles aussi à l'horizon, et plus seulement celles rencontrées ensuite.
+- **Plantage au démarrage corrigé** — Le jeu ne plante plus au démarrage avec le mod installé. (Forge, Minecraft 1.20.1 à 1.20.4.)
+- **Plantage de l'écran Entités simplifiées corrigé** — Ouvrir l'écran *Entités simplifiées* ne fait plus planter le jeu. (Minecraft 1.21.8 et antérieures.)
+- **Créatures présentes dès votre arrivée** — Les créatures déjà autour de vous quand vous rejoignez un monde apparaissent maintenant elles aussi à l'horizon, et plus seulement celles rencontrées ensuite.
 
 ## 0.4.2 — 2026-10-12
 
 ### Corrections
-- **Créatures qui buguent en s'éloignant** — une créature qui sort de ta vue normale ne disparaît plus un instant et ne se tourne plus dans une autre direction.
-- **Morceaux de créatures visibles à travers les collines** — les vêtements d'un villageois, un objet tenu en main ou l'enveloppe d'un slime ne traversent plus les collines de Voxy ou de Distant Horizons quand le reste de la créature est caché (Minecraft 1.21.9 et plus, avec Distant Horizons, ou avec Voxy et un pack de shaders).
+- **Créatures stables en s'éloignant** — Une créature qui sort de votre distance d'affichage ne disparaît plus un instant et ne se tourne plus dans une autre direction.
+- **Créatures entièrement cachées par les collines** — Les vêtements d'un villageois, un objet tenu en main ou l'enveloppe d'un slime ne traversent plus les collines de Voxy ou de Distant Horizons quand le reste de la créature est caché. (Minecraft 1.21.9 et plus, avec Distant Horizons, ou avec Voxy et des shaders.)
 
 ## 0.4.1 — 2026-10-11
 
 ### Corrections
-- **Créatures lointaines trop sombres avec les shaders** — les créatures lointaines dessinées en images plates ne sont plus trop sombres avec les packs de shaders d'Iris comme Photon ou Complementary : le soleil les éclaire maintenant comme les vrais modèles.
-- **Ombres du terrain sur les créatures lointaines** — les créatures lointaines ne portent plus l'ombre du terrain situé derrière elles, et l'eau de Voxy reste normale (Photon avec Voxy).
-- **Créatures lointaines visibles à travers les collines** — les créatures lointaines ne traversent plus les collines de Voxy ou de Distant Horizons (Minecraft 26.1 ; Minecraft 26.2 et plus avec un pack de shaders, anciennes versions d'Iris comprises ; Minecraft 26.3 avec Iris installé).
-- **Voxy 0.2.18 non reconnu** — le mod fonctionne de nouveau avec Voxy 0.2.18 : les créatures lointaines se tiennent sur son terrain et ne traversent plus ses collines.
-- **Créatures lointaines cachées par les mauvaises collines** — les créatures lointaines ne sont plus cachées par des collines qui ne sont pas devant elles (Distant Horizons avec l'upscaling de Photon, TAAU).
+- **Créatures bien éclairées avec les shaders** — Les créatures lointaines en images simplifiées sont maintenant éclairées par le soleil comme les modèles complets, au lieu d'être trop sombres avec les packs de shaders d'Iris comme Photon ou Complementary.
+- **Ombres du terrain corrigées** — Les créatures lointaines ne portent plus l'ombre du terrain situé derrière elles, et l'eau de Voxy s'affiche normalement. (Photon avec Voxy.)
+- **Créatures bien cachées par les collines** — Les créatures lointaines ne traversent plus les collines de Voxy ou de Distant Horizons. (Minecraft 26.1 ; Minecraft 26.2 et plus avec des shaders, anciennes versions d'Iris comprises ; Minecraft 26.3 avec Iris installé.)
+- **Compatibilité avec Voxy 0.2.18** — Le mod fonctionne de nouveau avec Voxy 0.2.18 : les créatures lointaines se tiennent sur son terrain et ne traversent plus ses collines.
+- **Créatures cachées par les bonnes collines avec Distant Horizons** — Les créatures lointaines ne sont plus cachées par des collines qui ne se trouvent pas devant elles. (Distant Horizons avec l'upscaling TAAU de Photon.)
 
 ## 0.4.0 — 2026-10-10
 
 ### Nouveautés
-- **Premier scan automatique** — la première fois que tu entres dans un monde solo, les créatures dans un rayon de 32 chunks sont trouvées tout de suite, pour que l'horizon soit vivant dès le départ. Le rayon du scan se règle maintenant en chunks, comme la distance d'affichage.
-- **Réglages d'animation** — deux nouveaux curseurs arrêtent les animations des créatures lointaines trop petites à l'écran ou trop loin, pour gagner en performances.
-- **Préréglages de qualité** — Bas, Normal, Élevé et Ultra choisissent en un clic combien de créatures lointaines et d'oiseaux tu vois, et jusqu'où. Élevé et Ultra sont faits pour les ordinateurs puissants.
+- **Premier scan automatique** — La première fois que vous entrez dans un monde solo, Living Horizon recherche aussitôt les créatures dans un rayon de 32 chunks, pour que l'horizon soit vivant dès le départ. Le rayon du scan se règle maintenant en chunks, comme la distance d'affichage.
+- **Réglages d'animation** — Deux nouveaux curseurs arrêtent l'animation des créatures lointaines trop petites à l'écran ou trop éloignées, pour gagner en performances.
+- **Préréglages de qualité** — Bas, Normal, Élevé et Ultra règlent en un clic combien de créatures lointaines et d'oiseaux vous voyez, et jusqu'où. Élevé et Ultra sont destinés aux ordinateurs puissants.
 
 ### Corrections
-- **Créatures lointaines qui deviennent noires** — sans shaders, les créatures lointaines ne deviennent plus noires par moments, surtout en vol.
+- **Créatures qui gardent leurs couleurs** — Sans shaders, les créatures lointaines ne deviennent plus noires par moments, notamment en vol.
 
 ## 0.3.2 — 2026-10-09
 
 ### Corrections
-- **Photon** — avec Voxy et l'upscaling de Photon (TAAU), les créatures lointaines se cachent de nouveau derrière les bonnes collines.
+- **Créatures cachées par les bonnes collines avec Photon** — Avec Voxy et l'upscaling TAAU de Photon, les créatures lointaines sont de nouveau cachées par les bonnes collines.
 
 ## 0.3.1 — 2026-10-08
 
 ### Corrections
-- **Minecraft 1.20 à 1.21.4** — les créatures lointaines se cachent désormais derrière les collines de Voxy et de Distant Horizons, comme sur les versions récentes.
-- **Anciennes versions de Distant Horizons** — fonctionne avec Distant Horizons 2.3 et plus, pas seulement la dernière version.
+- **Collines prises en compte sur les anciennes versions** — Les créatures lointaines se cachent maintenant derrière les collines de Voxy et de Distant Horizons, comme sur les versions récentes, au lieu de les traverser. (Minecraft 1.20 à 1.21.4.)
+- **Anciennes versions de Distant Horizons prises en charge** — Le mod fonctionne maintenant avec Distant Horizons 2.3 et plus, et plus seulement avec la dernière version.
 
 ## 0.3.0 — 2026-10-07
 
 ### Nouveautés
-- **Vulkan** — avec le moteur Vulkan du jeu, les créatures lointaines se cachent aussi derrière les collines, Distant Horizons compris.
+- **Compatibilité Vulkan** — Avec le moteur de rendu Vulkan du jeu, les créatures lointaines se cachent aussi derrière les collines, y compris celles de Distant Horizons.
 
 ### Corrections
-- **Distant Horizons sans shaders** — les créatures lointaines ne disparaissent plus dans le terrain.
-- **Distant Horizons** — plus de traînées là où s'arrête la distance d'affichage normale.
+- **Créatures visibles devant le terrain de Distant Horizons** — Sans shaders, les créatures lointaines ne disparaissent plus dans le terrain de Distant Horizons.
+- **Plus de traînées en bordure de la distance d'affichage** — Les traînées qui apparaissaient là où s'arrête la distance d'affichage normale ont disparu. (Distant Horizons.)
 
 ## 0.2.0 — 2026-10-07
 
 ### Nouveautés
-- **Créatures lointaines** — animaux, villageois et golems restent vivants à l'horizon, au-delà de la distance d'affichage, à brouter et à se promener.
-- **Joueurs lointains** — les autres joueurs continuent de marcher au loin, avec leur skin, leur armure et leur monture. Les joueurs déconnectés restent endormis là où ils sont partis.
-- **Oiseaux** — nuées, oies en V, goélands sur la côte, chauves-souris la nuit.
-- **Compatibilité Distant Horizons** — fonctionne avec Distant Horizons comme avec Voxy.
-- **Cachées derrière les collines** — les créatures lointaines derrière une colline ne sont pas dessinées, pour garder le jeu fluide.
-- **Imposteurs** (désactivés par défaut) — très loin, créatures et joueurs sont dessinés comme des images plates, bien plus légères quand ils sont nombreux.
-- **Scanner les chunks autour** — en solo, les créatures des chunks autour de toi apparaissent tout de suite à l'horizon.
-- **Réglages** — un bouton « Living Horizon... » dans le menu Options, avec le monde visible derrière, et un bouton pour revenir aux valeurs par défaut.
-- **Quilt, NeoForge et Forge** — le mod fonctionne aussi sur Quilt, NeoForge et Forge, de Minecraft 1.20 à 26.3.
-- **Un logo** dans la liste des mods et celle des data packs.
+- **Créatures lointaines** — Les animaux, villageois et golems restent vivants à l'horizon, au-delà de votre distance d'affichage : ils broutent et se promènent.
+- **Joueurs lointains** — Les autres joueurs continuent de marcher au loin, avec leur skin, leur armure et leur monture. Les joueurs qui se déconnectent restent endormis là où ils sont partis.
+- **Oiseaux** — Des nuées d'oiseaux, des oies en V, des goélands sur la côte et des chauves-souris la nuit animent le ciel.
+- **Compatibilité Distant Horizons** — Living Horizon fonctionne avec Distant Horizons comme avec Voxy.
+- **Créatures cachées derrière les collines** — Les créatures lointaines situées derrière une colline ne sont pas dessinées, pour garder le jeu fluide.
+- **Images simplifiées au loin** — Très loin, les créatures et les joueurs peuvent être affichés en images simplifiées, bien plus légères à afficher quand ils sont nombreux. Cette option est désactivée par défaut.
+- **Scan des alentours** — En solo, un scan lit les créatures des chunks autour de vous pour les faire apparaître tout de suite à l'horizon, sans avoir à les croiser d'abord.
+- **Écran de réglages** — Un bouton *Living Horizon...* dans le menu Options ouvre les réglages du mod, avec le monde toujours visible derrière, et un bouton permet de revenir aux valeurs par défaut.
+- **Quilt, NeoForge et Forge** — Living Horizon fonctionne aussi sur Quilt, NeoForge et Forge, de Minecraft 1.20 à 26.3.
+- **Logo du mod** — Living Horizon a maintenant un logo dans la liste des mods et dans celle des data packs.

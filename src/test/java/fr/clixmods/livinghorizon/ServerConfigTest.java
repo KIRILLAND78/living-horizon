@@ -33,6 +33,9 @@ class ServerConfigTest {
         assertTrue(written.get("hideInvisible").getAsBoolean());
         assertTrue(written.get("shareOfflinePlayers").getAsBoolean());
         assertTrue(written.get("shareMobs").getAsBoolean());
+        assertTrue(written.get("seedMobs").getAsBoolean());
+        assertEquals(512, written.get("seedMobRange").getAsInt());
+        assertFalse(written.get("shareSeed").getAsBoolean());
         assertFalse(watched.refresh());
     }
 
@@ -51,6 +54,19 @@ class ServerConfigTest {
         JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
         assertTrue(written.has("shareMobs"));
         assertFalse(written.get("sharePlayers").getAsBoolean());
+    }
+
+    @Test
+    void keepsTheRangeOfTheSeedsMobsInBounds() throws Exception {
+        Path file = folder.resolve(ServerConfig.FILE);
+        Files.writeString(file, "{\"seedMobRange\": 99999}");
+        ServerConfig.Watched watched = new ServerConfig.Watched(file);
+        watched.refresh();
+        assertEquals(ServerConfig.MAX_SEED_MOB_RANGE, watched.get().seedMobRange);
+        Files.writeString(file, "{\"seedMobRange\": -3}");
+        Files.setLastModifiedTime(file, FileTime.fromMillis(Files.getLastModifiedTime(file).toMillis() + 5000));
+        watched.refresh();
+        assertEquals(0, watched.get().seedMobRange);
     }
 
     @Test

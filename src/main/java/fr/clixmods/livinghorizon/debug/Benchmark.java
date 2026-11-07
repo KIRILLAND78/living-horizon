@@ -336,6 +336,7 @@ public final class Benchmark {
         list.add(new Phase("mobs-no-impostors", "distant mobs, Simplified Entities off", config -> {
             mobsOnly(config);
             config.impostors = false;
+            config.impostorEntities = false;
         }));
         list.add(new Phase("mobs-no-lods", "distant mobs, Detail Levels off", config -> {
             mobsOnly(config);
@@ -356,6 +357,7 @@ public final class Benchmark {
     private static void off(FarConfig config) {
         config.enabled = false;
         config.distantMobs = false;
+        config.distantEntities = false;
         config.skyBirds = false;
     }
 
@@ -378,6 +380,7 @@ public final class Benchmark {
         config.outlineGameMobs = false;
         config.outlineLiveMobs = false;
         config.outlineCopies = false;
+        config.outlineForeseen = false;
         config.outlinePlayers = false;
         config.outlineImpostors = false;
         config.outlineLeftOut = false;

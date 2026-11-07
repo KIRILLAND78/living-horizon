@@ -26,7 +26,7 @@ class PositionsMessageTest {
     private static final String NETHER = "minecraft:the_nether";
 
     /** Steve, online in the nether, at (1.5, 64, -2), facing 90 degrees. */
-    private static final String STEVE = "00000003" + "00000003" + "00"
+    private static final String STEVE = "00000004" + "00000003" + "00"
             // The dimensions: one, by its id.
             + "01" + "0014" + hex(NETHER)
             // One player, 37 bytes: name, x, y, z, yaw, dimension 0, online.
@@ -34,13 +34,23 @@ class PositionsMessageTest {
             + "42b40000" + "00" + "01";
 
     /** A baby horse (kind 1, variant 513) in the overworld, sent around (0, 0), 2048 blocks. */
-    private static final String HORSE_AROUND = "00000003" + "00000003" + "01"
+    private static final String HORSE_AROUND = "00000004" + "00000003" + "01"
             + "01" + "0013" + hex(OVERWORLD)
             // The circle, 25 bytes: dimension 0, x, z, radius.
             + "19" + "00" + "0000000000000000" + "0000000000000000" + "40a0000000000000"
             // One mob, 48 bytes: id, x, y, z, kind, dimension 0, baby, variant.
             + "01" + "30" + "0f8fad5bd9cb469fa16570867728950e" + "3ff8000000000000" + "4051800000000000"
             + "c004000000000000" + "0001" + "00" + "01" + "00000201";
+
+    /**
+     * Alex gliding with an elytra in the overworld, at (0, 120, 0), facing 0 and looking 15 degrees
+     * down: the flag version 3 leaves unread, and the pitch at the end of the record, which it skips.
+     */
+    private static final String ALEX_GLIDING = "00000004" + "00000003" + "00"
+            + "01" + "0013" + hex(OVERWORLD)
+            // One player, 40 bytes: name, x, y, z, yaw, dimension 0, online and gliding, pitch.
+            + "01" + "28" + "0004" + hex("Alex") + "0000000000000000" + "405e000000000000" + "0000000000000000"
+            + "00000000" + "00" + "81" + "41700000";
 
     private static final PositionsMessage.Player STEVE_PLAYER =
             new PositionsMessage.Player("Steve", 1.5, 64, -2, 90f, NETHER, true, false, null);
@@ -54,6 +64,30 @@ class PositionsMessageTest {
         assertNotNull(read);
         assertEquals(PositionsMessage.PLAYERS, read.kind());
         assertEquals(List.of(STEVE_PLAYER), read.players());
+    }
+
+    @Test
+    void writesAGliderByteForByte() {
+        PositionsMessage.Player alex = new PositionsMessage.Player("Alex", 0, 120, 0, 0f, OVERWORLD, true, false, null,
+                null, null, 0, false, true, 15f);
+        assertEquals(ALEX_GLIDING, HexFormat.of().formatHex(PositionsMessage.players(List.of(alex))));
+        PositionsMessage.Decoded read = PositionsMessage.read(bytes(ALEX_GLIDING));
+        assertNotNull(read);
+        assertEquals(List.of(alex), read.players());
+        // Sent by position alone, still gliding: it comes with every message, not every few seconds.
+        assertTrue(alex.plain().gliding());
+    }
+
+    /** The same player from a server of version 3, which never says who glides: standing, looking ahead. */
+    @Test
+    void readsAServerOfVersion3AsStanding() {
+        String record = ALEX_GLIDING.substring(ALEX_GLIDING.indexOf("0004" + hex("Alex")));
+        String standing = "00000003" + "00000003" + "00" + "01" + "0013" + hex(OVERWORLD)
+                + "01" + "24" + record.substring(0, record.length() - 10) + "01";
+        PositionsMessage.Decoded read = PositionsMessage.read(bytes(standing));
+        assertNotNull(read);
+        assertEquals(List.of(new PositionsMessage.Player("Alex", 0, 120, 0, 0f, OVERWORLD, true, false, null)),
+                read.players());
     }
 
     @Test
@@ -83,21 +117,21 @@ class PositionsMessageTest {
     @Test
     void readsALaterVersionThatOnlyAddsFields() {
         String record = STEVE.substring(STEVE.indexOf("0005" + hex("Steve")));
-        String later = "00000004" + "00000003" + "00" + "01" + "0014" + hex(NETHER)
+        String later = "00000005" + "00000003" + "00" + "01" + "0014" + hex(NETHER)
                 + "01" + "28" + record + "abcdef" + "0102030405";
         PositionsMessage.Decoded read = PositionsMessage.read(bytes(later));
         assertNotNull(read);
         assertEquals(List.of(STEVE_PLAYER), read.players());
-        assertTrue(new PositionsMessage.Format(4, 3).readableBy(PositionsMessage.VERSION));
+        assertTrue(new PositionsMessage.Format(5, 3).readableBy(PositionsMessage.VERSION));
     }
 
     @Test
     void refusesAVersionItCannotRead() {
         byte[] message = bytes(STEVE);
-        message[7] = 4;
+        message[7] = 5;
         assertNull(PositionsMessage.read(message));
         PositionsMessage.Format format = PositionsMessage.format(message);
-        assertEquals(new PositionsMessage.Format(3, 4), format);
+        assertEquals(new PositionsMessage.Format(4, 5), format);
         assertFalse(format.readableBy(PositionsMessage.VERSION));
         assertFalse(new PositionsMessage.Format(1, 1).readableBy(PositionsMessage.VERSION));
     }
@@ -239,5 +273,18 @@ class PositionsMessageTest {
 
     private static byte[] bytes(String hex) {
         return HexFormat.of().parseHex(hex);
+    }
+
+    @Test
+    void sharesTheSeedWithTheDimensionsAClientCanBuild() {
+        PositionsMessage.Seed seed = new PositionsMessage.Seed(-123456789L, List.of(
+                new PositionsMessage.SeedGround("minecraft:overworld", "minecraft:overworld", "minecraft:overworld")));
+        PositionsMessage.Decoded read = PositionsMessage.read(PositionsMessage.seed(seed));
+        assertNotNull(read);
+        assertEquals(PositionsMessage.SEED, read.kind());
+        assertEquals(seed, read.seed());
+        PositionsMessage.Decoded none = PositionsMessage.read(PositionsMessage.seed(PositionsMessage.Seed.NONE));
+        assertNotNull(none);
+        assertEquals(PositionsMessage.Seed.NONE, none.seed());
     }
 }

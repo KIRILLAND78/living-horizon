@@ -19,16 +19,21 @@ import java.nio.file.Path;
 
 /**
  * When the easter eggs may come by chance, in days of the game this player has lived in a
- * world: each from a day of its own on, never two within a few days of each other; the
- * watcher ({@link Herobrine}) on nights of his own. A day is a dawn seen in the overworld,
+ * world: each from a day of its own on, never two within a few days of each other; the daily
+ * ones ({@link Daily}: 3, 4 and 5) on days of their own, alongside the others. A day is a dawn seen in the overworld,
  * a night slept through included.
  *
  * <p>Kept per server, in {@code config/livinghorizon/calendar/<server>.json}. Calling an
  * easter egg by its command is none of its business.
  */
 public final class EggCalendar {
-    /** The first day each easter egg may come by chance, by number; the watcher's is drawn per world. */
-    private static final int[] FIRST = {0, 3, 5, 10, 0, 4, 6, 8};
+    /**
+     * The first day each easter egg may come by chance, by number; the daily ones' (3, 4, 5)
+     * are drawn per world, 14 and 20 are no more, and 21 keeps to dates of its own.
+     */
+    private static final int[] FIRST = {0, 3, 5, 0, 0, 0, 6, 8, 4, 5, 4, 3, 2, 6, 3, 2, 7, 3, 2, 3, 5, 0};
+    /** The daily easter eggs, by number. */
+    private static final int[] DAILY = {3, 4, 5};
 
     /** Gson writes every field that is not transient, under names that say nothing of what they count. */
     private static final class State {
@@ -37,12 +42,40 @@ public final class EggCalendar {
         /** No easter egg comes by chance before this day: the last one was not long ago. */
         @SerializedName("next")
         int quietUntil;
-        /** The watcher comes every night from this day on, until he is looked in the eyes; -1 until drawn. */
+        /** Each daily one comes every day from this one on, until it is seen; -1 until drawn. */
+        @SerializedName("next3")
+        int from3 = -1;
         @SerializedName("next4")
-        int watcherFrom = -1;
-        /** The night he last came, by the day it belongs to; -1 if never. */
+        int from4 = -1;
+        @SerializedName("next5")
+        int from5 = -1;
+        /** The day each daily one last came; -1 if never. */
+        @SerializedName("last3")
+        int came3 = -1;
         @SerializedName("last4")
-        int watcherNight = -1;
+        int came4 = -1;
+        @SerializedName("last5")
+        int came5 = -1;
+
+        int from(int number) {
+            return number == 3 ? from3 : number == 4 ? from4 : from5;
+        }
+
+        void from(int number, int day) {
+            if (number == 3) from3 = day;
+            else if (number == 4) from4 = day;
+            else from5 = day;
+        }
+
+        int came(int number) {
+            return number == 3 ? came3 : number == 4 ? came4 : came5;
+        }
+
+        void came(int number, int day) {
+            if (number == 3) came3 = day;
+            else if (number == 4) came4 = day;
+            else came5 = day;
+        }
     }
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -69,10 +102,14 @@ public final class EggCalendar {
                 LivingHorizonClient.LOGGER.warn("Could not read {}", file, e);
             }
         }
-        if (state.watcherFrom < 0) {
-            state.watcherFrom = 2 + random.nextInt(2);
-            save();
+        boolean drawn = false;
+        for (int number : DAILY) {
+            if (state.from(number) >= 0) continue;
+            // The second or third day.
+            state.from(number, 2 + random.nextInt(2));
+            drawn = true;
         }
+        if (drawn) save();
     }
 
     public void close() {
@@ -108,20 +145,21 @@ public final class EggCalendar {
         save();
     }
 
-    /** Whether the watcher is due tonight: his day has come and he has not come yet this night. */
-    boolean watcherTonight() {
-        return state.watcherFrom >= 0 && state.days >= state.watcherFrom && state.watcherNight != state.days;
+    /** Whether daily easter egg {@code number} is due today: its day has come and it has not come yet. */
+    boolean dailyDue(int number) {
+        int from = state.from(number);
+        return from >= 0 && state.days >= from && state.came(number) != state.days;
     }
 
-    /** He came tonight. */
-    void watcherCame() {
-        state.watcherNight = state.days;
+    /** Daily easter egg {@code number} came today. */
+    void dailyCame(int number) {
+        state.came(number, state.days);
         save();
     }
 
-    /** He was looked in the eyes: back in two to four days. */
-    void watcherSeen() {
-        state.watcherFrom = state.days + 2 + random.nextInt(3);
+    /** Daily easter egg {@code number} was seen: back in one to three days. */
+    void dailySeen(int number) {
+        state.from(number, state.days + 1 + random.nextInt(3));
         save();
     }
 

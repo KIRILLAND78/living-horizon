@@ -39,18 +39,34 @@ import java.util.zip.GZIPOutputStream;
  *
  * <p>The fingerprint is everything that changes how a figure is drawn: the game version, the
  * resource packs chosen and their files, the mods' files, and how a sheet is baked. When any
- * of them changes, the folder of the old fingerprint is thrown away and the mobs are baked
- * again. The players' sheets are never kept: they come and go.
+ * of them changes, the mobs are baked again into the folder of the new fingerprint. The folders
+ * of the last {@link #FOLDERS} fingerprints are kept, so that switching a resource pack off and
+ * on again reads the sheets back. The players' sheets are never kept: they come and go. Each
+ * folder holds the text its fingerprint was made from, {@code fingerprint.txt}: when one is
+ * thrown away, the log says which lines changed.
  *
- * <p>Files are read and written on a thread of their own; the render thread only asks and,
- * frames later, uploads what was read ({@link ImpostorAtlas}).
+ * <p>Each sheet carries when it was baked and in which world, for the impostor screen.
+ *
+ * <p>Files are read and written on a thread of their own, and the fingerprint is worked out
+ * there too (it reads every mod's jar): the render thread only asks and, frames later, uploads
+ * what was read ({@link ImpostorAtlas}). Until the sheets of a new fingerprint are listed
+ * ({@link #ready()}), the mobs wait rather than being baked again.
  */
 public final class ImpostorDisk {
-    /** Bumped whenever a sheet is baked differently, or the file holds something else. */
-    private static final int FORMAT = 2;
+    /** Bumped whenever a sheet is baked differently: part of the fingerprint, every sheet is baked again. */
+    private static final int BAKE = 2;
+    /**
+     * Bumped whenever the file holds something else. 3 added when and where a sheet was baked;
+     * a file of 2 is still read, its date unknown. 4 added how far down its tiles the figure's
+     * origin is, which a figure pictured round its middle may have moved; one of 3 has it where
+     * the kind of figure puts it.
+     */
+    private static final int FORMAT = 4;
     private static final int MAGIC = 0x4C484953;
-    /** Sheet files kept in all: the ones read or written longest ago go first. */
+    /** Sheet files kept per fingerprint: the ones read or written longest ago go first. */
     private static final int KEEP = 4096;
+    /** Fingerprint folders kept, the current one included: the ones chosen longest ago go first. */
+    static final int FOLDERS = 3;
 
     /**
      * How many times larger than {@link ImpostorViews#TILE} the tiles of a sheet on disk are:
@@ -58,8 +74,12 @@ public final class ImpostorDisk {
      */
     static final int SCALE = 1;
 
-    /** A sheet as read from disk: its size in blocks, and the rows of each mip level. */
-    public record Stored(double worldSize, int[][] levels) {
+    /**
+     * A sheet as read from disk: its size in blocks, the rows of each mip level, when it was baked
+     * (milliseconds since 1970, 0 when not known), in which world (empty when not known) and how
+     * far down its tiles the figure's origin is (NaN when not known: where its kind puts it).
+     */
+    public record Stored(double worldSize, int[][] levels, long bakedAt, String world, float feet) {
     }
 
     private static final ExecutorService IO = Executors.newSingleThreadExecutor(task -> {
@@ -68,9 +88,25 @@ public final class ImpostorDisk {
         return thread;
     });
 
-    /** The folder of the current fingerprint; null until worked out again after a reload. */
+    /**
+     * The folder of the current fingerprint, read and written on the disk's thread only: every
+     * task queued after the one that works it out sees it, the thread running them in order.
+     */
     private static @Nullable Path folder;
-    /** The sheets in {@link #folder}, listed when it is worked out. */
+
+    /** What the disk's thread found in a fingerprint's folder: its sheets, and what was learnt to leave out of keys. */
+    private record Found(Set<ImpostorKey> saved, Map<String, Map<Integer, Long>> restless) {
+    }
+
+    /** What the render thread knows of the game to work the fingerprint out from. */
+    private record Inputs(Path base, File gameDirectory, String game, List<String> packs, boolean relief) {
+    }
+
+    /** The disk's thread working out the current fingerprint; null until asked for after a reload. */
+    private static @Nullable CompletableFuture<Found> finding;
+    /** Whether {@link #SAVED} lists the current fingerprint's sheets. */
+    private static boolean ready;
+    /** The sheets of the current fingerprint, listed when it is worked out. Render thread only. */
     private static final Set<ImpostorKey> SAVED = new HashSet<>();
     /** What {@link ImpostorKey#learnt()} was when last saved. */
     private static int savedLearnt;
@@ -80,28 +116,46 @@ public final class ImpostorDisk {
 
     /** The packs or the mods may have changed: the fingerprint is worked out again. */
     public static void reset() {
-        folder = null;
+        finding = null;
+        ready = false;
         SAVED.clear();
     }
 
-    /** Throws every saved sheet away: they are all baked again. */
+    /** Throws every saved sheet of the current fingerprint away: they are all baked again. */
     public static void clear() {
-        Path old = folder();
         SAVED.clear();
-        savedLearnt = ImpostorKey.learnt() - 1;
-        IO.execute(() -> delete(old));
+        IO.execute(() -> {
+            if (folder != null) deleteSheets(folder);
+        });
     }
 
-    /** Whether a sheet is on disk, never for a player. */
+    /**
+     * Whether the sheets on disk are known. Starts working the fingerprint out after a reload,
+     * on the disk's thread: false until it is, a moment later.
+     */
+    public static boolean ready() {
+        if (ready) return true;
+        if (finding == null) finding = start();
+        Found found = finding.getNow(null);
+        if (found == null) return false;
+        SAVED.clear();
+        SAVED.addAll(found.saved);
+        ImpostorKey.restore(found.restless);
+        savedLearnt = ImpostorKey.learnt();
+        ready = true;
+        return true;
+    }
+
+    /** Whether a sheet is on disk, never for a player. False until {@link #ready()}. */
     public static boolean has(ImpostorKey key) {
-        folder();
-        return SAVED.contains(key);
+        return ready() && SAVED.contains(key);
     }
 
     /** Reads a sheet, on the disk's thread: null when it cannot be read, and then forgotten. */
     public static CompletableFuture<@Nullable Stored> read(ImpostorKey key) {
-        Path file = file(folder(), key);
         return CompletableFuture.supplyAsync(() -> {
+            if (folder == null) return null;
+            Path file = file(folder, key);
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new GZIPInputStream(Files.newInputStream(file))))) {
                 Stored stored = decode(in);
                 // Read again: kept over the ones not met for longer.
@@ -117,20 +171,18 @@ public final class ImpostorDisk {
     /** A sheet that could not be read: dropped, and baked again. */
     public static void forget(ImpostorKey key) {
         SAVED.remove(key);
-        Path file = file(folder(), key);
         IO.execute(() -> {
+            if (folder == null) return;
             try {
-                Files.deleteIfExists(file);
+                Files.deleteIfExists(file(folder, key));
             } catch (IOException ignored) {
                 // Written over by the next bake.
             }
         });
     }
 
-    /** Saves a mob's sheet just baked, and what has been learnt to leave out of keys. */
-    public static void write(ImpostorKey key, double worldSize, int[][] levels) {
-        Path root = folder();
-        Path file = file(root, key);
+    /** Saves a mob's sheet just baked, when and where, and what has been learnt to leave out of keys. */
+    public static void write(ImpostorKey key, double worldSize, float feet, int[][] levels, long bakedAt, String world) {
         SAVED.add(key);
         Map<String, Map<Integer, Long>> restless = null;
         if (ImpostorKey.learnt() != savedLearnt) {
@@ -139,11 +191,14 @@ public final class ImpostorDisk {
         }
         Map<String, Map<Integer, Long>> learnt = restless;
         IO.execute(() -> {
+            Path root = folder;
+            if (root == null) return;
+            Path file = file(root, key);
             try {
                 Files.createDirectories(file.getParent());
                 Path part = file.resolveSibling(file.getFileName() + ".part");
                 try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(part))))) {
-                    encode(out, worldSize, SCALE, levels);
+                    encode(out, worldSize, feet, SCALE, levels, bakedAt, world);
                 }
                 Files.move(part, file, StandardCopyOption.REPLACE_EXISTING);
                 if (learnt != null) writeRestless(root, learnt);
@@ -154,10 +209,14 @@ public final class ImpostorDisk {
     }
 
     /** A sheet as {@link #decode} reads it back, its tiles {@code scale} times larger: {@link #SCALE}. */
-    static void encode(DataOutputStream out, double worldSize, int scale, int[][] levels) throws IOException {
+    static void encode(DataOutputStream out, double worldSize, float feet, int scale, int[][] levels, long bakedAt,
+                       String world) throws IOException {
         out.writeInt(MAGIC);
         out.writeInt(FORMAT);
+        out.writeLong(bakedAt);
+        out.writeUTF(world);
         out.writeDouble(worldSize);
+        out.writeFloat(feet);
         out.writeInt(scale);
         out.writeInt(levels.length);
         for (int[] level : levels) {
@@ -172,35 +231,66 @@ public final class ImpostorDisk {
      * asks for more memory than one sheet takes; it throws then.
      */
     static @Nullable Stored decode(DataInputStream in) throws IOException {
-        if (in.readInt() != MAGIC || in.readInt() != FORMAT) return null;
+        if (in.readInt() != MAGIC) return null;
+        int format = in.readInt();
+        if (format < 2 || format > FORMAT) return null;
+        long bakedAt = format >= 3 ? in.readLong() : 0;
+        String world = format >= 3 ? in.readUTF() : "";
         double worldSize = in.readDouble();
+        float feet = format >= 4 ? in.readFloat() : Float.NaN;
+        if (!Float.isNaN(feet) && (feet <= 0 || feet >= 1)) throw new IOException("origin " + feet + " down its tiles");
         int scale = in.readInt();
         if (scale != SCALE) throw new IOException("tiles " + scale + " times larger");
         int count = in.readInt();
-        if (count != ImpostorAtlas.MIPS) throw new IOException(count + " levels, not " + ImpostorAtlas.MIPS);
+        // With their normal maps, twice as many (ImpostorAtlas.relief).
+        if (count != ImpostorAtlas.MIPS && count != 2 * ImpostorAtlas.MIPS) {
+            throw new IOException(count + " levels, not " + ImpostorAtlas.MIPS);
+        }
         int[][] levels = new int[count][];
         for (int level = 0; level < count; level++) {
-            int tile = ImpostorViews.TILE >> level;
+            int tile = ImpostorViews.TILE >> level % ImpostorAtlas.MIPS;
             int expected = tile * ImpostorViews.VIEWS * tile;
             int length = in.readInt();
             if (length != expected) throw new IOException("level " + level + " of " + length + " pixels, not " + expected);
             levels[level] = new int[length];
             for (int i = 0; i < length; i++) levels[level][i] = in.readInt();
         }
-        return new Stored(worldSize, levels);
+        return new Stored(worldSize, levels, bakedAt, world, feet);
     }
 
     /**
-     * The folder of the current fingerprint, worked out once after each reload: the folders
-     * of other fingerprints are thrown away, the sheets of this one listed, and what an
-     * earlier game learnt to leave out of keys taken back.
+     * Hands the disk's thread what it needs to work the fingerprint out: what only the render
+     * thread may read of the game, taken now, the files read there.
      */
-    private static Path folder() {
-        if (folder != null) return folder;
-        Path base = Platform.configDir().resolve("livinghorizon").resolve("impostors");
-        Path current = base.resolve(fingerprint());
+    private static CompletableFuture<Found> start() {
+        Minecraft minecraft = Minecraft.getInstance();
+        Inputs inputs = new Inputs(Platform.configDir().resolve("livinghorizon").resolve("impostors"),
+                minecraft.gameDirectory, minecraft.getLaunchedVersion(),
+                List.copyOf(minecraft.getResourcePackRepository().getSelectedIds()), ImpostorAtlas.relief());
+        return CompletableFuture.supplyAsync(() -> find(inputs), IO).exceptionally(error -> {
+            LivingHorizonClient.LOGGER.warn("Could not look for the saved impostors", error);
+            return new Found(Set.of(), Map.of());
+        });
+    }
+
+    /**
+     * On the disk's thread: the folder of the current fingerprint, its sheets listed and what an
+     * earlier game learnt to leave out of keys read; the folders of fingerprints chosen longest
+     * ago thrown away. Nothing listed when the folder cannot be read: its mobs are baked again.
+     */
+    private static Found find(Inputs inputs) {
+        String text = fingerprintText(inputs);
+        Path current = inputs.base.resolve(fingerprint(text));
         folder = current;
-        SAVED.clear();
+        Set<ImpostorKey> saved = new HashSet<>();
+        try {
+            Files.createDirectories(current);
+            Files.writeString(current.resolve(FINGERPRINT), text, StandardCharsets.UTF_8);
+            // Chosen now: kept over the folders chosen longer ago.
+            current.toFile().setLastModified(System.currentTimeMillis());
+        } catch (IOException e) {
+            LivingHorizonClient.LOGGER.warn("Could not make the folder of the saved impostors {}", current, e);
+        }
         try (Stream<Path> kinds = Files.isDirectory(current) ? Files.list(current) : Stream.empty()) {
             for (Path kind : kinds.filter(Files::isDirectory).toList()) {
                 String type = kind.getFileName().toString().replace('+', ':').replace('~', '/');
@@ -209,20 +299,20 @@ public final class ImpostorDisk {
                         String name = sheet.getFileName().toString();
                         if (!name.endsWith(".bin")) continue;
                         try {
-                            SAVED.add(new ImpostorKey(type, Long.parseUnsignedLong(name.substring(0, name.length() - 4), 16)));
+                            saved.add(new ImpostorKey(type, Long.parseUnsignedLong(name.substring(0, name.length() - 4), 16)));
                         } catch (NumberFormatException ignored) {
                             // Not one of ours.
                         }
                     }
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             LivingHorizonClient.LOGGER.warn("Could not list the saved impostors in {}", current, e);
         }
-        ImpostorKey.restore(readRestless(current));
-        savedLearnt = ImpostorKey.learnt();
-        IO.execute(() -> tidy(base, current));
-        return current;
+        Map<String, Map<Integer, Long>> restless = readRestless(current);
+        LivingHorizonClient.LOGGER.info("Impostors: {} mob pictures saved by earlier games found in {}", saved.size(), current);
+        tidy(inputs.base, current, FOLDERS, KEEP);
+        return new Found(saved, restless);
     }
 
     private static Path file(Path root, ImpostorKey key) {
@@ -230,23 +320,36 @@ public final class ImpostorDisk {
         return root.resolve(key.type().replace(':', '+').replace('/', '~')).resolve(Long.toHexString(key.appearance()) + ".bin");
     }
 
+    /** The fingerprint's text as a short name. */
+    private static String fingerprint(String text) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 8);
+        } catch (NoSuchAlgorithmException e) {
+            return Integer.toHexString(text.hashCode());
+        }
+    }
+
     /**
-     * Everything that changes how a figure is drawn, as a short name: the game, the resource
-     * packs chosen and their files, the mods' files, and the format of the sheets.
+     * Everything that changes how a figure is drawn, one line each: the game, the resource
+     * packs chosen and their files, the mods' files, and how a sheet is baked.
      */
-    private static String fingerprint() {
-        Minecraft minecraft = Minecraft.getInstance();
+    private static String fingerprintText(Inputs inputs) {
         StringBuilder text = new StringBuilder();
-        text.append("format ").append(FORMAT).append(" tile ").append(ImpostorViews.TILE).append(" views ")
+        // Still named "format": a new name would change every fingerprint, and bake every sheet again.
+        text.append("format ").append(BAKE).append(" tile ").append(ImpostorViews.TILE).append(" views ")
                 .append(ImpostorViews.VIEWS).append(" mips ").append(ImpostorAtlas.MIPS).append('\n');
-        text.append("game ").append(minecraft.getLaunchedVersion()).append('\n');
-        File packs = new File(minecraft.gameDirectory, "resourcepacks");
-        for (String pack : minecraft.getResourcePackRepository().getSelectedIds()) {
+        // Baked evenly lit, with normal maps, for a shader pack: sheets of their own. Without,
+        // the line is left out, so that the fingerprints of before stay the same.
+        if (inputs.relief) text.append("relief\n");
+        text.append("game ").append(inputs.game).append('\n');
+        File packs = new File(inputs.gameDirectory, "resourcepacks");
+        for (String pack : inputs.packs) {
             text.append("pack ").append(pack);
             if (pack.startsWith("file/")) stamp(text, new File(packs, pack.substring("file/".length())));
             text.append('\n');
         }
-        File[] mods = new File(minecraft.gameDirectory, "mods").listFiles();
+        File[] mods = new File(inputs.gameDirectory, "mods").listFiles();
         if (mods != null) {
             List<File> sorted = new ArrayList<>(List.of(mods));
             sorted.sort(Comparator.comparing(File::getName));
@@ -257,12 +360,7 @@ public final class ImpostorDisk {
                 text.append('\n');
             }
         }
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.toString().getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest, 0, 8);
-        } catch (NoSuchAlgorithmException e) {
-            return Integer.toHexString(text.toString().hashCode());
-        }
+        return text.toString();
     }
 
     /** A file's size and when it was last changed: an edited pack or a new jar shows here. */
@@ -270,23 +368,59 @@ public final class ImpostorDisk {
         text.append(' ').append(file.length()).append(' ').append(file.lastModified());
     }
 
-    /** Throws away the folders of other fingerprints, and the sheets met longest ago past {@link #KEEP}. */
-    private static void tidy(Path base, Path current) {
-        try (Stream<Path> folders = Files.isDirectory(base) ? Files.list(base) : Stream.empty()) {
-            for (Path other : folders.toList()) {
-                if (!other.equals(current) && Files.isDirectory(other)) delete(other);
+    /**
+     * Keeps the current fingerprint's folder and the {@code folders - 1} others chosen last,
+     * throwing the rest away (the log says what changed since each), and in the current one the
+     * {@code sheets} sheets met last.
+     */
+    static void tidy(Path base, Path current, int folders, int sheets) {
+        try (Stream<Path> all = Files.isDirectory(base) ? Files.list(base) : Stream.empty()) {
+            List<Path> others = new ArrayList<>(all.filter(path -> !path.equals(current) && Files.isDirectory(path)).toList());
+            // Chosen last first.
+            others.sort(Comparator.comparingLong((Path path) -> path.toFile().lastModified()).reversed());
+            for (Path old : others.subList(Math.min(others.size(), Math.max(0, folders - 1)), others.size())) {
+                LivingHorizonClient.LOGGER.info("Impostors: the saved mob pictures of {} are thrown away, changed since: {}",
+                        old.getFileName(), changes(old.resolve(FINGERPRINT), current.resolve(FINGERPRINT)));
+                delete(old);
             }
         } catch (IOException e) {
             LivingHorizonClient.LOGGER.warn("Could not tidy the saved impostors in {}", base, e);
         }
         if (!Files.isDirectory(current)) return;
         try (Stream<Path> files = Files.walk(current)) {
-            List<Path> sheets = new ArrayList<>(files.filter(path -> path.toString().endsWith(".bin")).toList());
-            if (sheets.size() <= KEEP) return;
-            sheets.sort(Comparator.comparingLong(path -> path.toFile().lastModified()));
-            for (Path old : sheets.subList(0, sheets.size() - KEEP)) Files.deleteIfExists(old);
+            List<Path> kept = new ArrayList<>(files.filter(path -> path.toString().endsWith(".bin")).toList());
+            if (kept.size() <= sheets) return;
+            kept.sort(Comparator.comparingLong(path -> path.toFile().lastModified()));
+            for (Path old : kept.subList(0, kept.size() - sheets)) Files.deleteIfExists(old);
         } catch (IOException e) {
             LivingHorizonClient.LOGGER.warn("Could not tidy the saved impostors in {}", current, e);
+        }
+    }
+
+    private static final String FINGERPRINT = "fingerprint.txt";
+
+    /** The lines of one fingerprint's text that are not in the other, both ways: "- old line", "+ new line". */
+    private static String changes(Path old, Path current) {
+        if (!Files.exists(old)) return "not known, saved by an older version";
+        try {
+            List<String> before = Files.readAllLines(old, StandardCharsets.UTF_8);
+            List<String> after = Files.exists(current) ? Files.readAllLines(current, StandardCharsets.UTF_8) : List.of();
+            List<String> lines = new ArrayList<>();
+            for (String line : before) if (!after.contains(line)) lines.add("- " + line);
+            for (String line : after) if (!before.contains(line)) lines.add("+ " + line);
+            return lines.isEmpty() ? "nothing" : String.join(", ", lines);
+        } catch (IOException e) {
+            return "not known, " + e.getMessage();
+        }
+    }
+
+    /** Throws away every sheet of a folder, keeping what was learnt to leave out of keys. */
+    private static void deleteSheets(Path root) {
+        if (!Files.isDirectory(root)) return;
+        try (Stream<Path> files = Files.walk(root)) {
+            for (Path sheet : files.filter(path -> path.toString().endsWith(".bin")).toList()) Files.deleteIfExists(sheet);
+        } catch (IOException e) {
+            LivingHorizonClient.LOGGER.warn("Could not delete the saved impostors in {}", root, e);
         }
     }
 

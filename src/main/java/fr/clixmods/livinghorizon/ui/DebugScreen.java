@@ -32,23 +32,25 @@ public final class DebugScreen extends SideOptionsScreen {
         FarConfig c = FarConfig.get();
 
         header(Component.translatable(KEY + "debug.view"));
-        list.addSmall(
-                bool("debugHud", c.debugHud, v -> c.debugHud = v),
-                bool("debugBoxes", c.debugBoxes, v -> c.debugBoxes = v),
-                bool("debugLabels", c.debugLabels, v -> c.debugLabels = v),
-                bool("debugGameMobs", c.debugGameMobs, v -> c.debugGameMobs = v),
+        list.addSmall(bool("debugHud", c.debugHud, v -> c.debugHud = v),
                 bool("debugLodColors", c.debugLodColors, v -> c.debugLodColors = v));
-        list.addBig(choice("debugDepthView", List.of("0", "1", "2", "3"), String.valueOf(c.debugDepthView),
+        list.addBig(choice("debugDepthView", List.of("0", "1", "2", "3", "4"), String.valueOf(c.debugDepthView),
                 v -> c.debugDepthView = Integer.parseInt(v)));
-        list.addSmall(Button.builder(Component.translatable(KEY + "outlines.open"),
-                        b -> minecraft.setScreen(new OutlinesScreen(this)))
-                .tooltip(Tooltip.create(Component.translatable(KEY + "outlines.open.tooltip"))).build(), null);
+        list.addSmall(
+                Button.builder(Component.translatable(KEY + "boxes.open"), b -> minecraft.setScreen(new BoxesScreen(this)))
+                        .tooltip(Tooltip.create(Component.translatable(KEY + "boxes.open.tooltip"))).build(),
+                Button.builder(Component.translatable(KEY + "outlines.open"), b -> minecraft.setScreen(new OutlinesScreen(this)))
+                        .tooltip(Tooltip.create(Component.translatable(KEY + "outlines.open.tooltip"))).build());
+        list.addSmall(
+                Button.builder(Component.translatable(KEY + "stats.open"), b -> minecraft.setScreen(new StatsScreen(this)))
+                        .tooltip(Tooltip.create(Component.translatable(KEY + "stats.open.tooltip"))).build(), null);
 
         header(Component.translatable(KEY + "debug.rendering"));
         list.addSmall(
                 bool("extendFarPlane", c.extendFarPlane, v -> c.extendFarPlane = v),
                 unit("minApparentPixels", "pixels", 0, 32, (int) c.minApparentPixels, v -> c.minApparentPixels = v),
-                bool("renderTrackedVehiclesFar", c.renderTrackedVehiclesFar, v -> c.renderTrackedVehiclesFar = v));
+                bool("renderTrackedVehiclesFar", c.renderTrackedVehiclesFar, v -> c.renderTrackedVehiclesFar = v),
+                bool("impostorTurn", c.impostorTurn, v -> c.impostorTurn = v));
 
         header(Component.translatable(KEY + "debug.optimisations"));
         list.addSmall(
@@ -56,6 +58,7 @@ public final class DebugScreen extends SideOptionsScreen {
                 bool("optTinyCulling", c.optTinyCulling, v -> c.optTinyCulling = v),
                 bool("depthOcclusion", c.depthOcclusion, v -> c.depthOcclusion = v),
                 bool("optLazyDepth", c.optLazyDepth, v -> c.optLazyDepth = v),
+                bool("optDepthRegion", c.optDepthRegion, v -> c.optDepthRegion = v),
                 bool("optParallelRead", c.optParallelRead, v -> c.optParallelRead = v),
                 bool("optColumnCache", c.optColumnCache, v -> c.optColumnCache = v),
                 bool("hideOccludedMobs", c.hideOccludedMobs, v -> c.hideOccludedMobs = v),
@@ -64,6 +67,7 @@ public final class DebugScreen extends SideOptionsScreen {
                 bool("optDhFade", c.optDhFade, v -> c.optDhFade = v),
                 bool("optVoxyShadows", c.optVoxyShadows, v -> c.optVoxyShadows = v),
                 bool("optVoxyFog", c.optVoxyFog, v -> c.optVoxyFog = v),
+                bool("optDhFog", c.optDhFog, v -> c.optDhFog = v),
                 bool("optBackgroundBuild", c.optBackgroundBuild, v -> c.optBackgroundBuild = v),
                 bool("optStillTiny", c.optStillTiny, v -> c.optStillTiny = v),
                 bool("optFreezeHidden", c.optFreezeHidden, v -> c.optFreezeHidden = v));

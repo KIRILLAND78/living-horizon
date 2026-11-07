@@ -18,6 +18,7 @@ into a virtual display (Xvfb).
 .claude/skills/game-test/run.sh impostors        # one, or several: a,b
 .claude/skills/game-test/run.sh all --sodium     # with Sodium loaded too
 .claude/skills/game-test/run.sh impostors --shaders <pack folder>   # Sodium, Iris and a shader pack
+.claude/skills/game-test/run.sh vehicles --with immersive-aircraft   # another mod, by its Modrinth project
 ```
 
 It takes 1 to 3 minutes per scenario. The script:
@@ -135,15 +136,32 @@ thread), `setScreen`, `clickScreenButton(translation key)`, `takeScreenshot`. Th
 ## Limits
 
 - No real graphics card: a bug of one driver (NVIDIA, AMD) does not show here.
-- **Voxy and Distant Horizons cannot run** (Voxy needs GLSL 4.60, llvmpipe has 4.50).
-  Say so when a check depended on them.
+- **Voxy cannot run** (it needs GLSL 4.60, llvmpipe has 4.50). Say so when a check depended on it.
+- **Distant Horizons runs on 26.3** (`LH_NODE=26.3.x ... --with distanthorizons`): it needs
+  Fabric Loader 0.19.5, so set `deps.fabric_loader` to it in `stonecutter.properties.toml` for
+  the run, and put it back; 3.3.4 needs the same. The game may hang as it closes with it: kill
+  `KnotClient` once the scenario says `done`. The `dhfog` scenario checks its fog on the mobs.
+- **Lodistance runs on 26.3** (Fabric Loader 0.19.5, as for Distant Horizons): it is on
+  CurseForge only, so put its client jar (not `lodistance-server`) at
+  `build/game-test-mods/26.3-with/lodistance/lodistance.jar` and pass `--with lodistance`. With
+  `--sodium` it draws into the game's depth, without Sodium into its own; the `lodistance`
+  scenario checks both. It takes the chunks as they load: something built afterwards reaches it
+  through `save-all flush` and its client command `lodistance reimport`.
 - **Shader packs** run through Iris on llvmpipe, slowly: `--shaders` takes an unpacked
   pack folder, downloads Iris next to Sodium for the node's game version (`LH_NODE`), and
   `Scene.shaderPack` copies the pack into Iris's folder and turns it on before the first
   scenario. Photon does not load on llvmpipe (too much shared memory): use Complementary,
   its zip from Modrinth unpacked into the scratchpad. The run folder is emptied at start, so a pack copied there by hand is lost.
+  On a machine with a graphics card Photon and Voxy do run (Gradle's `runClientGameTest`
+  directly, `-Plh.mods` and `-Plh.shaderpack`): the `impostorshading` and `photonvoxy`
+  scenarios need them. On 26.3 Iris 1.11 needs Fabric Loader 0.19.5 as Distant Horizons does
+  (with 0.19.3 its access widener is not applied: `IllegalAccessError` as the game starts).
 - Sodium can be added (`--sodium`, downloaded from Modrinth into `build/game-test-mods`). The
   `sodium` scenario shows the mod's pages in Sodium's video settings; without Sodium it does nothing.
+- Any other mod can be added by its Modrinth project, `--with <project>` (repeatable): its
+  Fabric jar for the node's game version, in a folder of its own, loaded by that run only. Its
+  own dependencies are not fetched; the Fabric API is there already. The `vehicles` scenario
+  checks Immersive Aircraft's aircraft with `--with immersive-aircraft`, the minecart without.
 
 ## Never
 

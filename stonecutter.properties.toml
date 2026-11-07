@@ -3,7 +3,7 @@
 mod.id = "livinghorizon"
 mod.name = "Living Horizon"
 mod.group = "fr.clixmods.livinghorizon"
-mod.version = "0.13.0"
+mod.version = "0.16.0"
 
 deps.fabric_loader = "0.19.3"
 # What fabric.mod.json asks of players. Fabric API sets the real floor on each game
@@ -191,8 +191,6 @@ deps.neoforge_compat = "[21.3.97,)"
 ["1.21.4-neoforge"]
 mod.mc_compat = "[1.21.4]"
 mod.mc_releases = ["1.21.4"]
-# Starts in the game, but not yet seen drawing in a world.
-mod.release_type = "alpha"
 
 deps.neoforge = "21.4.158"
 deps.neoforge_compat = "[21.4.158,)"
@@ -227,8 +225,6 @@ deps.neoforge_compat = "[21.10.64,)"
 ["1.21.11-neoforge"]
 mod.mc_compat = "[1.21.11]"
 mod.mc_releases = ["1.21.11"]
-# Starts in the game, but not yet seen drawing in a world.
-mod.release_type = "alpha"
 
 deps.neoforge = "21.11.45"
 deps.neoforge_compat = "[21.11.45,)"

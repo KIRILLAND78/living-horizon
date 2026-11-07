@@ -120,7 +120,8 @@ public record ImpostorKey(String type, long appearance, int posture) {
 
     /**
      * The height each key of a flying figure ({@link #seenFrom}) is pictured from, as an index
-     * of {@link ImpostorViews#HEIGHTS}. A few per look of a phantom or a ghast: never trimmed.
+     * of {@link ImpostorViews#HEIGHTS}. A few per look of a phantom, a ghast, a vehicle or a
+     * rider on one; {@link #seenFrom} puts a key back each time it is asked for.
      */
     private static final Map<ImpostorKey, Integer> HEIGHTS = new HashMap<>();
     /** Mixed into the key of a figure pictured from a height, so that it never meets the same figure standing. */
@@ -171,12 +172,12 @@ public record ImpostorKey(String type, long appearance, int posture) {
         return new ImpostorKey(PLAYER, hash * 31 + type(mount).hashCode());
     }
 
-    /** A player who logged off: sitting on the ground, lying down or in a bed; standing otherwise. */
+    /** A player who logged off: sitting on the ground or in a bed; standing otherwise. */
     public static int posture(Entity entity) {
         if (!(entity instanceof RestingPuppet puppet)) return STANDING;
         return switch (puppet.look()) {
             case SIT -> SEATED;
-            case LIE, BED -> LYING;
+            case BED -> LYING;
             default -> STANDING;
         };
     }
@@ -192,6 +193,11 @@ public record ImpostorKey(String type, long appearance, int posture) {
         ImpostorKey key = compute(entity, values);
         KNOWN.put(entity, new Known(key, now, values, changes));
         return key;
+    }
+
+    /** A sheet thrown away: the height its key is pictured from goes with it. */
+    public static void forget(ImpostorKey key) {
+        HEIGHTS.remove(key);
     }
 
     public static void forgetAll() {
@@ -320,10 +326,20 @@ public record ImpostorKey(String type, long appearance, int posture) {
         *///?} else
         /*if (entity instanceof AbstractClientPlayer player) hash = hash * 31 + player.getSkinTextureLocation().hashCode();*/
         hash = hash(hash, values, restless);
+        // Its size, to about 6%: some mods' mobs take it from a value that keeps changing and
+        // is left out (Ice and Fire's dragons grow with their age, which ticks up). Two of one
+        // look but not one size would share a sheet baked for one of them.
+        hash = hash * 31 + size(entity.getBbWidth());
+        hash = hash * 31 + size(entity.getBbHeight());
         if (entity instanceof LivingEntity living) {
             for (EquipmentSlot slot : EquipmentSlot.values()) hash = hash * 31 + item(living.getItemBySlot(slot));
         }
         return new ImpostorKey(type, hash);
+    }
+
+    /** A size in blocks, in steps of about 6%: the same step for sizes a little apart. */
+    static long size(float blocks) {
+        return Math.round(Math.log(Math.max(blocks, 0.01f)) * 16);
     }
 
     /**

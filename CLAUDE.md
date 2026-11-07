@@ -100,6 +100,14 @@ page is named by the key `livinghorizon.options.<field>` of the `FarConfig` fiel
 the `sodiumcontrols` scenario finds rows by that name and checks that each one writes its
 field. Run it (`run.sh sodium,sodiumcontrols --sodium`) after any change to the settings.
 
+A slider of whole numbers on the mod's screens goes through `FarConfigScreen`'s helpers
+(`ui/NumberSlider`: one step per arrow key; where no limit follows its end, typed with a right
+click, digits only, past the end too; a slider within bounds takes no typing), never a bare `IntRange`. No limit is a value of its own, never a number
+past the slider's last one, which a player may type.
+No limit is never safe: every setting whose right end means no limit is named in
+`NumberSlider.asksBeforeUnlimited`, both screens ask before keeping it, and no preset or
+default sets it.
+
 Older Sodium (0.5 to 0.7: 1.20.x, 1.21.3 to 1.21.10) has no API for other mods' pages: there
 the settings stay on the mod's own screen, which the *Living Horizon...* button opens.
 
@@ -121,6 +129,10 @@ must look exactly the same with Living Horizon installed as without it:
 Writing the mobs into Voxy's depth over the whole screen, for Photon's shadows, broke Voxy's
 water under Photon. Check any change to `compat/` against this section.
 
+Supporting a new far-terrain mod, or saying how well one is supported: the `far-terrain-mod`
+skill (`.claude/skills/far-terrain-mod/`), whose `support.md` is updated by any pull request
+that changes the support of Voxy, Distant Horizons or another such mod.
+
 ## Easter eggs are secret
 
 The mod hides a few easter eggs, in `ambient/` (the `eeN` commands in `LivingHorizonCommand`
@@ -138,8 +150,10 @@ say which class is which). Players find them; nothing they read gives one away:
   the log where each one comes; without it the log says nothing of them. Its lang keys are
   `livinghorizon.eeN.*`, and `livinghorizon.ee.nothing` when it cannot come;
 - by chance, only as `ambient/EggCalendar` allows: each from a day of its own (days lived in
-  that world, counted at dawn), two to four days apart, one at a time; the watcher (ee4)
-  keeps nights of his own and stays out of the others' way. The commands skip all of it;
+  that world, counted at dawn), two to four days apart, one at a time. The daily ones (ee3,
+  ee4, ee5, `ambient/Daily`) are not left to chance: once a day from the second or third, at a
+  moment of it drawn at dawn, alongside the others, and back one to three days after being
+  seen. The commands skip all of it;
 - an easter egg gets no changelog entry, even when it changes. One wink that names none
   ("I thought I saw something in the sky") is the most a release may carry.
 
@@ -253,8 +267,9 @@ distant mobs or players, birds, impostors or a screen is checked in the real cli
 `.claude/skills/game-test/` runs it headless (Xvfb, software OpenGL), drives it with the
 scenarios in `src/gametest/java` and takes screenshots to look at. Run
 `.claude/skills/game-test/run.sh [scenario]`, read `SKILL.md` there first, add a scenario
-for what the change touches, and show the user the screenshots. Voxy and Distant Horizons
-cannot run there: say so when a check depends on them.
+for what the change touches, and show the user the screenshots. Voxy cannot run there: say so
+when a check depends on it. Distant Horizons runs there on 26.3 (`--with distanthorizons`,
+Fabric Loader 0.19.5 for the run: see the skill).
 
 ## Debugging checklist
 
@@ -264,6 +279,12 @@ come back, add it here in the same pull request: this file is what the next sess
 - **Far terrain depth missing** (depth view without Voxy's or Distant Horizons' terrain,
   mobs not hidden behind its hills): read the *Far terrain depth* line of the debug panel or
   `/livinghorizon lod`, with *Lazy far depth* off, since lazy depth hides the real reason.
+- **Part of the far terrain's depth missing, cut along a straight line** (a far mob showing
+  through Voxy's or Distant Horizons' terrain on one side of an edge, the depth view fine):
+  the merge is held to a rectangle round the figures (`FarDepth.region`, *Local Far Depth*).
+  Something drawn past the render distance must hand its place over (`FarDepth.figure` or
+  `around`) or say it has none (`neededAnywhere`), before `FarDepth.before`. Turn
+  `optDepthRegion` off to tell.
 - **Distant Horizons version.** Players run old ones: `DhDepth` and `DhSource` work from
   2.3 on and fall back where its API is missing. Before 3.3.2 there is no depth layout
   (`getDepthRange`, `getDepthDirection`: OpenGL's usual one), before 3.3 the depth texture is
@@ -314,6 +335,27 @@ come back, add it here in the same pull request: this file is what the next sess
   tries both). Check a new version with `javap` on its jar from Modrinth, as for Distant
   Horizons, and read the links' lines in `/livinghorizon lod`: each says what it runs without,
   and how often the mixins into Voxy and Distant Horizons ran (0 while they draw: renamed).
+- **Distant mobs through Lodistance's terrain** (Fabric 26.3; hidden only far behind its hills):
+  with Sodium, Lodistance writes its terrain into the game's depth at half the depth of its
+  distance, so that the game's terrain always wins. `FarDepth.mergeLodistance` moves the pixels
+  farther across than any of the game's chunks to their real depth around the entities; without
+  Sodium its depth is a texture of its own, merged like Distant Horizons'. It has no API and no
+  source: `LodistanceLink` reads its fields, so check a new version by decompiling its jar from
+  CurseForge (in the scratchpad, never copied in). Not done yet with Vulkan or a shader pack.
+  Distant mobs a flat patch of fog colour on its clear hills: its terrain has no atmospheric
+  fog, which the game still gave the entities; `FarFog.lodistance` gives them its ramp alone.
+  The `lodistance` scenario checks it (its jar in `build/game-test-mods/26.3-with/lodistance/`,
+  `--with lodistance`, with and without `--sodium`).
+- **Distant mobs painted over by Ecstatic's terrain behind them** (NeoForge 1.21.1, single
+  player): Ecstatic draws after the entities, tested against the game's depth, with a far plane
+  of its own; the game's projection must take the same one (`EcstaticLink.farPlane`, read from
+  its private `LodRenderer.extendedFarPlaneBlocks`). `/livinghorizon lod` says whether it is
+  matched; the depth view shows its terrain on its *Whole World* picture only, copied at the end
+  of `renderLevel` (`FarDepth.worldDrawn`): the others are taken before it draws. Its source is public (CC BY-NC-SA: read it, never copy it); `EcstaticSource` reads its
+  files only under their lock and while open, since Ecstatic frees them as its server stops.
+  Distant mobs sharp on its fogged hills: it pushes the game's fog (the entities' too) a hundred
+  far distances out and fogs its terrain with the game's ramp in its own shaders;
+  `EcstaticLink.fog` gives the entities that ramp, from its ring and *fog falloff* settings.
 - **Steps out of order** (`/livinghorizon lod` or the log says so; the `depthview` game test
   fails): a hook before that step no longer runs, renamed by the game or another mod. The order
   is in `FarDepth.Frame` and `docs/technical.md` ("One frame").
@@ -333,6 +375,17 @@ come back, add it here in the same pull request: this file is what the next sess
   Distant Horizons answers as cancelled. The game's thread never waits for a read of another mod.
 - **Depth view lighter or darker as far mobs show or hide**: the game's far plane follows the
   farthest figure drawn (`GhostRenderer.farPlane`); the view shades against `FarDepth.VIEW_FAR`.
+- **Far View** (Forge and NeoForge, 1.20.1 to 1.21.4; no API, no source): it draws its height
+  grid into the game's own depth, before the entities, with the game's projection pushed out, so
+  nothing merges it. Every distant mob hidden past the render distance with it: its grid not read
+  (`FarViewSource`, *Only Over Terrain* sees void; `/livinghorizon lod` says why). A mob drawn
+  twice, a box and a figure: its far mobs cancel the game's model past 128 blocks and draw a box,
+  which `FarViewLink.drawsMob` leaves to it. Mobs through its hills with its *Seamless* option
+  only: its terrain is squeezed into the back of the depth with a projection of its own, so hidden
+  mobs come from lines of sight there (`FarViewLink.squeezesDepth`). Its map of regions is a plain
+  one: read only on the game's thread, copied for the readers. Check a new version by decompiling
+  its jars (CurseForge's files, listed by `api.cfwidget.com/minecraft/mc-mods/far-view`) outside
+  the repository, and reach it by reflection only: the jar says "All Rights Reserved".
 - **Distant Horizons' rendering engine** (from 3.3: Blaze3D or OpenGL). With Iris installed,
   pack on or off, it switches itself to OpenGL and fills only `getDhDepthTextureGlId`; the
   Blaze3D wrapper the game's GPU device path reads stays empty ("has no depth texture").
@@ -347,6 +400,12 @@ come back, add it here in the same pull request: this file is what the next sess
   Distant Horizons reports (`getDepthRange`, `getDepthDirection`: reversed and 0..1 on 26.2,
   empty at 0). Measured: sky 0, ground at 53 blocks 0.067, horizon 0.005. `DhDepth.frame`
   combines the two from 26.2 only; older versions keep OpenGL's -1..1.
+- **The game aborts on a Mac, no crash report** (macOS writes one with `jni_FatalError` on the
+  render thread, from LWJGL; the log says "a function that is not available in the current
+  context was called"): an OpenGL call past 4.1, which macOS never goes past. Every such call
+  goes through `compat/GlCalls`, which goes another way where the context lacks it;
+  `OpenGlVersionTest` finds one made anywhere else. Reproduce with Mesa held at 4.1 (see
+  `docs/technical.md`, "OpenGL 4.1 and older"): the game aborts the same way.
 - **Before 1.21.5** the game's depth texture has an unsized format (`GL_DEPTH_COMPONENT`):
   `glTextureStorage2D` refuses it, so anything copied from it is allocated the way the game
   allocates its own. A copy "with no size" or an all-white depth view is this.
@@ -367,6 +426,14 @@ come back, add it here in the same pull request: this file is what the next sess
   the wrong side): Iris throws away the normal given to a quad and computes it from its
   corners, counter-clockwise. `ImpostorLean` moves an impostor's corners along their lines of
   sight so that its own plane faces where the light should come from.
+- **Impostors without their normal maps under a pack that reads them** (*Shader Lighting* on,
+  Photon's *Normal Mapping* on, the pictures flat): Iris looks a texture's normal map up by its
+  class, through the loader `compat/IrisNormals` registers, and only for textures it is told
+  are drawn. Check it with the `impostorshading` scenario (Sodium, Iris and Photon in
+  `-Plh.mods` / `-Plh.shaderpack`, a real graphics card): its mobs stand past the game's
+  entity distance, since a mob the game draws itself is never an impostor; closer, the counts
+  stay 0 and say nothing. On 26.3 the game's copy of a depth texture fails ("No color buffer")
+  and blackened the screen: `OverrideBake.readDepth` reads it straight from OpenGL.
 - **Far terrain depth lost under shaders from 26.2** (depth view empty or uniform, nothing
   hidden behind the far terrain, only with a pack on): Iris's shadow pass draws its entities
   through the same `PreparedFrame.executeSolid` / `executeTranslucent` steps as the world,
@@ -385,12 +452,33 @@ come back, add it here in the same pull request: this file is what the next sess
 - **Mobs near the player never drawn far away**, only those met later: the mob memory is opened
   on the first tick with a player, and opening clears the mobs sent so far, which the level may
   have loaded just before. `FarPlayerTracker` hands it the level's entities again once open.
+- **Distant mobs missing, or far players stopping short, past the server's view distance with
+  Bobby** (issue #112): Bobby makes `getEffectiveRenderDistance` the client's own setting and
+  draws chunks it saved past the server's, which hold no entities. Anything about the entities
+  the server sends (the copies' near zone, a far player lost inside it) reads
+  `track/ServerView`, the render distance cut to the server's; terrain keeps the render
+  distance. The `bobby` scenario checks it (`run.sh bobby --with bobby`).
 - **Distant mobs jumping or sprinting as the player comes back** (the copy runs or teleports to
   the real mob once it is sent again): the server stops sending a mob at its tracking range
   (160 blocks for animals, scaled by *Entity Distance*) but keeps moving it out to the
   simulation distance, a square of chunks that reaches farther on its diagonals. In single
   player `ServerMobs` asks the server where those are and the copies follow; on a server only
   the mod on the server closes that gap.
+- **Distant mobs gliding to and fro, legs still, or trembling** (past *Animation Distance* or
+  under *Min. Animated Size*): a still mob must stand, not play its animation's path without its
+  legs; `MobMotion.held` stops its animation's clock. And a puppet's `tickCount` must go on every
+  tick: the game plays idle movements at `tickCount` plus the frame's part of a tick, so a stopped
+  one replays a tick's worth twenty times a second. Still copies are looked at once in sixteen
+  ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
+  once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
+  skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
+- **Distant mobs gone between two distances on another player's server or LAN** (the copies
+  hidden as "too close for a copy" past where the real mobs stop being sent, then forgotten): the
+  reach the mod learnt for that kind of mob (`MobMemory.reach`, the debug panel's reach line) is
+  farther than the server sends now. A LAN host's game sends as far as the host's *Entity
+  Distance* says; it comes down when several mobs stop being sent well inside it
+  (`MobMemory.unlearnReach`). The client's own *Entity Distance* only changes who draws a real
+  mob, the game or the mod. The `handover` scenario checks both.
 - **Distant mobs only turning on the spot**, never walking, after the world was opened, while
   those met since walk: their ground was read (`MobPaths.plan`) where the far world had nothing
   (Voxy or Distant Horizons not open yet, or Voxy turned off for the session by one failed
@@ -398,6 +486,19 @@ come back, add it here in the same pull request: this file is what the next sess
   mob got no animation. A ground read whole is saved with the mob (`Remembered.ground`,
   `MobPaths.Ground.save`) and walked on at once in the next session; a choice read with
   columns missing is not `complete()` and is read again, later and later.
+- **A mob riding something remembered standing, or strolling off** (a villager out of its minecart,
+  a cow out of its boat): the game makes a vehicle's passengers get off before it reports the
+  vehicle removed, so the rider is no longer a passenger when it unloads. `MobMemory.riders`
+  keeps who rode what as of the last tick; the rider's copy then rides its vehicle's copy
+  (`MobMemory.ride`), or it would lag behind a minecart rolling on.
+- **Another mod's mobs hanging still far away** (Ambient Birds' flocks frozen in the sky past
+  the render distance): a mod that makes mobs on the client alone (no server knows them) lets
+  them go where this client holds no chunk, and the game stops moving an entity there.
+  `MobMemory.strand` hands such a mob to its copy until its chunk is back. Another mod's mob
+  drawn perched, invisible or walking far away when it should fly: it is not in
+  `track/ModdedMobs` yet, or what `compat/` reaches in its mod by reflection was renamed (the
+  log says "found, but not the version this mod knows"). Supporting one is an entry there:
+  its flight, and what its copy needs to be drawn as its mod draws it.
 - **Impostors before 1.21.6** (empty or missing pictures, or a figure flashing over the screen
   at the start of a frame): the game has no output override there, so `ImpostorAtlas` bakes
   at the start of the frame (`GameRendererMixin`) into a target of its own, which
@@ -417,13 +518,21 @@ come back, add it here in the same pull request: this file is what the next sess
   `ImpostorKey` leaves out what never shows (positions, times, owners, names, sound variants,
   an item's damage), names variants by their registry key so that a sheet is found again in
   the next world, and learns per kind of mob the values seen changing again and again
-  (`RESTLESS`). `ImpostorAtlas` gives each kind of figure pages of its own (`Page`), keeps the
+  (`RESTLESS`). `SheetAllocator` gives each kind of figure pages of its own (`Page`), keeps the
   mobs' sheets, throws the players' away once unused, and never evicts a sheet drawn or asked
-  for within `IN_USE`. `ImpostorDisk` keeps the mobs' sheets on disk under a fingerprint
+  for within `IN_USE`; `SheetAllocatorTest` checks it without the game. `ImpostorDisk` keeps the mobs' sheets on disk under a fingerprint
   (game, resource packs, mods): a sheet never read back from disk means its key is not
   stable across games (an identity hash in `ImpostorKey.stable`). The `sharing` scenario
   checks all of it, except across games: the client game tests start from an empty run
   folder every time.
+- **A modded mob's picture a close-up of part of it** (Ice and Fire's adult dragons as legs or a
+  wing filling the tile, in the impostor screen): its copy kept the box of a newborn, since the
+  mod works the size out in its tick and a copy never ticks. `EntityNbt.load` refreshes the box.
+  A model longer than five times its box (a sea serpent, the oldest dragons) is not pictured
+  (`MAX_GROW`, "does not fit its picture" in the log). Ice and Fire is on Forge 1.20.1 only,
+  where the client game tests do not run: install Forge's client with its installer, put the
+  SRG jar (`renameJarJar`), Ice and Fire and Citadel in `mods/`, and open a world made by its
+  dedicated server with a datapack summoning the dragons (`AgeTicks`, `AgingDisabled`).
 - **Specks along an impostor's edge, or a figure cut off by its tile** (black dashes over a far
   mob, a horse without its muzzle): the texture filter reads half a pixel of the smallest level
   past each tile, so the quad and its UVs keep `ImpostorRenderer.INSET` clear on all four sides,
@@ -442,6 +551,16 @@ come back, add it here in the same pull request: this file is what the next sess
   GeckoLib 4's `createRenderState()` returns null and its `render` draws the entity it was
   last handed. `GhostRenderer.drawable` leaves such types out (issue #67 is about drawing
   them), and a renderer that throws while extracting is left out too, logged once.
+- **Lycanites Mobs blank or through the far terrain** (Forge 1.20.1: its pictures empty in the
+  impostor screen, its far models seen through Voxy's or Distant Horizons' hills): Lycanites queues
+  the opaque parts of its OBJ models (`VBOBatcher.queueDeferred`) and draws them at Forge's
+  `AFTER_ENTITIES` stage, after the bake and after `FarDepth.after`. `compat/LycaniteMobs.drawQueued`
+  draws the queue after each baked view and before the bracket closes. Another mod that defers its
+  draws that way needs the same.
+- **Entities on a Valkyrien Skies ship drawn in the wrong place far away** (a seat, a vehicle or its
+  rider floating, or nowhere): Valkyrien Skies keeps them in its shipyard, far from the world, and its
+  renderer moves them onto the ship from the camera, whatever place it is handed.
+  `compat/ValkyrienSkies.onShip` leaves them to the game (`GhostRenderer.drawable`).
 - **Perched birds darting to and fro, standing in the air or inside a block** (tits, robins,
   ducks): a move's progress is `timer / length`, so the rest after landing is `rest`, never
   added to `length` (which put an arrived bird back part of the way). Where a bird lands comes
@@ -449,6 +568,11 @@ come back, add it here in the same pull request: this file is what the next sess
   bird is stood again on what is under it. Birds jumping in a loop: a move is a flight once it
   is long, so a target is only moved in from a column's edge (never re-drawn on the block), and a
   duck swims as far as the water goes on (`Perchers.swims`). The `perchers` scenario counts all three.
+- **Crash opening one of the mod's screens from the title screen on 26.x** ("Components not bound
+  yet" under `new ItemStack`, through Mod Menu): from 26.x an item has no components until a
+  world's data binds them, and a stack of it throws. `MobTypesScreen.icon` goes without its icon
+  there; any other item the mod's screens draw needs the same. The `vehicles` scenario opens the
+  list from the title screen and logs whether items have their components there.
 - **Escape from a screen opened on Sodium's page goes back to the game**, not to Sodium's:
   Sodium runs its "close" shortcut when Escape is released, so a screen that closes on the
   press hands the release to Sodium's. Over Sodium's screen the mod's screens and
@@ -468,6 +592,31 @@ come back, add it here in the same pull request: this file is what the next sess
   that changes more than the bracket saved throws: widen the bracket's `save`. A step that
   starts drawing into a framebuffer with colour must save `GlState.COLOUR` and set blending
   and the colour mask itself.
+- **Another mod's vehicle vanishing far away** (an aircraft, a car, a tank gone past the render
+  distance): an entity that is not alive is a vehicle only when its class declares
+  `getControllingPassenger` again (steered: shown from the start, like a boat) or `positionRider`
+  (seated: listed but off), found on `Entity` by shape (`track/Vehicles`). Its class is read from
+  the renderer its kind is drawn with (`MobList.vehicle`), so it is listed before one is met; a
+  renderer declared for any entity leaves it to the first one met (`knownVehicles`). It is drawn
+  up to *Entity Render Distance*, not the mobs' (`GhostRenderer.creature`). Check the mod's classes
+  with `javap` on its jar; the `vehicles` scenario checks Immersive Aircraft
+  (`run.sh vehicles --with immersive-aircraft`).
+- **One of a mod's entities vanishing far away while its others stay** (Shippy Ships' galleon,
+  issue #320; listed and *Shown*, yet no copy and no picture): its save threw on the client, and
+  a kind that cannot be saved is never remembered. The log says so once per kind ("is not drawn
+  far away: its save failed", or "its copy could not be made"). The galleon's: a chest boat's hold
+  is 27 slots until a load sizes it, which never happens on the client, and the galleon writes
+  its 504 one by one. `EntityNbt.fitHold` sizes it there first. Then "does not fit its picture":
+  a boat or vehicle is pictured round the middle of its box, low in the hull, and the masts reach
+  40 blocks up. A figure pictured round its middle and cut off is moved to the middle of its tiles
+  before it grows (`ImpostorPixels.centred`; the sheet keeps where, on disk too). The `ships`
+  scenario checks both (`run.sh ships --with shippy-ships --with ingeniumapi`).
+- **Another mod's figure drawn black far away, its rider lit** (Immersive Aircraft's planes as
+  you travel towards them, from 26.1): its renderer keeps its own copy of the light, read as it
+  extracts (`getPackedLightCoords`), and ignores the `lightCoords` the mod sets after. In a chunk
+  the client has just received and not lit yet that reads 0. While `GhostRenderer.extract` runs,
+  `EntityRendererLightMixin` hands out the mod's light (full in a picture being baked). The
+  `vehicles` scenario reads the light the planes keep as their chunks come in.
 - **A far player's mount drawn twice, or a rider sitting on air** (a happy ghast beside its
   rider, a player met already riding floating far away): a mount is drawn under its rider
   (`FarPlayer.mountPuppet`), and the remembered mobs leave out every id `FarPlayer.carriedMount`
@@ -477,6 +626,15 @@ come back, add it here in the same pull request: this file is what the next sess
   the server's copy of the mount (`PositionsMessage.Mount`, kept by `PositionPublisher` with
   their last position) unless this client saw it itself. `CarriedMountTest`,
   `SharedPositionsTest` and the `lanshare`, `dedicated` and `restingmount` scenarios check it.
+  The server names what each player rides by its id, whatever it is (a plane, a modded mount):
+  named only for the shared kinds, a plane taken out of this client's sight had no id, and its
+  remembered copy was drawn on its own as well as under the rider (`FarPlayer.mountFrom`).
+- **A plane left in the air hovering or on the ground, when its pilot logged off flying** (the
+  debug command's test players circle; a real player's plane does not): what the client sees of
+  a vehicle the server moves has no motion, its last positions stop before the player leaves, and
+  a copy made while it stood says it is on the ground. `FarPlayer.Pace` keeps the fastest of the
+  last two seconds for `RestingMount.keepMotion`, `FarPlayer.mountToRest` takes off the ground or
+  not from the server's last copy, and `RestingMount.tick` looks under it once its blocks are known.
 - **A far player in an old skin** (they changed it, the puppet did not): a `RemotePlayer` finds its
   `PlayerInfo` by id once and keeps it. A new tab list entry means a new skin, so
   `FarPlayer.observeRemote` makes a new puppet when the entry changes (`newSkin`). The server's
@@ -498,6 +656,25 @@ come back, add it here in the same pull request: this file is what the next sess
   answers. Far, resting and logged-off player puppets are not ticked
   either, on every version (`Player.xCloak` before 1.21.9): not covered yet, and `cape` cannot
   just take any `ClientAvatarEntity`, since live players go through the same `extract` and tick.
+- **Distant pets standing up** (a cat or wolf told to sit, its copy far away standing and
+  strolling): the game saves the order to sit from `orderedToSit`, which only the server sets, so a
+  save made on the client says `Sitting:0b`. `MobMemory.onUnload` writes `isInSittingPose()` into
+  it; a sitting copy gets no stroll. The `sittingpets` scenario checks it.
+- **Distant players running upright in the air with an elytra** (legs walking, wings folded):
+  the game tilts a glider and spreads its wings in the player's tick (`fallFlyTicks`, and
+  `ElytraAnimationState` from 1.21.2), which a puppet never runs, and only the server knows who
+  glides. It shares it (message version 4: the last flag bit, the pitch at the end of the record)
+  and `FarPlayer.glide` does the tick's part. A glider is never an impostor, nor baked into one:
+  the pictures are baked standing. The `gliders` scenario checks it.
+- **Players who logged off losing their boat, or back up in the air, once the camera moves away**
+  (in a boat or on the ground up close): the client's level answers yes to `hasChunk` and
+  `hasChunkAt` for every chunk (`ClientLevel.hasChunk` returns true), and a chunk it dropped reads
+  as air: no water, no ground. Ask `level.getChunkSource().hasChunk` (`Footing.loaded`). And a
+  `RestingPuppet` is made again whenever they leave the nearest drawn, the world opens again or
+  the server's word on them changes: where they rest (`RestingPlayers.Rest`: the ground under a
+  spot in the air, the shore, the boat) is kept with the spot and saved, and a new puppet starts
+  there; before the blocks are ever loaded, the far world is asked (`guess`). The `restkept`
+  scenario checks it.
 - **A rider turned sideways** (a player resting in a boat facing left or right of it): the seat's
   yaw is the rider's body (`yBodyRot`), which the boat keeps in line with itself, never the head
   (`getYRot`), which looks wherever the player looked as they left.
@@ -560,6 +737,11 @@ come back, add it here in the same pull request: this file is what the next sess
   the game's fog on entities does not know. `FarFog` gives the world's entities Voxy's curve, from
   a second fog `FogRendererMixin` writes next to the game's; a new Voxy that computes its limit
   otherwise (`NormalRenderPipeline.finish`, `javap`) needs `FarFog.voxyLimit` to follow.
+- **Distant mobs sharp against Distant Horizons' fogged terrain** (no fog on them at all, without a
+  shader pack): Distant Horizons pushes both of the game's fog ramps out to 4×10¹⁴ blocks and fogs
+  its terrain in a pass of its own. `DhFog` gives the entities its far fog through the game's two
+  ramps (one a floor at its thinnest, one the slope), fitted to its formula (`DhFogTest`); a new
+  Distant Horizons that fogs otherwise (`shaders/fog`, `GlDhFogShader.onApplyUniforms`) needs it to follow.
 - **Water gone under a shader pack whenever a distant figure is in view** (Photon with Distant
   Horizons on 26.3: the lake shows its bare, shadowed bed, with *Hide Behind Far Terrain* on; the
   depth view looks right): from 26.3 the game caches blending and the colour mask per draw
@@ -577,6 +759,76 @@ come back, add it here in the same pull request: this file is what the next sess
   as a truncated jar (`zip END header not found` on the next attempt): `gradle.sh` deletes the
   jars that do not open before trying again. What Forge's Maven served is kept in each Forge
   node's cache entry (`mavenizer/caches/maven/forge`), so a build only asks it for what changed.
+- **Animals of unexplored land missing or drawn twice** (none far off in a world never explored,
+  or one beside the real herd as a chunk loads): they are drawn by `SeedDraws`, foreseen by the
+  server around players with the mod (`SeedMobs`) and by the client within *Mob Render Distance*,
+  through a spyglass and by *Guess Nearby Mobs* (`Foresight`: in a world played here, or from the
+  seed a server shares with `shareSeed`), in a dimension of the usual terrain only (a flat world
+  has none, the client game tests' consistent settings included). A chunk is left out once loaded
+  or saved past the step that puts its animals there; one generated with the mod off, explored,
+  or pregenerated (Chunky, Distant Horizons' `INTERNAL_SERVER` mode) has its real ones instead,
+  which only the scan or the server's memory shows. The client never draws one in a chunk it
+  holds: ask its chunk source (`level.getChunkSource().hasChunk`), never `ClientLevel.hasChunk`,
+  which always says yes. The generator a client builds from a shared seed (`SeedDraws.vanilla`,
+  the game's registries) has no biome tags: a tag is read from the client level's registries
+  (`SeedDraws.Tags`); asked of the built biome, it threw and the chunk was left out, logged once.
+  What the client foresaw is kept in `config/livinghorizon/foreseen/<server>/` (`Foresight.write`,
+  a few bytes a mob: an id is drawn again from the seed and its draw's place, the last 16 bits of
+  `SeedDraws.id`), read back on coming back; in a world played here the server first leaves out
+  the chunks generated since (`SeedMobs.unexplored`); *Forget All* deletes it.
+  The `seedmobs` scenario checks it all, the generator built from the seed against the server's,
+  and how many stand where the game puts them; the boxes and outlines show them in pink.
+- **Copies waiting to be built for minutes, or *Tick: choosing mobs* long** (thousands of mobs, guessed
+  ones with Mob Render Distance at 4000): a short saved text is read at once, never queued on the
+  game's background executor, which world generation keeps busy (a few copies a second); the
+  copies to build are sorted (in view first) before the 2 ms budget starts, which counts the
+  building alone (sorting 26 000 used it all, and those out of view were never built); a still
+  copy with nothing left to walk or turn is looked at once in sixteen ticks; the choice sorts only when something is cut or the
+  spyglass is up, and the guessed mobs are worked out again only when what they depend on
+  changed (`Foresight.wantedIfChanged`). The `seedcrowd` scenario measures it all; the
+  *Statistics...* screen counts what is kept.
+- **Nothing drawn in the world while a distance setting is hovered** (the distance preview,
+  `render/DistancePreview`): an entity's render type is fogged like an entity, and the game's
+  fog had faded a 128-block fence out completely at the default render distance. From 1.21.11
+  it is the game's debug quads (no fog, no depth written); before, their depth would hide the
+  water behind, so the entity type stays, and past the fog it shows only with Voxy or Distant
+  Horizons. Under a shader pack Iris gives debug quads no program of the pack (`IrisPipelines`
+  leaves them out) and Photon's passes paint over them: with a pack on, the glowing
+  entity type draws it on every version. The screen asks for it every frame; a time limit
+  instead made it vanish between two frames of a slow game. The `distancepreview` scenario
+  checks it.
+- **No question before Unlimited on an old version** (1.20.x: a slider dragged to its right end
+  shows *Unlimited*, nothing asks, the setting keeps its value): before 1.21 the game hands a
+  mouse release only to the widget under the cursor, and a slider dragged past its end is
+  released beside it. `SideOptionsScreen.mouseReleased` hands every release to
+  `NumberSlider.afterRelease`; a screen of numbers that is not a `SideOptionsScreen` needs the same.
+- **Distant mobs over the far terrain marked "over the void"** (dark purple boxes on terrain that
+  is drawn, *Only Over Terrain* hiding them): `DrawnGround` reads the far world with
+  `LodWorld.ground`, where only a column read as empty is void. A read that failed, no world open
+  yet, or Distant Horizons answering "failed" (`LodWorld.Unanswered`) is unknown, keeps the mob as
+  it was and is asked again a second later. As a world opens Distant Horizons answers "nothing"
+  for a while: a chunk read as empty waits 1 to 10 s, and the first one found with terrain after
+  that has every empty chunk asked again at once (`DrawnGround.revisit`). A mob with no answer
+  yet is hidden too, and marked void: its question waited behind the ground reads of thousands
+  of guessed mobs (`MobPaths`) in the readers' queue, seconds as a world opened, and
+  `/livinghorizon lod` answered late too, its probe reading hundreds of columns. Now any read of
+  the far world that finds blocks (a mob's ground above all, `MobPaths`) notes its chunk as
+  terrain (`DrawnGround.noted`), and the chunks still unknown are read a column a task on four
+  threads of their own (`LodWorld.ground`, `URGENT`, never the probe), 256 at most at a time, each
+  answered as it is read. `/livinghorizon lod` prints at once how many chunks have terrain, are
+  empty, wait or were never asked, how fast the far world reads, and where a column read for a
+  second or more waits. Never interrupt a Distant Horizons read to free a thread: it reads its
+  database, which an interrupt can close. An unanswered column (`LodWorld.Unanswered`) is never a
+  failure (`LodSource.fail` pauses every read 20 s). Even so a Distant Horizons column read through
+  its API took 278 ms (it loads or builds its whole 64-block section), and thousands of chunks took
+  minutes: `DhSource.holds` asks its database instead (`FullDataSourceV2Repo`, the generation step
+  of each column of a section, one query for 16 chunks). "its database not read" in the lod line
+  means a version whose classes differ: check them with `javap`, as for its API.
+- **Debug panel, depth view or an offline player's name never drawn on Forge 1.20.1 to 1.20.4**
+  (nothing over the world, no error): Forge draws the overlay with `ForgeGui`, whose `render`
+  replaces `Gui.render` without calling it, so `GuiMixin` never runs there. `Events.hud` draws
+  them from Forge's `RenderGuiEvent.Post` instead; from 1.20.6 Forge keeps the game's `Gui`.
+  Anything else hooked into `Gui.render` needs the same.
 - **Reproduce first.** `LH_NODE=<node> .claude/skills/game-test/run.sh <scenario>` on the
   player's game version, OpenGL errors are in `build/game-test.log`; the `depthview`
   scenario shows the depth view.
@@ -584,39 +836,57 @@ come back, add it here in the same pull request: this file is what the next sess
 ## Changelog
 
 **Every change, every push.** Whenever you work on something, write its changelog entry
-in the same pull request, and before every push re-read both changelog files against what
+in the same pull request, and before every push re-read its entry files against what
 you are about to push: each player-visible change has its bullet, in both languages, and
 no bullet describes something that is not in the diff. Never push first and fix the
 changelog in a later commit or pull request.
 
-A pull request that changes what a player sees or feels adds its entry to
-`changelog/en.md` and `changelog/fr.md`, under `## Unreleased` / `## Prochaine version`
-and nowhere else: a dated section is a version already released, never edited. A version
-is split in two parts, **Server** first (what a server owner installs, sets up or gets, and
-what the mod does on a server, a LAN host included), then **Client** (what a player sees and
-feels in game, single player included): `### Server` / `### Client` (`### Serveur` /
-`### Client`), each with the kinds it needs under it, `#### New`, `#### Improved`,
-`#### Fixed` (`#### Nouveautés`, `#### Améliorations`, `#### Corrections`); a kind with
-nothing in it is left out. Both files have the same parts, kinds and number of bullets, in
-the same order. Versions released before the split keep their flat `### New` headings. The
-`changelog` CI job checks all of this.
+A pull request that changes what a player sees or feels adds each of its entries as a file
+of its own in `changelog/unreleased/` (named after the change; its `README.md` has the
+format): `part: server` or `client`, `kind: new`, `improved` or `fixed`, then the bullet in
+English (`en:`) and in French (`fr:`). **Never write a bullet into `changelog/en.md` or
+`changelog/fr.md`**: two pull requests editing the same lines there conflicted on every
+rebase, while two files never do. A dated section there is a version already released, never
+given an entry, and reworded only when the user asks for it. A version is split in two parts,
+**Server** first (what a server owner installs, sets up or gets, and what the mod does on a
+server, a LAN host included), then **Client** (what a player sees and feels in game, single
+player included), each with the kinds it needs, New, Improved, Fixed. Versions released
+before the split keep their flat `### New` headings. The `changelog` CI job checks all of
+this; `node .github/scripts/changelog-notes.js unreleased en` prints the next version's
+section as it will read. A branch started before the entry files moves its bullets into them
+with `node .github/scripts/changelog-split.js`, then keeps `develop`'s `en.md` and `fr.md`
+where they conflict.
 
-The release dates the section, opens a new empty one, and posts the entries on Modrinth
-(Changelog tab), CurseForge (file page) and Discord. Players read them, so write for
-someone who has never seen the code:
+The release turns the files into the version's section of `changelog/en.md` and
+`changelog/fr.md` (`### Server` / `#### New` and so on, in the order of the file names),
+deletes them, and posts the entries on Modrinth
+(Changelog tab), CurseForge (file page) and Discord. The game shows them in its changelog
+screen, under *Unreleased* until then: the build merges the files into the jar's copy
+(`gradle/target.gradle.kts`, the same layout as `.github/scripts/changelog-fragments.js`). Players read them, so **every entry is written with the
+`changelog-writing` skill** (`.claude/skills/changelog-writing/`), which holds the style,
+the vocabulary and examples. In short:
 
-- write like Minecraft's own release notes: one short sentence per bullet, a bold subject
-  first that names what the player sees (the feature, or the bug as it looked), never a
-  version or a mod alone; where it applies goes in brackets at the end:
-  `**Distant mobs showing through hills** — distant mobs no longer show through Voxy's
-  hills (Minecraft 26.1).`
-- a fix says what was wrong and that it is gone ("no longer…"), never only the new
-  behaviour: "mobs hide behind hills" reads as a feature, not a fix.
+- a bold, benefit-first title that names the result for the player (a fix too: "Better
+  integration with Distant Horizons' fog"; a crash: "Startup crash fixed"), never a version
+  or a mod alone; then what the player now sees or can do, why it matters, any condition,
+  in one to three short sentences starting with a capital; where it applies goes last:
+  `**Mobs properly hidden by hills** — Distant mobs no longer show through Voxy's
+  hills. (Minecraft 26.1.)`
+- a fix still makes clear what was wrong ("instead of…", "no longer…"): "mobs hide behind
+  hills" alone reads as a feature, not a fix.
 - say what the player notices, not how it was done: no shader, depth, buffer, pass,
-  query, mask, class or setting internals; nothing about the debug screens. Name settings
-  and screens as the game shows them (impostors are *Simplified Entities*), and explain
-  them in plain words (flat pictures of far mobs).
+  query, mask, class or setting internals; nothing about the debug screens. Summarise
+  rather than list, and drop side details. Name settings and screens as the game shows
+  them (impostors are *Simplified Mobs*, *Simplified Entities* and *Simplified Players*),
+  and explain them in plain words (simplified images of distant mobs). A prediction is
+  never written as a certainty.
+- the same word for the same thing: mobs / créatures, entities / entités (boats,
+  vehicles, mannequins), offline players / joueurs déconnectés; French says *vous*.
 - one bullet per problem: two causes of the same symptom share one bullet.
+- say *mobs* (*créatures* in French, the game's word for mobs in each language), never
+  *animals*, in the changelog, the translations, the README and the store text; only a list
+  of kinds may name animals (villagers, animals, golems). The mobs foreseen from the seed are
+  *guessed mobs* (*créatures devinées*).
 - nothing for CI, refactors, tooling, documentation or debug-only tools.
 
 ## Issues

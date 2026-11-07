@@ -86,7 +86,8 @@ final class BlockCopy implements Footing.Source {
             while (next < into.sections.length && copied < budget) {
                 int column = next / perChunk;
                 int cx = into.minCx + column / into.countZ, cz = into.minCz + column % into.countZ;
-                if (!level.hasChunk(cx, cz)) {
+                // The client's level says yes for every chunk: its chunk source knows.
+                if (!level.getChunkSource().hasChunk(cx, cz)) {
                     // Unknown, the whole column of sections.
                     next = (column + 1) * perChunk;
                     continue;

@@ -25,8 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Easter egg 7: some night, out on open water anywhere around the player, a few
- * hundred blocks off at most, a rowing boat drifts, pale and see-through, a ghost sitting in it; both are gone
- * when the player comes near. Only on this screen.
+ * hundred blocks off at most, a rowing boat drifts, pale and see-through, a ghost sitting in it.
+ * Looked at a few seconds, it sinks a little and fades away; it is gone at once when the
+ * player comes near. Only on this screen.
  *
  * <p>The water is found in rings of columns all around, loaded or in the far world
  * ({@link Columns}), each with water all round, in sight ({@link Sight}). The boat and the
@@ -37,8 +38,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class GhostBoat {
     /** Blocks per tick it drifts; blocks across under which it goes. */
     private static final double DRIFT = 0.012, NEAR = 28;
-    /** Ticks it drifts at most. */
-    private static final int LIFE = 4800;
+    /** Ticks it drifts at most; looked at before it goes; it takes to sink and fade. */
+    private static final int LIFE = 3600, SEEN = 60, FADE = 80;
+    /** How much of what is behind it the boat hides, out of 255. */
+    private static final int HULL_ALPHA = 50;
     /** Height of the bench above the water, where the ghost sits. */
     private static final double SEAT = 0.3;
     /** How far off it may drift, in blocks across. */
@@ -54,7 +57,8 @@ public final class GhostBoat {
     private boolean searching, active, called;
     private double x, y, z, xo, yo, zo, surface, dirX, dirZ;
     private float yaw, yawO, turn;
-    private int age, idle, searchAge;
+    /** Ticks since it came; looked at; fading away, -1 until then. */
+    private int age, seen, leaving = -1, idle, searchAge;
 
     GhostBoat(EggCalendar calendar) {
         this.calendar = calendar;
@@ -166,8 +170,12 @@ public final class GhostBoat {
             z = nz;
         }
         yaw += turn;
-        y = surface + 0.04 * Math.sin(age * 0.05);
-        if (age > LIFE || Math.hypot(self.getX() - x, self.getZ() - z) < NEAR || !Columns.drawn(current, self, x, z)
+        // Looked at long enough, or its time up: it sinks a little as it fades.
+        if (leaving < 0 && Herobrine.lookedAt(current, self, new Vec3(x, y + 1, z)) && ++seen >= SEEN) leaving = 0;
+        if (leaving < 0 && age > LIFE) leaving = 0;
+        float sinking = leaving < 0 ? 0f : (float) leaving / FADE;
+        y = surface + 0.04 * Math.sin(age * 0.05) - 0.5 * sinking;
+        if ((leaving >= 0 && ++leaving > FADE) || Math.hypot(self.getX() - x, self.getZ() - z) < NEAR || !Columns.drawn(current, self, x, z)
                 || (!called && current.isBrightOutside())) {
             clear();
         }
@@ -184,7 +192,8 @@ public final class GhostBoat {
         dirZ = Math.cos(drift);
         yaw = yawO = random.nextFloat() * 360f;
         turn = (random.nextBoolean() ? 1 : -1) * (0.05f + random.nextFloat() * 0.1f);
-        age = 0;
+        age = seen = 0;
+        leaving = -1;
         active = true;
     }
 
@@ -204,6 +213,8 @@ public final class GhostBoat {
 
     public void submit(PoseStack pose, Vec3 camera, Sink collector, float partial) {
         if (!active) return;
+        float shown = leaving < 0 ? 1f : Mth.clamp(1f - (leaving + partial) / FADE, 0f, 1f);
+        if (shown <= 0f) return;
         double px = Mth.lerp(partial, xo, x) - camera.x;
         double py = Mth.lerp(partial, yo, y) - camera.y;
         double pz = Mth.lerp(partial, zo, z) - camera.z;
@@ -217,18 +228,20 @@ public final class GhostBoat {
         pose.scale(pull, pull, pull);
         pose.mulPose(Axis.YP.rotationDegrees(-Mth.rotLerp(partial, yawO, yaw)));
         pose.mulPose(Axis.ZP.rotationDegrees(rock));
-        collector.draw(pose, Ufo.GLOW, GhostBoat::hull);
+        int hull = Math.round(HULL_ALPHA * shown);
+        collector.draw(pose, Ufo.GLOW, (at, out) -> hull(at, out, hull));
         // The ghost on the bench, looking out over the water, this way and that.
         pose.translate(0f, (float) SEAT - Ghosts.SHAPE.leg(), 0f);
         float look = 35f * (float) Math.sin((age + partial) * 0.01);
-        BoxFigure.draw(pose, collector, Ghosts.SHAPE, 0f, 0f, -look, Ufo.BRIGHT, Ufo.GLOW, Ghosts.ALPHA, true);
+        BoxFigure.draw(pose, collector, Ghosts.SHAPE, 0f, 0f, -look, Ufo.BRIGHT, Ufo.GLOW,
+                Math.round(Ghosts.ALPHA * shown), true);
         pose.popPose();
         if (called) CalledBeam.submit(pose, camera, collector, px + camera.x, py + camera.y, pz + camera.z);
     }
 
     /** A rowing boat, pale and see-through: its floor, its four sides, a bench across. */
-    private static void hull(PoseStack.Pose at, VertexConsumer out) {
-        int r = 140, g = 158, b = 190, a = 50, light = Ufo.BRIGHT;
+    private static void hull(PoseStack.Pose at, VertexConsumer out, int a) {
+        int r = 140, g = 158, b = 190, light = Ufo.BRIGHT;
         // Half its width and length, the height of its sides, the thickness of a plank.
         float w = 0.62f, l = 0.88f, h = 0.42f, t = 0.08f;
         Ufo.box(at, out, -w, -0.05f, -l, w, t - 0.05f, l, r, g, b, a, light);

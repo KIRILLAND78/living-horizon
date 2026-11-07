@@ -403,7 +403,7 @@ public final class Ufo {
     }
 
     /** One face, its corners put in the order that makes it face {@code (nx, ny, nz)}. */
-    private static void face(PoseStack.Pose at, VertexConsumer out, int r, int g, int b, int a, int light,
+    static void face(PoseStack.Pose at, VertexConsumer out, int r, int g, int b, int a, int light,
                              float nx, float ny, float nz,
                              float ax, float ay, float az, float bx, float by, float bz,
                              float cx, float cy, float cz, float dx, float dy, float dz) {

@@ -82,6 +82,8 @@ public final class AmbientRenderer {
             ambience.bigfoot().submit(pose, camera, collector, partial);
             ambience.ghosts().submit(pose, camera, collector, partial);
             ambience.ghostBoat().submit(pose, camera, collector, partial);
+            ambience.ghostVillager().submit(pose, camera, collector, partial);
+            for (Egg egg : ambience.more()) egg.submit(pose, camera, collector, partial);
         }
         boolean models = config.birdModels();
         Arrays.fill(ASKED, false);
@@ -93,7 +95,8 @@ public final class AmbientRenderer {
             // Behind the camera, or less than a pixel: the mobs' own tests.
             if (GhostRenderer.outOfSight(x, y, z, bird.span * bird.scale)) continue;
             double distance = Math.sqrt(x * x + y * y + z * z);
-            GhostRenderer.noteDistance(distance);
+            // A wingspan all round: the model, the silhouette and its picture all fit in it.
+            GhostRenderer.noteDistance(distance, x, y, z, bird.span * bird.scale * 1.5);
             // Past the far plane: closer and smaller in proportion, the same on screen.
             double pull = distance > reach ? reach / distance : 1.0;
             float yaw = Mth.rotLerp(partial, bird.yawO, bird.yaw);
@@ -143,7 +146,8 @@ public final class AmbientRenderer {
      */
     private static boolean impostor(Ambience.Flyer bird, double x, double y, double z, double distance, double pull,
                                     float yaw, float wingDegrees, FarConfig config, double pixelsPerRadian) {
-        if (!ImpostorAtlas.usable()) return false;
+        // Birds are creatures: pictured under Simplified Mobs.
+        if (!ImpostorAtlas.usable() || !config.impostors) return false;
         double apparent = distance < 1e-3 ? Double.MAX_VALUE : bird.span * bird.scale / distance * pixelsPerRadian;
         if (!ImpostorThreshold.pictured(distance, apparent, bird.view >= 0, config.impostorDistance, config.impostorPixels)) {
             return false;

@@ -169,11 +169,11 @@ public final class DebugHud {
         }
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.reach", reach.isEmpty() ? "?" : reach), GREY));
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.opts"), GREY));
-        String[] names = {"view", "tiny", "depth", "lazy", "parallel", "cache", "occluded", "queries", "fade", "shadows", "fog", "background",
+        String[] names = {"view", "tiny", "depth", "lazy", "region", "parallel", "cache", "occluded", "queries", "fade", "shadows", "fog", "dhfog", "background",
                 "animation", "freeze"};
         boolean[] values = {config.optViewCulling, config.optTinyCulling, config.depthOcclusion, config.optLazyDepth,
-                config.optParallelRead, config.optColumnCache, config.hideOccludedMobs, config.optOcclusionQueries,
-                config.optDhFade, config.optVoxyShadows, config.optVoxyFog, config.optBackgroundBuild, config.optStillTiny, config.optFreezeHidden};
+                config.optDepthRegion, config.optParallelRead, config.optColumnCache, config.hideOccludedMobs, config.optOcclusionQueries,
+                config.optDhFade, config.optVoxyShadows, config.optVoxyFog, config.optDhFog, config.optBackgroundBuild, config.optStillTiny, config.optFreezeHidden};
         for (int i = 0; i < names.length; i++) {
             lines.add(new Line("  " + (values[i] ? "✔ " : "✘ ") + I18n.get("livinghorizon.debug.opt." + names[i]),
                     values[i] ? ON : OFF));

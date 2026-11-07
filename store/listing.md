@@ -46,7 +46,7 @@ the id. What each version gets:
 | Release channel | **Beta** below 1.0.0; **Alpha** for the targets not yet seen drawing in a world (`mod.release_type`) |
 | Loaders | the jar's own: Fabric, Quilt, NeoForge or Forge |
 | Game versions | the `mod.mc_releases` of its table (1.20 to 1.21.11, 26.1 to 26.3) |
-| Dependencies | Fabric and Quilt: Fabric API **Required**, Voxy **Optional**. Every loader: Distant Horizons **Optional** |
+| Dependencies | Fabric and Quilt: Fabric API **Required**, Voxy **Optional**. NeoForge: Ecstatic **Optional**. Every loader: Distant Horizons **Optional** |
 | Changelog | a link to the GitHub release |
 
 ## CurseForge: the mod
@@ -71,7 +71,7 @@ Files: one per jar, uploaded by the release workflow once `CURSEFORGE_TOKEN` and
 `CURSEFORGE_ID` exist, with the same title, release type, loader and game versions as on
 Modrinth, plus **Client** and the Java version (17 up to 1.20.4, 21 up to 1.21.11, 25 for
 26.x). Relations: Fabric API required on Fabric and Quilt; Voxy and Distant Horizons
-optional, where they have a CurseForge page.
+optional, where they have a CurseForge page, and Lodistance and Ecstatic (NeoForge) optional.
 
 CurseForge reviews a new project before it goes public; it takes from hours to days.
 
@@ -88,7 +88,7 @@ The API cannot create a page: create it by hand, once, under the game **Minecraf
 | Category | **Miscellaneous** (no category fits a client-side visual mod better) |
 | Summary | the CurseForge one |
 | Description | the block below, in Nexus's editor (BBCode: headings and lists by hand) |
-| Requirements | Fabric API (off-site link to Modrinth), noted "Fabric and Quilt only"; Voxy, Distant Horizons and Mod Menu as optional, in the description |
+| Requirements | Fabric API (off-site link to Modrinth), noted "Fabric and Quilt only"; Voxy, Distant Horizons, Lodistance, Ecstatic and Mod Menu as optional, in the description |
 | Permissions | the Living Horizon License: no modified upload, no asset reuse, redistribution of the unchanged jar with credit, link to `LICENSE` |
 | AI content | Nexus asks every page to declare generative AI use: tick it and say what for |
 | Images | a banner of about 1400x400 and the gallery below, in 16:9 |
@@ -121,8 +121,13 @@ performance: you can lower your simulation distance and still see a living world
 ### Mobs on the horizon
 
 All mobs are visible from far away, on the game's terrain and **on Voxy and Distant
-Horizons terrain**. This works for any entity Minecraft can draw, mobs from other mods
-included. Choose which ones in *Mobs & Entities...*.
+Horizons terrain**. This works for any entity Minecraft can draw, mobs and vehicles from
+other mods included. Choose which ones in *Mobs & Entities...*.
+
+Land nobody has explored yet has its mobs too. The mod guesses from the world's seed which
+mobs the game will put there, and where. A guessed mob may not be there when you arrive.
+This needs the mod on the server, and works in single player. Look through a spyglass to
+see them farther away, or press *Guess Nearby Mobs* to show them up to 1024 chunks around.
 
 ### Players at any distance
 
@@ -141,8 +146,8 @@ ducks, bats... They land on trees, buildings, fields and beaches.
 
 - **No AI far away.** Far entities play ready-made animations that fit the ground around
   them. Players who logged off and birds have a small AI only when you are close.
-- **Simplified Entities.** Far mobs and players are drawn as flat pictures instead of 3D
-  models. It costs much less to draw, so you can show many more entities.
+- **Simplified Entities.** Far mobs, vehicles and players are drawn as flat pictures instead
+  of 3D models. It costs much less to draw, so you can show many more entities.
 - **Everything runs on your computer.** The server only shares positions, so two players
   can see the same far mob doing different things.
 
@@ -172,7 +177,8 @@ only, and which players and dimensions are never shared. Changes apply after a f
 
 ## Getting started
 
-1. Install the file for your game version and loader. Voxy and Distant Horizons are optional.
+1. Install the file for your game version and loader. Voxy, Distant Horizons, Lodistance and
+   Ecstatic are optional.
 2. Keep the default settings. *Restore Defaults* puts them back.
 
 Open the settings from the Options screen, Mod Menu, Sodium's *Video Settings* or
@@ -182,7 +188,7 @@ Open the settings from the Options screen, Mod Menu, Sodium's *Video Settings* o
 
 - Minecraft 1.20 to 1.21.11 and 26.1 to 26.3.
 - Fabric or Quilt (with [Fabric API](https://modrinth.com/mod/fabric-api)), NeoForge or Forge.
-- [Voxy](https://modrinth.com/mod/voxy) or [Distant Horizons](https://modrinth.com/mod/distanthorizons): optional.
+- [Voxy](https://modrinth.com/mod/voxy), [Distant Horizons](https://modrinth.com/mod/distanthorizons), [Lodistance](https://www.curseforge.com/minecraft/mc-mods/lodistance) or [Ecstatic](https://modrinth.com/mod/ecstatic): optional.
 - [Mod Menu](https://modrinth.com/mod/modmenu): optional, on Fabric and Quilt.
 
 ## FAQ
@@ -218,9 +224,9 @@ Entities*).
 <details>
 <summary>How far does it show mobs and players?</summary>
 
-Mobs: 512 blocks by default, up to *Unlimited* with *Mob Render Distance*. Players: any
-distance by default, which *Player Render Distance* can limit. A mob only shows once your
-game or the server has seen it.
+Mobs: 512 blocks by default, up to *Unlimited* with *Mob Render Distance*. Players, boats and
+vehicles: any distance by default, which *Player Render Distance* and *Entity Render Distance*
+can limit. A mob only shows once your game or the server has seen it.
 
 </details>
 
@@ -229,8 +235,8 @@ game or the server has seen it.
 <details>
 <summary>Does it work with my mod?</summary>
 
-Most likely. Voxy, Distant Horizons (2.3 and later), Sodium, Iris and shader packs work with
-it; Photon and Complementary were checked. Living Horizon only adds its own figures: it does not change how other
+Most likely. Voxy, Distant Horizons (2.3 and later), Lodistance (Fabric 26.3, with OpenGL and
+without shaders), Ecstatic (NeoForge 1.21.1, single player, without shaders), Bobby, Sodium, Iris and shader packs work with it; Photon and Complementary were checked. Living Horizon only adds its own figures: it does not change how other
 mods draw the world. Mods not tested yet are listed under the
 [`mod compatibility`](https://github.com/MC-Skin-Creator/living-horizon/labels/mod%20compatibility)
 label. If something breaks, open an
@@ -250,7 +256,7 @@ differently, ask me to add support for it, in an
 </details>
 
 <details>
-<summary>Do I need Voxy or Distant Horizons?</summary>
+<summary>Do I need Voxy, Distant Horizons, Lodistance or Ecstatic?</summary>
 
 No. Without them, distant mobs and players show on the game's own terrain, out to your
 render distance. With one of them, they also show on its far terrain.
@@ -262,8 +268,8 @@ render distance. With one of them, they also show on its far terrain.
 <details>
 <summary>Will it lower my frame rate?</summary>
 
-Drawing more entities costs frame rate. If your game slows down, keep *Simplified Entities*
-on and pick a lower *Preset*. *Max Mobs* and *Mob Render Distance* both on *Unlimited* can
+Drawing more entities costs frame rate. If your game slows down, keep *Simplified Mobs* and
+*Simplified Entities* on and pick a lower *Preset*. *Max Mobs* and *Mob Render Distance* both on *Unlimited* can
 crash the game.
 
 </details>
