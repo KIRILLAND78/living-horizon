@@ -540,6 +540,11 @@ come back, add it here in the same pull request: this file is what the next sess
   again with more room round it (`ImpostorPixels.growth`), drawn smaller in a tile of the same 64
   pixels: tiles two or three times larger took four or nine times the memory for a figure a dozen
   pixels tall. `impostoredges` and `longmobs` show both.
+- **Players online never simplified** (full models far past *Simplification Distance*, or
+  smaller than *Simplification Size*, while offline players are pictures): the game draws other
+  players itself up to ten times the usual entity distance, and a figure it draws is never a
+  picture. `GhostRenderer.pictureInstead` takes them, and their mount, out of the game's frame
+  past either threshold; the `playersize` scenario checks offline and online players.
 - **Distant mobs shaking their heads very fast** (often reported with Entity Culling, more so with
   Chloride or anything that makes the game stop drawing mobs sooner): Entity Culling holds every
   entity out of view until the game's own `renderEntity` draws it, and gives it a shorter tick

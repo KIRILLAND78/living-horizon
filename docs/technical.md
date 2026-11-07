@@ -936,6 +936,10 @@ textures, draws and reads back the views, and writes a sheet into its page. Ever
 - A figure becomes an impostor past `impostorDistance`, or shorter on screen than `impostorPixels`
   (its height or width, the larger, in the window's pixels), and a model again only 5% inside both
   (`ImpostorThreshold`). Birds too. Either may be 0, off: the other alone decides.
+- A figure the game draws itself is never a picture, and the game draws other players ten times
+  as far as other entities, far past both thresholds. `GhostRenderer.pictureInstead` takes them
+  out of the game's frame (`EntityRenderDispatcherMixin`, with the mount carrying one alone) once
+  they pass a threshold, and the mod draws them: a picture, or the model while it is baked.
 - It keeps its model while its picture would be shown more than twice the 64 pixels it holds
   (a dragon twenty blocks long just past the distance), and a picture kept stays one until 5%
   past that.

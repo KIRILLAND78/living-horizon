@@ -45,6 +45,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.OutlinesScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.OverVoidScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.PerchersScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.PerfScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.PlayerSizeScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.RememberedMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ResizeScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.RestKeptScenario;
@@ -89,6 +90,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
     private static final List<Scenario> SCENARIOS = List.of(
             new ImpostorsScenario(),
             new ImpostorSizeScenario(),
+            new PlayerSizeScenario(),
             new ImpostorSharingScenario(),
             new ImpostorCrowdScenario(),
             new ImpostorEdgesScenario(),
