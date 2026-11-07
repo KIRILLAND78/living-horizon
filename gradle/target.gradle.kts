@@ -92,6 +92,80 @@ run {
     extra["lhAccessTransformer"] = file
 }
 
+// The changelog the game shows in its own screen: changelog/{en,fr}.md with the entries
+// waiting in changelog/unreleased/ put under "Unreleased", as the release will date them.
+// .github/scripts/changelog-fragments.js does the same for the release: keep the two alike.
+run {
+    val parts = listOf("server", "client")
+    val kinds = listOf("new", "improved", "fixed")
+    val areas = mapOf("en" to listOf("Server", "Client"), "fr" to listOf("Serveur", "Client"))
+    val headings = mapOf("en" to listOf("New", "Improved", "Fixed"), "fr" to listOf("Nouveautés", "Améliorations", "Corrections"))
+    data class Entry(val part: String, val kind: String, val text: String)
+
+    // One file per entry, sorted by name: "part:", "kind:", "en:", "fr:"; a line naming no
+    // field carries the one above on.
+    val fragments: List<Map<String, String>> = (rootProject.file("changelog/unreleased").listFiles() ?: emptyArray())
+        .filter { it.name.endsWith(".md") && it.name != "README.md" }.sortedBy { it.name }
+        .map { file ->
+            val fields = linkedMapOf<String, String>()
+            var current: String? = null
+            for (line in file.readLines().map { it.trim() }.filter { it.isNotEmpty() }) {
+                val field = Regex("""^(part|kind|en|fr):\s*(.*)$""").find(line)
+                if (field != null) {
+                    current = field.groupValues[1]
+                    fields[current] = field.groupValues[2]
+                } else if (current == "en" || current == "fr") {
+                    fields[current] = (fields[current]!! + " " + line).trim()
+                }
+            }
+            fields
+        }
+
+    val dir: File = layout.buildDirectory.dir("generated/changelog").get().asFile
+    dir.mkdirs()
+    for (lang in listOf("en", "fr")) {
+        val text = rootProject.file("changelog/$lang.md").readText().replace("\r\n", "\n")
+        val open = Regex("""^## (Unreleased|Prochaine version)[ \t]*$""", RegexOption.MULTILINE).find(text)
+        if (open == null) {
+            dir.resolve("$lang.md").writeText(text)
+            continue
+        }
+        val start = open.range.last + 1
+        val next = Regex("^## ", RegexOption.MULTILINE).find(text, start)
+        val end = next?.range?.first ?: text.length
+
+        // The bullets written straight under Unreleased, then the files.
+        val entries = mutableListOf<Entry>()
+        var part = "client"
+        var kind = "new"
+        for (line in text.substring(start, end).lines().map { it.trim() }) {
+            when {
+                line.startsWith("### ") -> part = parts.getOrElse(areas.getValue(lang).indexOf(line.substring(4).trim())) { "client" }
+                line.startsWith("#### ") -> kind = kinds.getOrElse(headings.getValue(lang).indexOf(line.substring(5).trim())) { "new" }
+                line.startsWith("- ") -> entries += Entry(part, kind, line.substring(2).trim())
+                line.isNotEmpty() && entries.isNotEmpty() -> entries[entries.size - 1] = entries.last().let { it.copy(text = it.text + " " + line) }
+            }
+        }
+        fragments.forEach { entries += Entry(it["part"] ?: "client", it["kind"] ?: "new", it[lang] ?: "") }
+
+        val body = buildList {
+            parts.forEachIndexed { p, partName ->
+                val ofPart = entries.filter { it.part == partName }
+                if (ofPart.isEmpty()) return@forEachIndexed
+                add("### " + areas.getValue(lang)[p]); add("")
+                kinds.forEachIndexed { k, kindName ->
+                    val ofKind = ofPart.filter { it.kind == kindName }
+                    if (ofKind.isEmpty()) return@forEachIndexed
+                    add("#### " + headings.getValue(lang)[k]); ofKind.forEach { add("- " + it.text) }; add("")
+                }
+            }
+        }.joinToString("\n")
+        val rest = text.substring(end)
+        dir.resolve("$lang.md").writeText(text.substring(0, start) + "\n\n" + body + (if (body.isEmpty() || rest.isEmpty()) "" else "\n") + rest)
+    }
+    extra["lhChangelog"] = dir
+}
+
 // The mixins this game version has something to hook into, written into the mixin config.
 extra["lhMixins"] = buildList {
     // The F3 screen's entries a mod can add came in 1.21.9.
