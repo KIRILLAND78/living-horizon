@@ -473,6 +473,11 @@ come back, add it here in the same pull request: this file is what the next sess
   mob got no animation. A ground read whole is saved with the mob (`Remembered.ground`,
   `MobPaths.Ground.save`) and walked on at once in the next session; a choice read with
   columns missing is not `complete()` and is read again, later and later.
+- **A mob riding something remembered standing, or strolling off** (a villager out of its minecart,
+  a cow out of its boat): the game makes a vehicle's passengers get off before it reports the
+  vehicle removed, so the rider is no longer a passenger when it unloads. `MobMemory.riders`
+  keeps who rode what as of the last tick; the rider's copy then rides its vehicle's copy
+  (`MobMemory.ride`), or it would lag behind a minecart rolling on.
 - **Impostors before 1.21.6** (empty or missing pictures, or a figure flashing over the screen
   at the start of a frame): the game has no output override there, so `ImpostorAtlas` bakes
   at the start of the frame (`GameRendererMixin`) into a target of its own, which

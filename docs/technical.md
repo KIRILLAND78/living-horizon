@@ -493,6 +493,13 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   `getServerSimulationDistance()` of this player and on blocks this client has; off its rails
   it stops. In single player `ServerMobs` puts it where the server has it every few ticks, and
   its run ends once the server no longer moves it.
+- **Mobs riding something** (a villager in a minecart, a cow in a boat) are drawn with their
+  ride while the server sends them; only a stack with a player in it is left to that player's
+  copy. A copy remembered riding keeps the id of the bottom of its stack (`Remembered.vehicle`,
+  set by the scan too) and rides that one's copy (`MobMemory.ride`), seated and placed by the
+  vehicle's own `positionRider`, wherever it goes; with no copy of it, it stays where it sat.
+  The game makes a vehicle's passengers get off before it says the vehicle left, so
+  `MobMemory.riders` keeps who rode what as of the last tick.
 - **A save that fails.** On the client a chest boat or minecart has the game's own hold, 27
   slots, sized again only when it is loaded from a save, which the client never does: another
   mod's larger one that writes its slots one by one (Shippy Ships' galleon, 504) threw as the
