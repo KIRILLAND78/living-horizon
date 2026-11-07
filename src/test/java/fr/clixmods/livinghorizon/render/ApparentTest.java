@@ -2,7 +2,10 @@ package fr.clixmods.livinghorizon.render;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Random;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** How big and how near a distant figure is drawn, for its model, its picture and its occlusion box alike. */
@@ -44,6 +47,32 @@ class ApparentTest {
     void aFigureInsideTheFarPlaneStaysWhereItIs() {
         assertEquals(1.0, Apparent.pull(100, 512));
         assertEquals(1.0, Apparent.pull(512 * Apparent.REACH, 512));
+    }
+
+    @Test
+    void outsideTheViewAsTheAnglesSay() {
+        Random random = new Random(42);
+        int compared = 0;
+        for (int i = 0; i < 200_000; i++) {
+            // Views from a narrow spyglass to wider than a half turn, figures from specks to wider than their distance.
+            double view = random.nextDouble() * 2.0;
+            double angle = random.nextDouble() * Math.PI;
+            double across = random.nextDouble() < 0.1 ? random.nextDouble() * 3 : random.nextDouble() * 0.2;
+            double edge = view + Math.asin(Math.min(1, across));
+            // Too close to the edge to tell the two apart: left out.
+            if (Math.abs(angle - edge) < 1e-9) continue;
+            assertEquals(angle > edge, Apparent.outsideView(Math.cos(angle), across, Math.cos(view), Math.sin(view)),
+                    "angle " + angle + ", view " + view + ", across " + across);
+            compared++;
+        }
+        assertTrue(compared > 199_000);
+    }
+
+    @Test
+    void nothingIsOutsideAViewOfHalfATurn() {
+        assertFalse(Apparent.outsideView(-1, 0.01, Math.cos(Math.PI - 0.005), Math.sin(Math.PI - 0.005)));
+        assertTrue(Apparent.outsideView(-1, 0.01, Math.cos(1.2), Math.sin(1.2)));
+        assertFalse(Apparent.outsideView(1, 0, Math.cos(1.2), Math.sin(1.2)));
     }
 
     @Test

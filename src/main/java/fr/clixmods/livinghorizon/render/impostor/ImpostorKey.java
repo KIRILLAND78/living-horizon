@@ -68,8 +68,15 @@ public record ImpostorKey(String type, long appearance, int posture) {
         this(type, appearance, STANDING);
     }
 
-    /** Milliseconds a figure's key is kept before it is worked out again. */
-    private static final long KEEP = 5000;
+    /**
+     * Milliseconds a figure's key is kept before it is worked out again, and up to {@link #SPREAD}
+     * more, depending on the figure: keys worked out together, the whole crowd at once, are not
+     * all worked out again in the same frame.
+     */
+    private static final long KEEP = 5000, SPREAD = 4095;
+
+    /** Figures whose key is kept before those not drawn for a while are forgotten. */
+    private static final int KNOWN_MOST = 4096;
 
     /** Milliseconds within which a value changing twice on one figure is taken as restless. */
     private static final long RESTLESS_WITHIN = 60_000;
@@ -85,6 +92,8 @@ public record ImpostorKey(String type, long appearance, int posture) {
     }
 
     private static final Map<Entity, Known> KNOWN = new IdentityHashMap<>();
+    /** How many figures {@link #KNOWN} may hold before it is looked through: twice what it kept the last time. */
+    private static int knownLimit = KNOWN_MOST;
 
     /**
      * Per kind of mob, the bits of each synched value seen changing on one figure again and
@@ -185,8 +194,13 @@ public record ImpostorKey(String type, long appearance, int posture) {
     private static ImpostorKey look(Entity entity) {
         long now = System.currentTimeMillis();
         Known known = KNOWN.get(entity);
-        if (known != null && now - known.when < KEEP) return known.key;
-        if (KNOWN.size() > 4096) KNOWN.clear();
+        if (known != null && now - known.when < KEEP + (System.identityHashCode(entity) & SPREAD)) return known.key;
+        if (KNOWN.size() > knownLimit) {
+            // Only the figures not asked for since their key was last kept: a copy let go, a mob gone.
+            // Cleared whole, thousands of figures on screen were all worked out again every second.
+            KNOWN.values().removeIf(old -> now - old.when > 2 * (KEEP + SPREAD));
+            knownLimit = Math.max(KNOWN_MOST, KNOWN.size() * 2);
+        }
         Map<Integer, Object> values = values(entity);
         Map<Integer, Change> changes = known == null ? new HashMap<>() : known.changes;
         if (known != null && learn(RESTLESS, type(entity), known.values, values, changes, now)) learnt++;

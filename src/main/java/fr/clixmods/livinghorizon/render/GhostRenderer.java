@@ -169,7 +169,7 @@ public final class GhostRenderer {
     private static final long MAKE_BUDGET = 1_000_000L;
 
     /** The view this frame: where the camera looks, how wide, how many pixels a radian is. */
-    private static double eyeX, eyeY, eyeZ, lookX, lookY, lookZ, viewAngle, pixelsPerRadian, drawnRange;
+    private static double eyeX, eyeY, eyeZ, lookX, lookY, lookZ, viewCos, viewSin, pixelsPerRadian, drawnRange;
     /** Figures drawn this frame, models or pictures, and those left out: for the debug panel. */
     private static int drawn, skipped;
 
@@ -186,7 +186,9 @@ public final class GhostRenderer {
         int width = Math.max(1, minecraft.getWindow().getWidth()), height = Math.max(1, minecraft.getWindow().getHeight());
         // Half the screen's diagonal, as an angle, with a margin for a quick turn of the head.
         double aspect = width / (double) height;
-        viewAngle = Math.atan(Math.tan(fov / 2) * Math.sqrt(1 + aspect * aspect)) + 0.15;
+        double viewAngle = Math.atan(Math.tan(fov / 2) * Math.sqrt(1 + aspect * aspect)) + 0.15;
+        viewCos = Math.cos(viewAngle);
+        viewSin = Math.sin(viewAngle);
         pixelsPerRadian = DepthFar.pixelsPerRadian(minecraft);
         drawnRange = minecraft.options.getEffectiveRenderDistance() * 16 - 16;
         debug = DebugMarks.active();
@@ -220,9 +222,9 @@ public final class GhostRenderer {
         FarConfig config = FarConfig.get();
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (distance < size * 2 + 4) return null;
-        if (config.optViewCulling) {
-            double angle = Math.acos(Mth.clamp((dx * lookX + dy * lookY + dz * lookZ) / distance, -1, 1));
-            if (angle > viewAngle + Math.asin(Math.min(1, size / distance))) return Mark.OUTSIDE;
+        if (config.optViewCulling
+                && Apparent.outsideView((dx * lookX + dy * lookY + dz * lookZ) / distance, size / distance, viewCos, viewSin)) {
+            return Mark.OUTSIDE;
         }
         if (mayVanish && config.optTinyCulling && config.minApparentPixels <= 0
                 && size / distance * pixelsPerRadian < 0.6) {
@@ -236,8 +238,7 @@ public final class GhostRenderer {
         double dx = x - eyeX, dy = y + size * 0.5 - eyeY, dz = z - eyeZ;
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (distance < size * 2 + 4) return true;
-        double angle = Math.acos(Mth.clamp((dx * lookX + dy * lookY + dz * lookZ) / distance, -1, 1));
-        return angle <= viewAngle + Math.asin(Math.min(1, size / distance));
+        return !Apparent.outsideView((dx * lookX + dy * lookY + dz * lookZ) / distance, size / distance, viewCos, viewSin);
     }
 
     private static @Nullable Mark count(@Nullable Mark why) {
@@ -642,6 +643,8 @@ public final class GhostRenderer {
             mob.drawn();
             // Held by easter egg 15, its head turned apart from its body: a model, which shows it.
             if (!Herd.holds(puppet) && impostor(minecraft, eye, puppet, partialTick, config)) continue;
+            // A model plays its idle movements and its legs from its clocks: made up first, if it rested untouched.
+            memory.catchUp(mob);
             EntityRenderState body = extract(dispatcher, puppet, partialTick);
             turned(puppet, body, partialTick);
             // A puppet is in no world, so never in water: fish would be drawn flopping on
@@ -996,11 +999,16 @@ public final class GhostRenderer {
     // --- Impostors ------------------------------------------------------------------------
 
     private static long lastPrewarm;
+    /** Copies looked at by one {@link #prewarm}, at most: thousands of them are gone through a share at a time. */
+    private static final int PREWARM_MOST = 1024;
+    /** Where in the list of copies drawn the next {@link #prewarm} starts. */
+    private static int prewarmFrom;
 
     /**
      * Once a second, asks for the pictures of every figure on hand to be baked, near or far,
      * so that they are ready when the figure walks past the impostor distance: every skin,
-     * every kind of mob, in the resource packs as they are.
+     * every kind of mob, in the resource packs as they are. Past {@link #PREWARM_MOST} copies,
+     * the next ones the next second: a figure drawn as a picture asks for its own anyway.
      */
     private static void prewarm(FarConfig config) {
         if (!ImpostorAtlas.usable()) return;
@@ -1013,7 +1021,13 @@ public final class GhostRenderer {
             if (puppet != null && !puppet.isFallFlying()) ImpostorAtlas.request(ImpostorKey.of(puppet), puppet);
         }
         if (!config.distantMobs && !config.distantEntities) return;
-        for (MobMemory.Remembered mob : FarPlayerTracker.get().mobs().shown()) {
+        List<MobMemory.Remembered> shown = FarPlayerTracker.get().mobs().shown();
+        int count = Math.min(shown.size(), PREWARM_MOST);
+        if (prewarmFrom >= shown.size()) prewarmFrom = 0;
+        int from = prewarmFrom;
+        prewarmFrom += count;
+        for (int i = 0; i < count; i++) {
+            MobMemory.Remembered mob = shown.get((from + i) % shown.size());
             Entity puppet = mob.puppet();
             if (puppet == null || !config.shows(creature(puppet)) || unpictured(puppet)
                     || !(creature(puppet) ? config.impostors : config.impostorEntities)) continue;

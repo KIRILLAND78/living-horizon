@@ -5,6 +5,8 @@ import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The mobs a server with the mod shares ({@link PositionPublisher}), numbered: kind 1 is the
@@ -34,8 +36,16 @@ public final class MobKinds {
      * mannequins are the other entities, with a switch, a limit and a distance of their own.
      */
     public static boolean creature(EntityType<?> type) {
-        return DefaultAttributes.hasSupplier(type) && !EntityType.getKey(type).toString().equals("minecraft:mannequin");
+        Boolean known = CREATURES.get(type);
+        if (known == null) {
+            known = DefaultAttributes.hasSupplier(type) && !EntityType.getKey(type).toString().equals("minecraft:mannequin");
+            CREATURES.put(type, known);
+        }
+        return known;
     }
+
+    /** {@link #creature} by type, worked out once: it is asked for every distant figure, every frame. */
+    private static final Map<EntityType<?>, Boolean> CREATURES = new ConcurrentHashMap<>();
 
     /** Every boat and raft, chest or not; before 1.21.2, the one boat of every wood. */
     public static boolean isBoat(String type) {

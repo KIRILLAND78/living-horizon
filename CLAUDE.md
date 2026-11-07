@@ -464,13 +464,22 @@ come back, add it here in the same pull request: this file is what the next sess
   simulation distance, a square of chunks that reaches farther on its diagonals. In single
   player `ServerMobs` asks the server where those are and the copies follow; on a server only
   the mod on the server closes that gap.
+- **A mob's copy back for a few seconds after it died far away** (single player; the `followed`
+  scenario failing now and then with "The cow died and its copy stays"): the single player
+  server says it died (`ServerMobs`, `gone`), but the positions it shared before, every 7.5 s,
+  were read again (`MobMemory.sync`) and made a new copy where they had it. A copy forgotten for
+  something the server's last word does not know yet sets that word aside (`MobMemory.setAside`).
 - **Distant mobs gliding to and fro, legs still, or trembling** (past *Animation Distance* or
   under *Min. Animated Size*): a still mob must stand, not play its animation's path without its
   legs; `MobMotion.held` stops its animation's clock. And a puppet's `tickCount` must go on every
   tick: the game plays idle movements at `tickCount` plus the frame's part of a tick, so a stopped
   one replays a tick's worth twenty times a second. Still copies are looked at once in sixteen
-  ticks only once `MobMotion.settled`, and `rest` keeps their clocks going in between: one moved
-  once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
+  ticks only once `MobMotion.settled`, and left untouched in between: their clocks (tick count,
+  legs, the animation's) are made up all at once (`MobMemory.catchUp`, `MobMotion.rest`) before
+  they are drawn as a model or looked at again. Anything else that reads a copy's tick count or
+  legs catches it up first. Until a copy is looked at, the tick reads only the remembered mob's
+  own fields (`settled`, `vehicle`, `aboard`), never the copy: one read of each copy a tick, for
+  thousands of them, was most of the cost. One moved once in sixteen ticks went in jerks. A copy held by easter egg 15 (`Herd.holds`) is never
   skipped: it turns every tick, or a far herd turned in jerks. The `stillmobs` scenario checks it all.
 - **Distant mobs gone between two distances on another player's server or LAN** (the copies
   hidden as "too close for a copy" past where the real mobs stop being sent, then forgotten): the
@@ -805,6 +814,17 @@ come back, add it here in the same pull request: this file is what the next sess
   spyglass is up, and the guessed mobs are worked out again only when what they depend on
   changed (`Foresight.wantedIfChanged`). The `seedcrowd` scenario measures it all; the
   *Statistics...* screen counts what is kept.
+- **The debug panel's costs compared** (*Tick: choosing mobs* and *Frame: extraction* the
+  largest): each time is per call. Choosing runs once a second, the guessed mobs nested in it;
+  the tick's other parts every tick, the frame's every frame. Compare them per second, or
+  profile the `seedcrowd` and `perf` scenarios with JFR (`-XX:StartFlightRecording` in
+  `JAVA_TOOL_OPTIONS`, then `jfr print --events jdk.ExecutionSample`). *Frame: extraction*
+  with a worst far above its average, every few seconds: something done for every copy at
+  once. A figure's picture key (`ImpostorKey.look`) is worked out again every 5 to 9 s, each
+  at its own moment; worked out for the whole crowd in one frame, or the cache cleared whole
+  past 4096 figures, it was a spike. `GhostRenderer.prewarm` looks at 1024 copies a second at
+  most. With thousands of copies the loops are memory-bound: a map lookup per copy (a UUID's
+  hash) costs more than the arithmetic, so mark copies with a round number, never a set.
 - **Nothing drawn in the world while a distance setting is hovered** (the distance preview,
   `render/DistancePreview`): an entity's render type is fogged like an entity, and the game's
   fog had faded a 128-block fence out completely at the default render distance. From 1.21.11

@@ -65,6 +65,12 @@ final class MobMotion {
     /** Blocks a tick in this hop, and above the ground at this tick. */
     private double hopPace, lift;
     private boolean tookOff, landed, climbing;
+    /**
+     * The copy {@link #rest} last caught up, by its id, and how fast its legs go: a baby's
+     * faster. Read once per copy, not from its synched data again and again.
+     */
+    private int restedId = Integer.MIN_VALUE;
+    private float restedScale;
 
     /** {@code flight}: how it flies, null for a mob that walks, hops or swims. */
     MobMotion(long seed, @Nullable MobFlight flight) {
@@ -82,18 +88,32 @@ final class MobMotion {
         return settled;
     }
 
+    /** Whether it is {@link #settled}, told to the remembered mob too, which the tick reads without coming here. */
+    private void settle(MobMemory.Remembered mob, boolean now) {
+        settled = now;
+        mob.settled = now;
+    }
+
     /**
-     * A tick of a {@link #settled} mob, in place of {@link #tick}: it stays as it is, and its
-     * clocks go on. Its idle movements are played at tickCount plus the frame's part of a tick,
-     * and its legs at their speed: left alone, both would run a tick's worth and snap back.
+     * {@code ticks} ticks of a {@link #settled} mob, in place of {@link #tick}: it stays as it is,
+     * and its clocks go on. Its idle movements are played at tickCount plus the frame's part of
+     * a tick, and its legs at their speed: left alone, both would run a tick's worth and snap
+     * back. The ticks it rested untouched are made up all at once, before anything reads it
+     * ({@code MobMemory.catchUp}): it stands where it stood, so only its clocks move.
      */
-    void rest(LivingEntity puppet) {
-        held++;
+    void rest(LivingEntity puppet, int ticks) {
+        if (ticks <= 0) return;
+        held += ticks;
         puppet.setOldPosAndRot();
         puppet.yBodyRotO = puppet.yBodyRot;
         puppet.yHeadRotO = puppet.yHeadRot;
-        Puppets.walk(puppet, 0f, 0.4f, puppet.isBaby() ? 3f : 1f);
-        puppet.tickCount++;
+        if (puppet.getId() != restedId) {
+            restedId = puppet.getId();
+            restedScale = puppet.isBaby() ? 3f : 1f;
+        }
+        // The legs slow down by 0.6 a tick: past a few dozen ticks they stand still for good.
+        for (int i = Math.min(ticks, 64); i > 0; i--) Puppets.walk(puppet, 0f, 0.4f, restedScale);
+        puppet.tickCount += ticks;
     }
 
     double x() {
@@ -114,7 +134,7 @@ final class MobMotion {
      * should be when it shows again, instead of running there.
      */
     void jump(LivingEntity puppet, MobMemory.Remembered mob) {
-        settled = false;
+        settle(mob, false);
         fit(puppet);
         place(mob);
         air = -1;
@@ -208,7 +228,7 @@ final class MobMotion {
         fit(puppet);
         if (!placed) place(mob);
         following = 0;
-        settled = false;
+        settle(mob, false);
         if (flight != null && roam && !mob.simulated) {
             fly(puppet, mob, flight, clock, home);
             return;
@@ -296,8 +316,8 @@ final class MobMotion {
         }
         pitch = Mth.lerp(0.15f, pitch, grazing ? 40f : 0f);
         apply(puppet, Math.hypot(x - fromX, z - fromZ));
-        settled = tiny && !followed && air < 0 && x == wasX && y + lift == wasY && z == wasZ
-                && body == wasBody && head == wasHead && Math.abs(pitch - wasPitch) < 0.01f;
+        settle(mob, tiny && !followed && air < 0 && x == wasX && y + lift == wasY && z == wasZ
+                && body == wasBody && head == wasHead && Math.abs(pitch - wasPitch) < 0.01f);
     }
 
     /**
@@ -357,7 +377,7 @@ final class MobMotion {
      * the real one takes its place without a jump.
      */
     boolean follow(LivingEntity puppet, MobMemory.Remembered mob, Entity real) {
-        settled = false;
+        settle(mob, false);
         fit(puppet);
         if (!placed) place(mob);
         double tx = real.getX(), ty = real.getY(), tz = real.getZ();
