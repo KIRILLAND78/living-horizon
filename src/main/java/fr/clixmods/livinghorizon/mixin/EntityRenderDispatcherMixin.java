@@ -1,5 +1,6 @@
 package fr.clixmods.livinghorizon.mixin;
 
+import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.track.FarPlayerTracker;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
@@ -11,7 +12,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Keeps a mob the server sends again out of the frame while its copy walks up to it:
- * the copy stands for it until both are in the same place, so that it never jumps.
+ * the copy stands for it until both are in the same place, so that it never jumps. And
+ * another player small or far enough to be a picture, with their mount: the mod draws them.
  */
 @Mixin(EntityRenderDispatcher.class)
 abstract class EntityRenderDispatcherMixin {
@@ -23,6 +25,8 @@ abstract class EntityRenderDispatcherMixin {
     private void livinghorizon$hiddenWhileJoined(Entity entity, Frustum frustum, double camX, double camY, double camZ,
                                                  CallbackInfoReturnable<Boolean> cir) {
     //?}
-        if (FarPlayerTracker.get().mobs().hides(entity)) cir.setReturnValue(false);
+        if (FarPlayerTracker.get().mobs().hides(entity) || GhostRenderer.pictureInstead(entity, camX, camY, camZ)) {
+            cir.setReturnValue(false);
+        }
     }
 }

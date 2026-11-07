@@ -1321,6 +1321,46 @@ public final class GhostRenderer {
         return config.enabled && config.renderTrackedVehiclesFar && carriesOtherPlayer(entity, 0);
     }
 
+    /**
+     * Whether the game leaves another player it would draw itself to the mod, to be drawn as a
+     * picture: a figure the game draws is never one, and the game draws players ten times as far
+     * as other entities, far past the impostor distance and down to a few pixels. Their mount too,
+     * when it carries that player alone. Decided on the last frame's view, by the same thresholds
+     * as {@link #picture}; the mod then draws a picture, or the model while that is baked.
+     */
+    public static boolean pictureInstead(Entity entity, double camX, double camY, double camZ) {
+        FarConfig config = FarConfig.get();
+        if (!config.enabled || !config.impostorPlayers || pixelsPerRadian <= 0 || !ImpostorAtlas.usable()) return false;
+        AbstractClientPlayer rider = null;
+        if (entity instanceof AbstractClientPlayer player) {
+            rider = player;
+        } else if (!entity.isPassenger() && entity.getPassengers().size() == 1
+                && entity.getFirstPassenger() instanceof AbstractClientPlayer carried) {
+            rider = carried;
+        }
+        if (rider == null || rider instanceof LocalPlayer || rider.isInvisible() || rider.isSpectator()
+                || rider.isFallFlying()) {
+            return false;
+        }
+        FarPlayer far = FarPlayerTracker.get().player(rider.getUUID());
+        if (far == null || far.live() != rider) return false;
+        Entity mount = rider.getVehicle();
+        double size = Math.max(rider.getBbHeight(), rider.getBbWidth());
+        Entity at = rider;
+        if (mount != null) {
+            // Pictured with its mount, and only on one carrying it alone, on nothing else.
+            if (mount.isPassenger() || mount.getPassengers().size() > 1) return false;
+            size = Math.max(Math.max(mount.getBbHeight(), rider.getY() - mount.getY() + rider.getBbHeight()),
+                    mount.getBbWidth());
+            at = mount;
+        }
+        double dx = at.getX() - camX, dy = at.getY() - camY, dz = at.getZ() - camZ;
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double apparent = distance < 1e-3 ? Double.MAX_VALUE : size / distance * pixelsPerRadian;
+        return ImpostorThreshold.pictured(distance, apparent, SHOWN.containsKey(rider), config.impostorDistance,
+                config.impostorPixels);
+    }
+
     /** A player, or something carrying one, however deep. */
     private static boolean carriesPlayer(Entity root) {
         if (root instanceof AbstractClientPlayer) return true;
