@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ передаётся сервером с модом: показывается, даже если ни разу не встречался. Бродит: ходит вокруг. На месте: остаётся там, где был.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - не передаётся сервером: показывается только там, где встречался. Бродит: ходит вокруг. На месте: остаётся там, где был.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - скрыт вместе со всеми существами своего мода записью «%s» в livinghorizon.json.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ передаётся сервером с модом: показывается, даже если ни разу не встречался. Остаётся там, где его оставили.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - не передаётся сервером: показывается только там, где встречался. Остаётся там, где его оставили.",
   "livinghorizon.options.mobTypes.all": "Все",

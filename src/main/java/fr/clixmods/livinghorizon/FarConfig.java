@@ -8,12 +8,15 @@ import fr.clixmods.livinghorizon.track.MobKinds;
 import fr.clixmods.livinghorizon.track.Vehicles;
 import fr.clixmods.livinghorizon.platform.Platform;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * {@code config/livinghorizon.json}. Read once at start, written back so that a player
@@ -51,7 +54,10 @@ public final class FarConfig {
     @SerializedName(value = "depthOcclusion", alternate = "voxyOcclusion")
     public boolean depthOcclusion = true;
 
-    private static final int CURRENT = 13;
+    private static final int CURRENT = 14;
+
+    /** The game's own namespace, the one an id without a colon belongs to. */
+    private static final String GAME = "minecraft";
 
     /** Skinned figures, which Distant Friends uses as its fake players: shown, standing still. */
     private static final String MANNEQUIN = "minecraft:mannequin";
@@ -64,6 +70,59 @@ public final class FarConfig {
         List<String> types = new ArrayList<>(MobKinds.TYPES);
         types.add(MANNEQUIN);
         return types;
+    }
+
+    /** Whether {@link #hiddenMobs} hides this type, by its own id or its mod's. */
+    public boolean hidesMob(String type) {
+        if (hiddenMobs.isEmpty()) return false;
+        return hiddenMobs.contains(type) || hiddenMobs.contains(wholeMod(type));
+    }
+
+    /** The {@link #hiddenMobs} entry that hides every mob of this type's mod: {@code "cobblemon:*"}. */
+    public static String wholeMod(String type) {
+        int colon = type.indexOf(':');
+        return (colon < 0 ? GAME : type.substring(0, colon)) + ":*";
+    }
+
+    /** Hidden for its whole mod ({@code "cobblemon:*"}): no switch can show it, only the file. */
+    public boolean locksMob(String type) {
+        return hiddenMobs.contains(wholeMod(type));
+    }
+
+    /**
+     * A kind switched on or off in game. One shown until now and switched off goes into
+     * {@link #hiddenMobs}, where a modpack finds it; one never shown (a vehicle waiting to be
+     * chosen) stays out of it. A kind its whole mod hides is left as it is.
+     */
+    public void setMobShown(String type, boolean shown) {
+        if (locksMob(type)) return;
+        boolean wasShown = mobTypes.contains(type) && !hidesMob(type);
+        boolean listed = hiddenMobs.removeIf(type::equals);
+        mobTypes.removeIf(type::equals);
+        if (shown) mobTypes.add(type);
+        else if (wasShown || listed) hiddenMobs.add(type);
+    }
+
+    /**
+     * {@link #hiddenMobs} as written by hand, tidied: no empty entry, ids in lower case, a bare
+     * name in the game's namespace as the game reads it ({@code "pig"}), each once. Ids of mobs
+     * the game does not have (a mod taken out, a typo) are kept: harmless, and back in use if
+     * the mod comes back.
+     */
+    private static List<String> tidy(List<String> entries) {
+        java.util.LinkedHashSet<String> tidy = new java.util.LinkedHashSet<>();
+        for (String entry : entries) {
+            if (entry == null || entry.isBlank()) continue;
+            String id = entry.trim().toLowerCase(java.util.Locale.ROOT);
+            tidy.add(id.indexOf(':') < 0 ? GAME + ":" + id : id);
+        }
+        return new ArrayList<>(tidy);
+    }
+
+    /** Whether a mob of this type, with a name tag or not, is shown far away. */
+    public boolean showsMob(String type, boolean named) {
+        if (hidesMob(type)) return false;
+        return (rememberNamedMobs && named) || mobTypes.contains(type);
     }
 
     private static List<String> defaultStillMobTypes() {
@@ -186,7 +245,20 @@ public final class FarConfig {
      */
     public List<String> stillMobTypes = defaultStillMobTypes();
 
-    /** A mob with a name tag is remembered and shown whatever its type. */
+    /**
+     * Mobs never shown far away, whatever {@link #mobTypes} and {@link #rememberNamedMobs} say:
+     * a type id ({@code "minecraft:cow"}), or every mob of a mod ({@code "cobblemon:*"}). A mob
+     * switched to Hidden under "Mobs &amp; Entities..." is written here, so a modpack can ship the list.
+     */
+    public List<String> hiddenMobs = new ArrayList<>();
+
+    /**
+     * Other mods' kinds an older file did not show, to sort once the game has registered them
+     * ({@link #sortUnsure}): written as version 14 brought the file up to date, gone after.
+     */
+    private @Nullable List<String> unsortedMobs;
+
+    /** A mob with a name tag is remembered and shown whatever its type, unless in {@link #hiddenMobs}. */
     public boolean rememberNamedMobs = true;
 
     /**
@@ -510,6 +582,7 @@ public final class FarConfig {
             config.birdSize = 1;
         }
         if (config.hiddenBirds == null) config.hiddenBirds = new ArrayList<>();
+        config.hiddenMobs = config.hiddenMobs == null ? new ArrayList<>() : tidy(config.hiddenMobs);
         if (config.birdStyle == null) config.birdStyle = "3d";
         if (config.knownMobTypes == null) config.knownMobTypes = defaultMobTypes();
         if (config.knownVehicles == null) config.knownVehicles = new ArrayList<>();
@@ -585,6 +658,19 @@ public final class FarConfig {
             if (config.entityMaxDistance <= 0) config.entityMaxDistance = MAX_DISTANCE;
             if (config.animationMaxDistance <= 0) config.animationMaxDistance = MAX_DISTANCE;
         }
+        if (config.version < 14) {
+            // The kinds switched off by hand become the list of hidden ones, where a modpack finds
+            // them; vehicles that only seat their riders were never shown, and are not listed. The
+            // game's kinds were all shown by default: one missing was taken out by hand. Other mods'
+            // monsters were hidden by default before 0.13, so the game is asked which are which.
+            List<String> unsure = new ArrayList<>();
+            for (String type : config.knownMobTypes) {
+                if (type == null || config.mobTypes.contains(type) || config.seatedVehicles.contains(type)) continue;
+                if (!type.startsWith(GAME + ":")) unsure.add(type);
+                else if (!config.hiddenMobs.contains(type)) config.hiddenMobs.add(type);
+            }
+            if (!unsure.isEmpty()) config.unsortedMobs = unsure;
+        }
         // Written by hand out of range: the nearest end.
         config.impostorMobMemory = Math.clamp(config.impostorMobMemory, MIN_MOB_MEMORY, MAX_MOB_MEMORY);
         config.impostorPlayerMemory = Math.clamp(config.impostorPlayerMemory, MIN_PLAYER_MEMORY, MAX_PLAYER_MEMORY);
@@ -598,7 +684,35 @@ public final class FarConfig {
      * Called once the game has registered them.
      */
     public static void adoptNewMobs(Iterable<EntityType<?>> types) {
-        if (instance.adopt(types)) save();
+        boolean sorted = false;
+        if (instance.unsortedMobs != null) {
+            Map<String, Boolean> monsters = new HashMap<>();
+            for (EntityType<?> type : types) {
+                monsters.put(EntityType.getKey(type).toString(), type.getCategory() == MobCategory.MONSTER);
+            }
+            sorted = instance.sortUnsure(monsters);
+        }
+        if (instance.adopt(types) | sorted) save();
+    }
+
+    /**
+     * {@link #unsortedMobs}, by whether the game calls each a monster. Any other kind was shown by
+     * default in every version, so missing it was taken out by hand: hidden. A monster may have
+     * been left out by default as well as by hand, and a kind the game no longer has cannot tell:
+     * shown, the player hides it again if they want. True when there was something to sort.
+     */
+    boolean sortUnsure(Map<String, Boolean> monsters) {
+        if (unsortedMobs == null) return false;
+        for (String type : unsortedMobs) {
+            if (type == null || mobTypes.contains(type)) continue;
+            if (Boolean.FALSE.equals(monsters.get(type))) {
+                if (!hiddenMobs.contains(type)) hiddenMobs.add(type);
+            } else {
+                mobTypes.add(type);
+            }
+        }
+        unsortedMobs = null;
+        return true;
     }
 
     private boolean adopt(Iterable<EntityType<?>> types) {
@@ -613,11 +727,13 @@ public final class FarConfig {
         return changed;
     }
 
-    /** The mob choices back to their defaults: every kind shown, the happy ghast and mannequins still. */
+    /** The mob choices back to their defaults: every kind shown but whole mods hidden, the happy ghast and mannequins still. */
     public void resetMobs(Iterable<EntityType<?>> types) {
         mobTypes = defaultMobTypes();
         stillMobTypes = defaultStillMobTypes();
         knownMobTypes = defaultMobTypes();
+        // Whole mods hidden in the file stay hidden: no switch could show them again.
+        hiddenMobs.removeIf(entry -> !entry.endsWith(":*"));
         adopt(types);
     }
 

@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ compartilhada por um servidor com o mod: exibida mesmo se nunca encontrada. Passeando: anda por aí. Parada: fica onde estava.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - não compartilhada pelo servidor: exibida só onde foi encontrada. Passeando: anda por aí. Parada: fica onde estava.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - oculta junto com todas as criaturas do seu mod por \"%s\" em livinghorizon.json.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ compartilhada por um servidor com o mod: exibida mesmo se nunca encontrada. Fica onde foi deixada.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - não compartilhada pelo servidor: exibida só onde foi encontrada. Fica onde foi deixada.",
   "livinghorizon.options.mobTypes.all": "Todas",

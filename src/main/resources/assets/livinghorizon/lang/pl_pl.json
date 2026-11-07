@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ udostępniane przez serwer z modem: widoczne, nawet jeśli nigdy nie spotkane. Wędrujące: chodzą wokół. Nieruchome: zostają tam, gdzie były.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - nieudostępniane przez serwer: widoczne tylko tam, gdzie spotkane. Wędrujące: chodzą wokół. Nieruchome: zostają tam, gdzie były.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - ukryte razem ze wszystkimi stworzeniami swojego moda przez „%s” w livinghorizon.json.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ udostępniane przez serwer z modem: widoczne, nawet jeśli nigdy nie spotkane. Zostaje tam, gdzie go zostawiono.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - nieudostępniane przez serwer: widoczne tylko tam, gdzie spotkane. Zostaje tam, gdzie go zostawiono.",
   "livinghorizon.options.mobTypes.all": "Wszystkie",

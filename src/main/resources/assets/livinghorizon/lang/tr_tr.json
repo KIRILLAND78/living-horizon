@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ modlu bir sunucu tarafından paylaşılır: hiç karşılaşılmasa da gösterilir. Dolaşan: etrafta yürür. Durağan: olduğu yerde kalır.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - sunucu tarafından paylaşılmaz: yalnızca karşılaşıldığı yerde gösterilir. Dolaşan: etrafta yürür. Durağan: olduğu yerde kalır.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - livinghorizon.json içindeki \"%s\" ile modunun tüm yaratıklarıyla birlikte gizlendi.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ modlu bir sunucu tarafından paylaşılır: hiç karşılaşılmasa da gösterilir. Bırakıldığı yerde kalır.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - sunucu tarafından paylaşılmaz: yalnızca karşılaşıldığı yerde gösterilir. Bırakıldığı yerde kalır.",
   "livinghorizon.options.mobTypes.all": "Tümü",

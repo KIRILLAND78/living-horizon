@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ надсилається сервером із модом: показано, навіть якщо ще не траплявся. Блукає: ходить довкола. На місці: залишається там, де був.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - не надсилається сервером: показано лише там, де траплявся. Блукає: ходить довкола. На місці: залишається там, де був.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - приховано разом з усіма істотами свого мода записом «%s» у livinghorizon.json.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ надсилається сервером із модом: показано, навіть якщо ще не траплявся. Залишається там, де його залишили.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - не надсилається сервером: показано лише там, де траплявся. Залишається там, де його залишили.",
   "livinghorizon.options.mobTypes.all": "Усі",

@@ -695,12 +695,14 @@ public final class GhostRenderer {
             if (memory.hides(entity)) continue;
             EntityType<?> type = entity.getType();
             if (!config.shows(MobKinds.creature(type))) continue;
+            // Null once known: hidden whatever its name (FarConfig.hiddenMobs).
             Boolean shown = wanted.get(type);
-            if (shown == null) {
-                shown = config.mobTypes.contains(EntityType.getKey(type).toString());
+            if (shown == null && !wanted.containsKey(type)) {
+                String id = EntityType.getKey(type).toString();
+                shown = config.hidesMob(id) ? null : config.mobTypes.contains(id);
                 wanted.put(type, shown);
             }
-            if (!shown && !(config.rememberNamedMobs && entity.hasCustomName())) continue;
+            if (shown == null || !shown && !(config.rememberNamedMobs && entity.hasCustomName())) continue;
             // Close by, the game leaves a mob out only when the terrain hides it.
             if (entity.distanceToSqr(eye) < 24 * 24) continue;
             if (tooFar(entity, eye, maxDistance(entity, config))) continue;

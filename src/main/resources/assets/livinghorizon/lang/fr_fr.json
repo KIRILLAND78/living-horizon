@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ partagé par un serveur avec le mod : affiché même sans l'avoir croisé. En balade : se promène. Immobile : reste à sa place.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - pas partagé par le serveur : affiché seulement là où il a été croisé. En balade : se promène. Immobile : reste à sa place.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - masqué avec tous les mobs de son mod par « %s » dans livinghorizon.json.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ partagé par un serveur avec le mod : affiché même sans l'avoir croisé. Reste là où il a été laissé.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - pas partagé par le serveur : affiché seulement là où il a été croisé. Reste là où il a été laissé.",
   "livinghorizon.options.mobTypes.all": "Tous",
