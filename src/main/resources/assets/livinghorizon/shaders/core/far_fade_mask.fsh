@@ -1,6 +1,8 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
+#include <livinghorizon:far_depth.glsl>
+
 // Before Distant Horizons fades the game's picture into its terrain: whatever is not the game's
 // own terrain reads as sky, which the fade leaves alone. Outside the game's chunks, that is
 // everything - the distant figures, and Distant Horizons' merged depth. Inside them, whatever
@@ -28,12 +30,6 @@ layout(std140) uniform LhFadeMask {
 
 layout(location = 0) in vec2 texCoord;
 
-/** The distance in front of the camera a depth stands for, through a projection's two terms. */
-float distanceOf(float depth, float a, float b, bool signedRange) {
-    float ndc = signedRange ? depth * 2.0 - 1.0 : depth;
-    return b / (ndc + a);
-}
-
 void main() {
     float d = texture(InSampler, texCoord).r;
     if (d == Layout.y) discard;
@@ -44,10 +40,8 @@ void main() {
         if (Layout.z < 0.5) discard;
         float dh = texture(DhDepth, texCoord).r;
         if (dh == Dh.w) discard;
-        float here = distanceOf(d, Game.x, Game.y, Layout.x < 0.5);
-        float terrain = Exact.x > 0.5
-                ? 1.0 / (DhInverse * vec4(texCoord * 2.0 - 1.0, Dh.z > 0.5 ? dh * 2.0 - 1.0 : dh, 1.0)).w
-                : distanceOf(dh, Dh.x, Dh.y, Dh.z > 0.5);
+        float here = lhDistance(d, Game.xy, Layout.x > 0.5);
+        float terrain = -lhDhViewZ(dh, Dh, Exact.x > 0.5, DhInverse, texCoord);
         // The game's own terrain: at Distant Horizons' depth, give or take its blocks.
         if (!(here < terrain - max(0.5, terrain * 0.01))) discard;
     }

@@ -4,9 +4,9 @@ import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.platform.Platform;
 import fr.clixmods.livinghorizon.render.DepthMath;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fc;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -19,21 +19,14 @@ import java.lang.reflect.Method;
  * as they did before.
  */
 final class DhDepth {
-    private static boolean ready, broken, started;
+    private static boolean ready, broken, started, linked;
     private static String reason = "not started";
 
-    private static Field renderProxy, projection, m22, m23, m32, success, payload;
+    private static MethodHandle renderProxy;
+    private static Field projection, m22, m23, m32;
     private static Method depthTexture, name;
     /** All sixteen numbers of a matrix of Distant Horizons', row by row; null where it is missing. */
     private static @Nullable Method valuesAsArray;
-    /**
-     * The inverse of the whole projection Distant Horizons drew its terrain with this frame, and
-     * whether it is known. It is the game's - view bobbing, nausea and all - with only its depth
-     * terms replaced by Distant Horizons' own planes: the bobbing then moves its depth in a way the
-     * two terms alone do not say, and a step made its terrain come and go in front of the mobs.
-     */
-    private static final Matrix4f INVERSE = new Matrix4f();
-    private static boolean exact;
     /**
      * From Distant Horizons 3.3.2: the layout of its depth. Before, null: OpenGL's usual one,
      * -1 to 1 with nothing at 1.
@@ -46,8 +39,6 @@ final class DhDepth {
     private static @Nullable Method nearPlane, farPlane, nearOverride;
     /** From API 7.1, Distant Horizons may draw through Blaze3D, without a shader pack: its depth is reached through a wrapper. */
     private static @Nullable Method blazeDepthTexture, wrappedObject;
-    /** Iris or Oculus, when installed: whether a shader pack is on, and the planes it draws Distant Horizons with. */
-    private static @Nullable Method irisApi, packInUse, irisNear, irisFar;
 
     private DhDepth() {
     }
@@ -70,7 +61,9 @@ final class DhDepth {
                 return false;
             }
             try {
+                if (!DhLink.linked()) throw new IllegalStateException("its API is not the one this mod knows");
                 link();
+                linked = true;
             } catch (Throwable e) {
                 broken = true;
                 reason = "Distant Horizons found, but too old or unknown (its depth needs 2.3 or newer): " + e;
@@ -83,75 +76,57 @@ final class DhDepth {
     }
 
     /**
-     * {@code {texture, a, b, signed, nothing}}: the GL texture of Distant Horizons' depth,
-     * the two numbers of its projection that matter to depth, 1 when its depth runs from -1
-     * to 1 (0 from 0 to 1), and the depth of a pixel with no terrain; null with the reason
-     * in {@link #reason()} when there is none this frame.
+     * Distant Horizons' depth this frame as an OpenGL texture, and the projection it is made
+     * with; null with the reason in {@link #reason()} when there is none this frame.
      */
-    static float @Nullable [] read() {
+    static @Nullable DhFrame read() {
         try {
-            Object proxy = renderProxy.get(null);
+            Object proxy = (Object) renderProxy.invokeExact();
             if (proxy == null) return none("Distant Horizons has not started");
             Object result = depthTexture.invoke(proxy);
-            int texture = success.getBoolean(result) && payload.get(result) instanceof Integer id ? id : blazeTexture(proxy);
+            int texture = DhLink.success(result) && DhLink.payload(result) instanceof Integer id ? id : blazeTexture(proxy);
             if (texture <= 0) return none("Distant Horizons has no depth texture");
-            float[] terms = terms(proxy);
-            return terms == null ? null : new float[]{texture, terms[0], terms[1], terms[2], terms[3]};
+            return frame(proxy, texture, null);
         } catch (Throwable e) {
-            broken = true;
-            reason = "Distant Horizons did not answer as expected: " + e;
-            LivingHorizonClient.LOGGER.warn("Using Distant Horizons' depth turned off: it did not answer as expected", e);
-            return null;
+            return failed(e);
         }
     }
 
     /**
-     * {@code {view, a, b, signed, nothing}} as {@link #read()} gives, but with the game's own
-     * texture view of Distant Horizons' depth instead of an OpenGL name: when it draws through
-     * Blaze3D, which works with Vulkan as with OpenGL. Null with the reason when there is none.
+     * As {@link #read()}, but with the game's own texture view of Distant Horizons' depth
+     * instead of an OpenGL name: when it draws through Blaze3D, which works with Vulkan as with
+     * OpenGL. Null with the reason when there is none.
      */
-    static Object @Nullable [] readView() {
+    static @Nullable DhFrame readView() {
         try {
-            Object proxy = renderProxy.get(null);
-            if (proxy == null) return noneView("Distant Horizons has not started");
-            if (blazeDepthTexture == null || wrappedObject == null) return noneView("Distant Horizons is too old to draw with Vulkan");
+            Object proxy = (Object) renderProxy.invokeExact();
+            if (proxy == null) return none("Distant Horizons has not started");
+            if (blazeDepthTexture == null || wrappedObject == null) return none("Distant Horizons is too old to draw with Vulkan");
             Object result = blazeDepthTexture.invoke(proxy);
-            if (!success.getBoolean(result)) return noneView("Distant Horizons has no depth texture");
-            Object wrapper = payload.get(result);
+            if (!DhLink.success(result)) return none("Distant Horizons has no depth texture");
+            Object wrapper = DhLink.payload(result);
             // The texture, its view and its sampler.
             if (wrapper == null || !(wrappedObject.invoke(wrapper) instanceof Object[] objects) || objects.length < 2
                     || objects[1] == null) {
-                return noneView("Distant Horizons has no depth texture");
+                return none("Distant Horizons has no depth texture");
             }
-            float[] terms = terms(proxy);
-            return terms == null ? null : new Object[]{objects[1], terms[0], terms[1], terms[2], terms[3]};
+            return frame(proxy, 0, objects[1]);
         } catch (Throwable e) {
-            broken = true;
-            reason = "Distant Horizons did not answer as expected: " + e;
-            LivingHorizonClient.LOGGER.warn("Using Distant Horizons' depth turned off: it did not answer as expected", e);
-            return null;
+            return failed(e);
         }
     }
 
-    private static Object @Nullable [] noneView(String why) {
-        reason = why;
+    private static @Nullable DhFrame failed(Throwable e) {
+        broken = true;
+        reason = "Distant Horizons did not answer as expected: " + e;
+        LivingHorizonClient.LOGGER.warn("Using Distant Horizons' depth turned off: it did not answer as expected", e);
         return null;
     }
 
-    /**
-     * The inverse of Distant Horizons' whole projection this frame, from its depth back to the view:
-     * a point at {@code (x, y, depth)} in its clip space, through it, gives {@code p} with
-     * {@code -1 / p.w} the view-space {@code z} the game's own (bobbed) projection divides by.
-     * Null where only its two depth terms are known: before 3.2, or under a shader pack.
-     */
-    static @Nullable Matrix4fc inverse() {
-        return exact ? INVERSE : null;
-    }
-
-    /** {@code {a, b, signed, nothing}} of the projection Distant Horizons' depth is made with. */
-    private static float @Nullable [] terms(Object proxy) throws ReflectiveOperationException {
+    /** The projection Distant Horizons' depth is made with, around its texture or view. */
+    private static @Nullable DhFrame frame(Object proxy, int texture, @Nullable Object view) throws ReflectiveOperationException {
         float a, b;
-        exact = false;
+        Matrix4f inverse = null;
         if (renderParams != null) {
             Object params = renderParams.get(null);
             Object matrix = params == null ? null : projection.get(params);
@@ -161,7 +136,7 @@ final class DhDepth {
             float[] read = DepthMath.fromMatrix(m22.getFloat(matrix), c, m32.getFloat(matrix));
             a = read[0];
             b = read[1];
-            exact = invert(matrix, DepthMath.rowByRow(c));
+            inverse = invert(matrix, DepthMath.rowByRow(c));
         } else {
             float[] planes = planes(proxy);
             if (planes == null) return none("Distant Horizons has no clip planes yet");
@@ -171,9 +146,9 @@ final class DhDepth {
         }
         boolean signed = depthRange == null
                 || "NEG_ONE_TO_POS_ONE".equals(String.valueOf(name.invoke(depthRange.invoke(proxy))));
-        float[] iris = irisPlanes();
+        float[] iris = IrisLink.dhPlanes();
         if (iris != null) {
-            exact = false;
+            inverse = null;
             // A shader pack draws Distant Horizons' terrain with Iris's own projection, whose
             // near plane is not the one Distant Horizons clamps for itself: OpenGL's -1..1.
             //? if >=26.2 {
@@ -192,18 +167,29 @@ final class DhDepth {
         }
         if (Math.abs(b) < 1.0e-6f) return none("Distant Horizons has no projection yet");
         float nothing = depthDirection == null || farDepth == null ? 1.0f : farDepth.getFloat(depthDirection.invoke(proxy));
-        return new float[]{a, b, signed ? 1.0f : 0.0f, nothing};
+        return new DhFrame(texture, view, a, b, signed, nothing, inverse);
     }
 
-    /** Distant Horizons' whole projection into {@link #INVERSE}, inverted; whether it could be. */
-    private static boolean invert(Object matrix, boolean rowByRow) {
-        if (valuesAsArray == null) return false;
+    /**
+     * The inverse of Distant Horizons' whole projection this frame, from its depth back to the
+     * view: a point at {@code (x, y, depth)} in its clip space, through it, gives {@code p} with
+     * {@code -1 / p.w} the view-space {@code z} the game's own (bobbed) projection divides by.
+     * It is the game's - view bobbing, nausea and all - with only its depth terms replaced by
+     * Distant Horizons' own planes: the bobbing then moves its depth in a way the two terms
+     * alone do not say, and a step made its terrain come and go in front of the mobs. Null when
+     * it could not be read whole.
+     */
+    private static @Nullable Matrix4f invert(Object matrix, boolean rowByRow) {
+        if (valuesAsArray == null) return null;
         try {
-            return valuesAsArray.invoke(matrix) instanceof float[] values && DepthMath.invert(values, rowByRow, INVERSE);
+            Matrix4f inverse = new Matrix4f();
+            return valuesAsArray.invoke(matrix) instanceof float[] values && DepthMath.invert(values, rowByRow, inverse)
+                    ? inverse : null;
         } catch (ReflectiveOperationException | RuntimeException e) {
             valuesAsArray = null;
+            DhLink.fallback("its projection could not be read whole: its depth may move with view bobbing");
             LivingHorizonClient.LOGGER.warn("Distant Horizons' projection could not be read whole: its depth may move with view bobbing", e);
-            return false;
+            return null;
         }
     }
 
@@ -222,31 +208,14 @@ final class DhDepth {
     }
 
     /**
-     * {@code {near, far}} of the projection Iris draws Distant Horizons' terrain with while a
-     * shader pack is on; null without Iris, without a pack, or when its planes are not known yet.
-     */
-    private static float @Nullable [] irisPlanes() {
-        if (irisApi == null || packInUse == null || irisNear == null || irisFar == null) return null;
-        try {
-            if (!(boolean) packInUse.invoke(irisApi.invoke(null))) return null;
-            float near = (float) irisNear.invoke(null), far = (float) irisFar.invoke(null);
-            return near > 0.0f && far > near ? new float[]{near, far} : null;
-        } catch (Throwable e) {
-            packInUse = null;
-            LivingHorizonClient.LOGGER.warn("Iris did not answer as expected: Distant Horizons' depth is read as without a shader pack", e);
-            return null;
-        }
-    }
-
-    /**
      * The OpenGL name of the depth texture Distant Horizons draws into through Blaze3D, which
      * it does without a shader pack from 26.1; 0 when there is none, or not on OpenGL.
      */
-    private static int blazeTexture(Object proxy) throws ReflectiveOperationException {
+    private static int blazeTexture(Object proxy) throws Throwable {
         if (blazeDepthTexture == null || wrappedObject == null) return 0;
         Object result = blazeDepthTexture.invoke(proxy);
-        if (!success.getBoolean(result)) return 0;
-        Object wrapper = payload.get(result);
+        if (!DhLink.success(result)) return 0;
+        Object wrapper = DhLink.payload(result);
         // The texture, its view and its sampler; the texture is the game's own GpuTexture.
         if (wrapper == null || !(wrappedObject.invoke(wrapper) instanceof Object[] objects) || objects.length == 0
                 || objects[0] == null) {
@@ -265,105 +234,71 @@ final class DhDepth {
      * is installed. Its depth is then an OpenGL texture, and no texture of the game's.
      */
     static boolean drawsWithOpenGl() {
-        if (broken || renderProxy == null || depthTexture == null) return false;
+        if (broken || !linked) return false;
         try {
-            Object proxy = renderProxy.get(null);
+            Object proxy = (Object) renderProxy.invokeExact();
             if (proxy == null) return false;
             Object result = depthTexture.invoke(proxy);
-            return success.getBoolean(result) && payload.get(result) instanceof Integer id && id > 0;
-        } catch (ReflectiveOperationException e) {
+            return DhLink.success(result) && DhLink.payload(result) instanceof Integer id && id > 0;
+        } catch (Throwable e) {
             return false;
         }
     }
 
     /** Whether Iris draws with a shader pack: Distant Horizons then does not fade the game's picture. */
     static boolean shaderPackOn() {
-        if (irisApi == null || packInUse == null) return false;
-        try {
-            return (boolean) packInUse.invoke(irisApi.invoke(null));
-        } catch (Throwable e) {
-            return false;
-        }
+        return linked && IrisLink.shaderPackOn();
     }
 
-    private static float @Nullable [] none(String why) {
+    private static @Nullable DhFrame none(String why) {
         reason = why;
         return null;
     }
 
     private static void link() throws ReflectiveOperationException {
-        String api = "com.seibel.distanthorizons.api.";
-        Class<?> delayed = Class.forName(api + "DhApi$Delayed");
+        String api = DhLink.API;
         Class<?> proxy = Class.forName(api + "interfaces.render.IDhApiRenderProxy");
-        Class<?> result = Class.forName(api + "objects.DhApiResult");
         Class<?> param = Class.forName(api + "methods.events.sharedParameterObjects.DhApiRenderParam");
         Class<?> matrix = Class.forName(api + "objects.math.DhApiMat4f");
-        renderProxy = delayed.getField("renderProxy");
-        try {
-            depthTexture = proxy.getMethod("getDhDepthTextureGlId");
-        } catch (NoSuchMethodException e) {
+        renderProxy = DhLink.delayed("renderProxy", proxy);
+        depthTexture = Links.optionalMethod(proxy, "getDhDepthTextureGlId");
+        if (depthTexture == null) {
             depthTexture = proxy.getMethod("getDhDepthTextureId"); // before 3.3
+            DhLink.fallback("depth texture by its older name (before 3.3)");
         }
-        try {
-            depthRange = proxy.getMethod("getDepthRange");
-            depthDirection = proxy.getMethod("getDepthDirection");
-            farDepth = Class.forName(api + "enums.config.EDhApiDepthDirection").getField("farDepth");
-        } catch (ReflectiveOperationException e) {
+        depthRange = Links.optionalMethod(proxy, "getDepthRange");
+        depthDirection = Links.optionalMethod(proxy, "getDepthDirection");
+        farDepth = Links.optionalField(Links.optionalClass(api + "enums.config.EDhApiDepthDirection"), "farDepth");
+        if (depthRange == null || depthDirection == null || farDepth == null) {
             depthRange = depthDirection = null; // before 3.3.2: OpenGL's usual depth
             farDepth = null;
+            DhLink.fallback("no depth layout, OpenGL's usual one (before 3.3.2)");
         }
-        success = result.getField("success");
         name = Enum.class.getMethod("name");
         projection = param.getField("dhProjectionMatrix");
         m22 = matrix.getField("m22");
         m23 = matrix.getField("m23");
         m32 = matrix.getField("m32");
-        try {
-            valuesAsArray = matrix.getMethod("getValuesAsArray");
-        } catch (NoSuchMethodException e) {
-            valuesAsArray = null; // its two depth terms only
-        }
+        valuesAsArray = Links.optionalMethod(matrix, "getValuesAsArray");
+        if (valuesAsArray == null) DhLink.fallback("its two depth terms only: its depth may move with view bobbing");
         // Not API: the last parameters Distant Horizons rendered with, from 3.2.
         try {
             renderParams = Class.forName("com.seibel.distanthorizons.core.api.internal.ClientApi").getDeclaredField("RENDER_PARAMS");
             renderParams.setAccessible(true);
         } catch (NoSuchFieldException e) {
             renderParams = null;
+            DhLink.fallback("no render parameters, projection rebuilt from its planes (before 3.2)");
             // Before 3.2, its planes: the near one through the API, the far one and the override not.
             nearPlane = proxy.getMethod("getNearClipPlaneDistanceInBlocks", float.class);
             Class<?> util = Class.forName("com.seibel.distanthorizons.core.util.RenderUtil");
             farPlane = util.getMethod("getFarClipPlaneDistanceInBlocks");
-            nearOverride = null;
-            for (String override : new String[]{"getHeightBasedNearClipOverride", "getHeightBasedNearClipOverrideBlockDistance"}) {
-                try {
-                    nearOverride = util.getMethod(override);
-                    break;
-                } catch (NoSuchMethodException ignored) {
-                    // the other name
-                }
-            }
+            nearOverride = Links.firstMethod(util, "getHeightBasedNearClipOverride", "getHeightBasedNearClipOverrideBlockDistance");
         }
-        payload = result.getField("payload");
-        try {
-            blazeDepthTexture = proxy.getMethod("getDhDepthTextureBlazeWrapper");
-            wrappedObject = Class.forName(api + "interfaces.IDhApiUnsafeWrapper").getMethod("getWrappedMcObject");
-        } catch (ReflectiveOperationException e) {
+        blazeDepthTexture = Links.optionalMethod(proxy, "getDhDepthTextureBlazeWrapper");
+        wrappedObject = Links.optionalMethod(Links.optionalClass(api + "interfaces.IDhApiUnsafeWrapper"), "getWrappedMcObject");
+        if (blazeDepthTexture == null || wrappedObject == null) {
             blazeDepthTexture = null; // before API 7.1: OpenGL only
-        }
-        // Oculus, Iris's port to Forge, keeps Iris's classes under another mod id: missed, a pack
-        // on Forge was read as no pack, and Distant Horizons' depth with the wrong projection.
-        if (Platform.isModLoaded("iris") || Platform.isModLoaded("oculus")) {
-            try {
-                Class<?> iris = Class.forName("net.irisshaders.iris.api.v0.IrisApi");
-                Class<?> compat = Class.forName("net.irisshaders.iris.compat.dh.DHCompat");
-                irisApi = iris.getMethod("getInstance");
-                packInUse = iris.getMethod("isShaderPackInUse");
-                irisNear = compat.getMethod("getNearPlane");
-                irisFar = compat.getMethod("getFarPlane");
-            } catch (ReflectiveOperationException e) {
-                packInUse = null;
-                LivingHorizonClient.LOGGER.warn("Iris found, but not the version this mod knows: Distant Horizons' depth is read as without a shader pack", e);
-            }
+            DhLink.fallback("OpenGL depth only (before API 7.1)");
         }
     }
 }

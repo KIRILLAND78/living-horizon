@@ -38,13 +38,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * ({@link Sight}): in a forest too thick to see into (a jungle), a way all under the leaves
  * would never be seen. It starts out of sight where it can, and once it has been in sight a
  * while, the first obstacle that hides it is where it goes. The figure is drawn of boxes
- * ({@link BoxFigure}), in the light where it walks.
+ * ({@link BigfootModel}), in the light where it walks.
  *
  * <p>Secret: nothing a player reads (settings, README, changelog) says what it is.
  */
 public final class Bigfoot {
-    private static final BoxFigure.Shape SHAPE = new BoxFigure.Shape(
-            1.0f, 0.36f, 1.0f, 0.95f, 0.6f, 1.25f, 0.3f, 0.55f, 0.1f, 0x5E4329, 0x8C7058);
     /** Blocks per tick it walks; blocks across under which it goes. */
     private static final double PACE = 0.075, NEAR = 18;
     /**
@@ -73,9 +71,30 @@ public final class Bigfoot {
     private boolean[] inSight = new boolean[0];
     private float yaw, headYaw, headYawO;
     private int age, steps, lookAt, light, idle, seen, hidden, searchAge;
+    /** For the previews: standing still, in a stride of its own. */
+    private boolean showcase;
+    private float showSwing;
 
     Bigfoot(EggCalendar calendar) {
         this.calendar = calendar;
+    }
+
+    /**
+     * For the previews in the game tests: stands still at {@code (x, y, z)} facing {@code yaw},
+     * its legs {@code swing} degrees apart, until cleared.
+     */
+    public void showcase(ClientLevel current, double x, double y, double z, float yaw, float swing) {
+        clear();
+        this.x = xo = x;
+        this.y = yo = y;
+        this.z = zo = z;
+        this.yaw = yaw;
+        headYaw = headYawO = 0f;
+        showSwing = swing;
+        showcase = true;
+        level = current;
+        light = BoxFigure.light(current, x, y, z);
+        active = true;
     }
 
     /** On its way or under way: no other easter egg starts meanwhile. */
@@ -222,6 +241,7 @@ public final class Bigfoot {
     public void tick(ClientLevel current, LocalPlayer self, boolean enabled, boolean quiet) {
         if (busy() && (!enabled || current != level)) clear();
         if (!enabled) return;
+        if (showcase) return;
         if (searching) {
             if (++searchAge > SEARCH) clear();
             return;
@@ -267,7 +287,7 @@ public final class Bigfoot {
 
     private void clear() {
         generation.incrementAndGet();
-        searching = active = false;
+        searching = active = showcase = false;
         level = null;
     }
 
@@ -327,7 +347,8 @@ public final class Bigfoot {
         pose.scale(pull, pull, pull);
         pose.mulPose(Axis.YP.rotationDegrees(-yaw));
         // Yaw turns the other way round from the pose's rotations, the body's as the head's.
-        BoxFigure.draw(pose, collector, SHAPE, swing, 0f, -Mth.lerp(partial, headYawO, headYaw), light);
+        float stride = showcase ? showSwing : swing, turned = -Mth.lerp(partial, headYawO, headYaw);
+        BigfootModel.draw(pose, collector, stride, turned, light);
         pose.popPose();
         if (called) CalledBeam.submit(pose, camera, collector, px + camera.x, py + camera.y, pz + camera.z);
     }

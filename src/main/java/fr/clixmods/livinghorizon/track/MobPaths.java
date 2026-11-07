@@ -23,7 +23,8 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>The ground around the mob is read once, when it is remembered: in every column
  * within {@link #RADIUS} blocks, the floor nearest the mob's own height with room above
- * it, from the chunks loaded here or else from the far world (Voxy or Distant Horizons).
+ * it, from the chunks loaded here or else from the far world (Voxy, Distant Horizons or Lodistance).
+ * Both are read off the game's thread, the loaded chunks from a copy made as it is asked.
  * What has no collision - grass, flowers, crops, snow, torches - is air to a mob, and a
  * path dug with a shovel is ground like any other. Water, leaves and what stands too tall to step on (a fence, a
  * wall) are not.
@@ -73,39 +74,60 @@ public final class MobPaths {
     }
 
     /**
-     * Reads the ground around a mob and chooses its animation. Loaded columns are read at
-     * once; the others come from the far world, off the thread, so the answer may come later.
+     * Reads the ground around a mob and chooses its animation, off the game's thread: the
+     * loaded chunks around are copied here ({@link BlockCopy}) and read on {@link GroundWork}'s
+     * threads, the other columns come from the far world. The answer comes a tick or more later.
      */
     public static CompletableFuture<Choice> plan(ClientLevel level, double x, double y, double z, double width, long seed) {
         int bx = Mth.floor(x), bz = Mth.floor(z), bottom = Mth.floor(y) - BELOW, height = BELOW + ABOVE + 1;
-        double[][] ground = new double[SIZE][SIZE];
+        boolean[] near = new boolean[SIZE * SIZE];
         int[] farX = new int[SIZE * SIZE], farZ = new int[SIZE * SIZE];
         int far = 0;
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        BlockState[] column = new BlockState[height];
         for (int i = 0; i < SIZE; i++) {
             for (int j = 0; j < SIZE; j++) {
                 int cx = bx + i - RADIUS, cz = bz + j - RADIUS;
                 if (level.hasChunk(cx >> 4, cz >> 4)) {
-                    for (int k = 0; k < height; k++) column[k] = level.getBlockState(pos.set(cx, bottom + k, cz));
-                    ground[i][j] = floor(column, bottom, y);
+                    near[i * SIZE + j] = true;
                 } else {
-                    ground[i][j] = Double.NaN;
                     farX[far] = cx;
                     farZ[far] = cz;
                     far++;
                 }
             }
         }
-        if (far == 0) return CompletableFuture.completedFuture(choose(new Ground(ground, x, y, z), width, seed));
-        return LodWorld.columns(Arrays.copyOf(farX, far), Arrays.copyOf(farZ, far), bottom, height).thenApply(read -> {
+        BlockCopy blocks = far == SIZE * SIZE ? null
+                : BlockCopy.of(level, bx - RADIUS, bottom, bz - RADIUS, bx + RADIUS, bottom + height - 1, bz + RADIUS).copy(level);
+        if (far == 0) {
+            return GroundWork.run(() -> choose(new Ground(read(blocks, near, bx, bz, bottom, height, y), x, y, z), width, seed));
+        }
+        CompletableFuture<double[][]> loaded = GroundWork.run(() -> read(blocks, near, bx, bz, bottom, height, y));
+        int[] columnsX = Arrays.copyOf(farX, far), columnsZ = Arrays.copyOf(farZ, far);
+        return loaded.thenCombineAsync(LodWorld.columns(columnsX, columnsZ, bottom, height), (ground, read) -> {
             boolean complete = true;
             for (int k = 0; k < read.length; k++) {
-                if (read[k] != null) ground[farX[k] - bx + RADIUS][farZ[k] - bz + RADIUS] = floor(read[k], bottom, y);
+                if (read[k] != null) ground[columnsX[k] - bx + RADIUS][columnsZ[k] - bz + RADIUS] = floor(read[k], bottom, y);
                 else complete = false;
             }
             return choose(new Ground(ground, x, y, z, complete), width, seed);
-        });
+        }, GroundWork.executor());
+    }
+
+    /** The ground of the columns copied, {@code near[i * SIZE + j]}; NaN for the others, read from the far world. */
+    private static double[][] read(@Nullable BlockCopy blocks, boolean[] near, int bx, int bz, int bottom, int height, double y) {
+        double[][] ground = new double[SIZE][SIZE];
+        BlockState[] column = new BlockState[height];
+        for (int i = 0; i < SIZE; i++) {
+            for (int j = 0; j < SIZE; j++) {
+                if (blocks == null || !near[i * SIZE + j]) {
+                    ground[i][j] = Double.NaN;
+                    continue;
+                }
+                int cx = bx + i - RADIUS, cz = bz + j - RADIUS;
+                for (int k = 0; k < height; k++) column[k] = blocks.state(cx, bottom + k, cz);
+                ground[i][j] = floor(column, bottom, y);
+            }
+        }
+        return ground;
     }
 
     /** Around a flying or swimming mob: a few blocks every way, at its own height. */
@@ -133,11 +155,34 @@ public final class MobPaths {
      * and one of them by the seed so that a herd does not all do the same.
      */
     static Choice choose(Ground ground, double width, long seed) {
+        return choose(ground, width, seed, MobAnimations.ALL);
+    }
+
+    /**
+     * For a player who logged off: the choice made, or, where none of the animations fits, one
+     * of the {@link MobAnimations#CRAMPED} ones, a step or two on the same ground.
+     */
+    static Choice orCramped(Choice choice, double width, long seed) {
+        if (choice.animation() != null) return choice;
+        return choose(choice.ground(), width, seed, MobAnimations.CRAMPED);
+    }
+
+    /**
+     * The choice made, kept within {@code radius} blocks of ({@code cx}, {@code cz}): where some of
+     * its ground lies past that, chosen again with that part left out. For a player who logged
+     * off, who never goes farther from where they logged off than they roam.
+     */
+    static Choice within(Choice choice, double cx, double cz, double radius, double width, long seed) {
+        Ground inside = choice.ground().within(cx, cz, radius);
+        return inside == choice.ground() ? choice : choose(inside, width, seed);
+    }
+
+    private static Choice choose(Ground ground, double width, long seed, List<MobAnimations.Animation> animations) {
         int bias = (int) Math.floorMod(seed, 8L);
         boolean mirrorFirst = ((seed >> 7) & 1) == 1;
         List<Choice> fit = new ArrayList<>();
         double widest = 0;
-        for (MobAnimations.Animation animation : MobAnimations.ALL) {
+        for (MobAnimations.Animation animation : animations) {
             search:
             for (int k = 0; k < 8; k++) {
                 for (int m = 0; m < 2; m++) {
@@ -270,6 +315,24 @@ public final class MobPaths {
             for (int i = 0; i < SIZE; i++) height[i] = ground[i].clone();
             double own = height[RADIUS][RADIUS];
             if (Double.isNaN(own) || Math.abs(own - y) > LEVEL) height[RADIUS][RADIUS] = y;
+        }
+
+        /**
+         * This ground with every column whose middle is farther than {@code radius} blocks from
+         * ({@code cx}, {@code cz}) left out, as if nothing could stand there; itself when none is.
+         */
+        Ground within(double cx, double cz, double radius) {
+            double[][] kept = new double[SIZE][SIZE];
+            boolean cut = false;
+            for (int i = 0; i < SIZE; i++) {
+                for (int j = 0; j < SIZE; j++) {
+                    double dx = bx + i - RADIUS + 0.5 - cx, dz = bz + j - RADIUS + 0.5 - cz;
+                    boolean out = dx * dx + dz * dz > radius * radius;
+                    cut |= out && !Double.isNaN(height[i][j]);
+                    kept[i][j] = out ? Double.NaN : height[i][j];
+                }
+            }
+            return cut ? new Ground(kept, x, y, z, complete) : this;
         }
 
         /** Where nothing could stand, in a saved ground. */

@@ -42,8 +42,14 @@ import java.util.function.Consumer;
  * <p>In the world {@link BenchmarkWorld} makes, the player is put on its spot, facing south,
  * and the render distance, entity distance and field of view are fixed for the run: two
  * reports from that world, before and after an update, measure the same scene.
+ *
+ * <p>Only in a game started with {@code -Dlh.benchmark=true} ({@link #ON}): without it the
+ * command is not there at all, not even among the suggestions.
  */
 public final class Benchmark {
+    /** Whether the game was started with {@code -Dlh.benchmark=true}, the only way to get the command. */
+    public static final boolean ON = Boolean.getBoolean("lh.benchmark");
+
     /** One step: a name for the report, and what it changes in the player's settings. */
     private record Phase(String id, String what, Consumer<FarConfig> setup, boolean measured) {
         Phase(String id, String what, Consumer<FarConfig> setup) {
@@ -330,6 +336,7 @@ public final class Benchmark {
         list.add(new Phase("mobs-no-impostors", "distant mobs, Simplified Entities off", config -> {
             mobsOnly(config);
             config.impostors = false;
+            config.impostorEntities = false;
         }));
         list.add(new Phase("mobs-no-occlusion", "distant mobs, Skip Hidden Mobs off", config -> {
             mobsOnly(config);
@@ -346,6 +353,7 @@ public final class Benchmark {
     private static void off(FarConfig config) {
         config.enabled = false;
         config.distantMobs = false;
+        config.distantEntities = false;
         config.skyBirds = false;
     }
 
@@ -367,6 +375,7 @@ public final class Benchmark {
         config.outlineGameMobs = false;
         config.outlineLiveMobs = false;
         config.outlineCopies = false;
+        config.outlineForeseen = false;
         config.outlinePlayers = false;
         config.outlineImpostors = false;
         config.outlineLeftOut = false;

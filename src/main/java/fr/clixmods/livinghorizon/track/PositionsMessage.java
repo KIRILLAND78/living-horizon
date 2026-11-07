@@ -35,11 +35,12 @@ import java.util.UUID;
  * ids, {@code minecraft:overworld}), then its records, each one after its length. A later
  * version may add fields at the end of a record, or after the records, and still be read here:
  * what this one does not know is skipped. Version 2, which numbered the dimensions 0 to 3, is
- * still read, from a server not updated yet and from the file.
+ * still read, from a server not updated yet and from the file. Version 4 adds a player gliding
+ * with an elytra: a flag version 3 leaves unread, and their pitch at the end of the record.
  */
 public final class PositionsMessage {
     /** The layout written here. */
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
     /** The oldest version that reads what is written here: a reader of it or newer skips what it does not know. */
     static final int READABLE_FROM = 3;
     /** The layout of the server's own file ({@link #saved}), apart from the messages'. */
@@ -56,6 +57,12 @@ public final class PositionsMessage {
     public static final byte PLAYERS = 0;
     public static final byte MOBS = 1;
     public static final byte OFFLINE = 2;
+    /**
+     * The world's seed, for a client to foresee the first animals of the land nobody explored
+     * itself ({@link SeedDraws}); sent only when the server's owner allows it. Versions before it
+     * leave a kind they do not know unread.
+     */
+    public static final byte SEED = 3;
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Living Horizon");
     /** Bytes before the dimensions: the two versions and the kind. */
@@ -70,11 +77,12 @@ public final class PositionsMessage {
      * {@code mount} what they ride, as the server saves it, and {@code look} how they look: both
      * sent every few seconds only, so null in most messages. {@code lastSeen} is when they logged
      * off, in milliseconds since 1970 (0 when not known), and {@code test} marks a test player the
-     * host placed with the debug command.
+     * host placed with the debug command. {@code gliding}: flying with an elytra, {@code pitch}
+     * the way they look up or down then (0 otherwise).
      */
     public record Player(String name, double x, double y, double z, float yaw, String dimension, boolean online,
                          boolean riding, @Nullable UUID vehicle, @Nullable Mount mount, @Nullable Look look,
-                         long lastSeen, boolean test) {
+                         long lastSeen, boolean test, boolean gliding, float pitch) {
         public Player(String name, double x, double y, double z, float yaw, String dimension, boolean online,
                       boolean riding, @Nullable UUID vehicle) {
             this(name, x, y, z, yaw, dimension, online, riding, vehicle, null, null, 0, false);
@@ -85,15 +93,23 @@ public final class PositionsMessage {
             this(name, x, y, z, yaw, dimension, online, riding, vehicle, mount, null, 0, false);
         }
 
+        public Player(String name, double x, double y, double z, float yaw, String dimension, boolean online,
+                      boolean riding, @Nullable UUID vehicle, @Nullable Mount mount, @Nullable Look look,
+                      long lastSeen, boolean test) {
+            this(name, x, y, z, yaw, dimension, online, riding, vehicle, mount, look, lastSeen, test, false, 0f);
+        }
+
         /** The same player, without what is sent every few seconds only. */
         public Player plain() {
             return mount == null && look == null ? this
-                    : new Player(name, x, y, z, yaw, dimension, online, riding, vehicle, null, null, lastSeen, test);
+                    : new Player(name, x, y, z, yaw, dimension, online, riding, vehicle, null, null, lastSeen, test,
+                            gliding, pitch);
         }
 
         /** The same player, with how they look and what they ride. */
         public Player full(@Nullable Mount mount, @Nullable Look look) {
-            return new Player(name, x, y, z, yaw, dimension, online, riding, vehicle, mount, look, lastSeen, test);
+            return new Player(name, x, y, z, yaw, dimension, online, riding, vehicle, mount, look, lastSeen, test,
+                    gliding, pitch);
         }
     }
 
@@ -141,10 +157,46 @@ public final class PositionsMessage {
      * A message read: its kind, and the list it carries (the other one is null). The players who
      * logged off come in {@code part} of a list that may take several messages; null for the others.
      */
-    public record Decoded(byte kind, @Nullable List<Player> players, @Nullable Mobs mobs, @Nullable Part part) {
+    public record Decoded(byte kind, @Nullable List<Player> players, @Nullable Mobs mobs, @Nullable Part part,
+                          @Nullable Seed seed) {
         public Decoded(byte kind, @Nullable List<Player> players, @Nullable Mobs mobs) {
-            this(kind, players, mobs, null);
+            this(kind, players, mobs, null, null);
         }
+
+        public Decoded(byte kind, @Nullable List<Player> players, @Nullable Mobs mobs, @Nullable Part part) {
+            this(kind, players, mobs, part, null);
+        }
+    }
+
+    /**
+     * The world's seed and the dimensions whose generator is the game's own, for a client to build
+     * it again ({@link SeedDraws#vanilla}); none when the server shares no seed.
+     */
+    public record Seed(long seed, List<SeedGround> dimensions) {
+        public static final Seed NONE = new Seed(0, List.of());
+    }
+
+    /** A dimension whose generator is the game's own: its noise settings and its biome preset, by id. */
+    public record SeedGround(String dimension, String settings, String biomes) {
+    }
+
+    /** The seed message; {@link Seed#NONE} tells a client the server shares none (any more). */
+    public static byte[] seed(Seed seed) {
+        Encoder encoder = new Encoder(MAX_BYTES, 1 + COUNT + 8);
+        Records list = encoder.list();
+        for (SeedGround ground : seed.dimensions()) {
+            encoder.add(list, out -> {
+                writeVarint(out, encoder.dimension(ground.dimension()));
+                out.writeUTF(ground.settings());
+                out.writeUTF(ground.biomes());
+            });
+        }
+        return write(VERSION, READABLE_FROM, out -> {
+            out.writeByte(SEED);
+            encoder.writeTable(out);
+            writeRecord(out, head -> head.writeLong(seed.seed()));
+            list.writeTo(out);
+        });
     }
 
     /** Which message of a list sent in several this one is, from 0, and how many there are. */
@@ -335,6 +387,16 @@ public final class PositionsMessage {
                 double x = head.readDouble(), z = head.readDouble(), radius = head.readDouble();
                 return new Decoded(kind, null, new Mobs(readMobs(in, dimensions), dimension, x, z, radius));
             }
+            if (kind == SEED) {
+                long seed = readRecord(in).readLong();
+                int count = readCount(in);
+                List<SeedGround> grounds = new ArrayList<>(Math.min(count, 64));
+                for (int i = 0; i < count; i++) {
+                    DataInputStream ground = readRecord(in);
+                    grounds.add(new SeedGround(dimensions.get(readVarint(ground)), ground.readUTF(), ground.readUTF()));
+                }
+                return new Decoded(kind, null, null, null, new Seed(seed, List.copyOf(grounds)));
+            }
             return null;
         } catch (IOException | RuntimeException e) {
             return null;
@@ -500,7 +562,7 @@ public final class PositionsMessage {
         Look look = player.look();
         out.writeByte((player.online() ? 1 : 0) | (player.riding() ? 2 : 0) | (player.vehicle() != null ? 4 : 0)
                 | (mount != null ? 8 : 0) | (look != null ? 16 : 0) | (player.test() ? 32 : 0)
-                | (player.lastSeen() != 0 ? 64 : 0));
+                | (player.lastSeen() != 0 ? 64 : 0) | (player.gliding() ? 128 : 0));
         if (player.vehicle() != null) writeId(out, player.vehicle());
         if (player.lastSeen() != 0) out.writeLong(player.lastSeen());
         if (look != null) {
@@ -518,6 +580,8 @@ public final class PositionsMessage {
             out.writeFloat(mount.yaw());
             out.writeFloat(mount.riderYaw());
         }
+        // From version 4, last: version 3 reads the record without it.
+        if (player.gliding()) out.writeFloat(player.pitch());
     }
 
     private static void writeMob(DataOutputStream out, Encoder encoder, Mob mob) throws IOException {
@@ -577,8 +641,10 @@ public final class PositionsMessage {
         long lastSeen = (flags & 64) != 0 ? in.readLong() : 0;
         Look look = (flags & 16) != 0 ? readLook(in) : null;
         Mount mount = (flags & 8) != 0 ? readMount(in) : null;
+        boolean gliding = (flags & 128) != 0;
+        float pitch = gliding ? in.readFloat() : 0f;
         return new Player(name, x, y, z, yaw, dimension, (flags & 1) != 0, (flags & 2) != 0, vehicle, mount, look,
-                lastSeen, (flags & 32) != 0);
+                lastSeen, (flags & 32) != 0, gliding, pitch);
     }
 
     private static List<Mob> readMobs(DataInputStream in, List<String> dimensions) throws IOException {

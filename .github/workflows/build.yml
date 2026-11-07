@@ -13,6 +13,10 @@ on:
 # short-lived workflow artifact, so a PR can be test-installed before it merges.
 # These are not releases: no tag, no GitHub release, no version bump.
 #
+# A pull request that changes only Markdown files and the LICENSE builds nothing: the
+# targets are skipped, and the changelog is still checked. These are the files the
+# release ignores too (its paths-ignore); a trigger filter would skip the changelog check.
+#
 # A pull request into develop or main stamps the version its merge will release, and
 # once every target is built leaves a marker naming the merged files and that version.
 # The release workflow finds it and publishes these jars rather than building again,
@@ -33,9 +37,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Entries go under Unreleased only, with the headings the release reads, the same in
-  # English and French: the release dates that section and posts it on Modrinth,
-  # CurseForge and Discord.
+  # Each new entry is a file of its own in changelog/unreleased/, in English and French,
+  # so that pull requests never conflict over the changelog; released versions gain
+  # nothing. The release turns the files into the version's section and posts it on
+  # Modrinth, CurseForge and Discord.
   changelog:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
@@ -57,6 +62,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tree: ${{ steps.version.outputs.tree }}
+      code: ${{ steps.changes.outputs.code }}
 
     steps:
       - name: Checkout
@@ -81,9 +87,32 @@ jobs:
             echo "tree=$(git rev-parse 'HEAD^{tree}')"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Look for anything but documentation
+        # What the merge GitHub prepared changes on the base: HEAD^1 is the base, HEAD^2
+        # the pull request. Anything this cannot read builds, as an odd path does
+        # (git quotes it, so it no longer ends in .md).
+        id: changes
+        run: |
+          set -euo pipefail
+          code=true
+          if git rev-parse -q --verify 'HEAD^2' >/dev/null && files=$(git diff --name-only 'HEAD^1' HEAD); then
+            code=false
+            while IFS= read -r file; do
+              case "$file" in
+                '' | *.md | LICENSE) ;;
+                *) code=true; break ;;
+              esac
+            done <<< "$files"
+          fi
+          echo "Code changed: ${code}"
+          if [ "$code" = false ]; then
+            echo 'Only documentation changed: no target is built.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+
   build:
     needs: version
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && needs.version.outputs.code == 'true'
     # One job per Stonecutter target, so a version that stops compiling fails on its
     # own line. A target added to stonecutter.properties.toml is added here too.
     strategy:
@@ -147,10 +176,20 @@ jobs:
 
     name: build ${{ matrix.minecraft }}
     runs-on: ubuntu-latest
+    # gradle.sh gives each of its three attempts 25 minutes; a hung job is stopped here
+    # rather than after GitHub's 6 hours.
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Restore the Gradle cache
+        # Read only: the cache workflow writes it on develop, where every pull request
+        # into develop can read it.
+        uses: ./.github/actions/gradle-cache
+        with:
+          node: ${{ matrix.minecraft }}
 
       - name: Stamp the version
         # The number the release will give these jars, so it can publish them as they are.
@@ -177,19 +216,17 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          # Read-only is the default off the default branch, which would mean the
-          # cache is never written on a pull request.
-          cache-read-only: false
-          cache-cleanup: always
+          # Its cache saved some 4 GB per job, which only that pull request could read
+          # again: the step above replaces it.
+          cache-disabled: true
 
       - name: Build
         # build compiles and runs the tests; buildAndCollect copies the jar into
-        # build/libs/<mod version>/, which is what gets uploaded.
-        # --configure-on-demand configures this one target and the root alone.
-        run: >-
-          ./gradlew ":${{ matrix.minecraft }}:build" ":${{ matrix.minecraft }}:buildAndCollect"
-          --stacktrace --configure-on-demand
-          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64
+        # build/libs/<mod version>/, which is what gets uploaded. A download that fails
+        # or hangs is tried again (gradle.sh); a compile error or a test failure is not.
+        env:
+          NODE: ${{ matrix.minecraft }}
+        run: .github/scripts/gradle.sh ":${NODE}:build" ":${NODE}:buildAndCollect"
 
       - name: Upload test report
         # Only worth having when something failed, and then it is the first thing
@@ -212,7 +249,8 @@ jobs:
           retention-days: 14
 
   # Only once every target built: the marker tells the release that this run holds the
-  # jars of every target for these files (the merge's tree) at this version.
+  # jars of every target for these files (the merge's tree) at this version. Skipped with
+  # the build when only documentation changed: the release skips such a push as well.
   prebuilt:
     needs: [version, build]
     if: needs.version.outputs.version != ''

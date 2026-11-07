@@ -5,14 +5,15 @@ import java.util.Locale;
 /**
  * Ready-made settings for how far and how many: {@link #NORMAL} is the defaults, the others
  * trade the cost of drawing more and farther for a fuller horizon. They set only the
- * settings that scale that cost; everything else stays as the player chose it.
+ * settings that scale that cost; everything else stays as the player chose it. None of them
+ * goes without a limit: that is for a player who chose it, and was asked first.
  */
 public enum QualityPreset {
     LOW(64, 128, 256, 50, 400),
     /** Read from the defaults themselves, so that it is always what a fresh install has. */
     NORMAL(new FarConfig()),
-    HIGH(256, FarConfig.UNLIMITED_MOBS, 1024, 200, 1500),
-    ULTRA(512, FarConfig.UNLIMITED_MOBS, 0, 400, 3000);
+    HIGH(256, 1500, 1024, 200, 1500),
+    ULTRA(512, 3000, 2048, 400, 3000);
 
     private final int impostorDistance, maxDistantMobs, mobMaxDistance, birdDensity, birdMaxDistance;
 

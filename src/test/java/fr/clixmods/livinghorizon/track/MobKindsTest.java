@@ -45,4 +45,10 @@ class MobKindsTest {
         assertNull(MobKinds.type(0));
         assertNull(MobKinds.type(MobKinds.TYPES.size() + 1));
     }
+
+    @Test
+    void numbersATypeTheWayBack() {
+        for (int kind = 1; kind <= MobKinds.TYPES.size(); kind++) assertEquals(kind, MobKinds.kind(MobKinds.type(kind)));
+        assertEquals(0, MobKinds.kind("minecraft:zombie"));
+    }
 }

@@ -9,6 +9,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import fr.clixmods.livinghorizon.ambient.AmbientRenderer;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.FarFog;
+import fr.clixmods.livinghorizon.render.DistancePreview;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.Sink;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorRenderer;
@@ -72,6 +73,19 @@ abstract class LevelRendererMixin {
     }
     //?}
 
+    /** The world is drawn, a far terrain drawn after the entities (Ecstatic) included: the depth view's last picture. */
+    //? if >=26.2 {
+    /*@Inject(method = "render", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+    *///?} else {
+    @Inject(method = "renderLevel", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+    //?}
+
     //? if >=26.3 {
     /*// With Vulkan, what Distant Horizons' depth merge needs is written before the world's pass
     // opens: nothing may be written to a buffer while a pass is open.
@@ -123,13 +137,14 @@ abstract class LevelRendererMixin {
         FarFog.arm();
     }
 
-    /** The silhouette birds and the impostors, with the entities so that shader packs treat them alike. */
+    /** The silhouette birds, the impostors and a distance being set, with the entities so that shader packs treat them alike. */
     @Inject(method = "submitEntities", at = @At("TAIL"))
     private void livinghorizon$submitFlat(PoseStack pose, LevelRenderState frame, SubmitNodeCollector collector,
                                          CallbackInfo ci) {
         Sink sink = new Sink(collector);
         AmbientRenderer.submit(pose, frame.cameraRenderState.pos, sink);
         ImpostorRenderer.submit(pose, sink);
+        DistancePreview.submit(pose, frame.cameraRenderState.pos, sink);
     }
 
     /** Moves a distant player's state closer along the line of sight, and scales it to match. */
@@ -161,6 +176,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import fr.clixmods.livinghorizon.ambient.AmbientRenderer;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.FarFog;
+import fr.clixmods.livinghorizon.render.DistancePreview;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.Sink;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorRenderer;
@@ -195,6 +211,12 @@ abstract class LevelRendererMixin {
         FarDepth.noteView(modelView, projection);
     }
 
+    /^* The world is drawn, a far terrain drawn after the entities (Ecstatic) included: the depth view's last picture. ^/
+    @Inject(method = "renderLevel", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+
     @Inject(method = "collectVisibleEntities", at = @At("HEAD"))
     private void livinghorizon$beginFrame(Camera camera, Frustum frustum, List<Entity> entities,
                                          CallbackInfoReturnable<Boolean> cir) {
@@ -218,7 +240,7 @@ abstract class LevelRendererMixin {
         FarFog.begin(null);
     }
 
-    /^* The figures, the silhouette birds and the impostors, with the entities; then all of them drawn. ^/
+    /^* The figures, the silhouette birds, the impostors and a distance being set, with the entities; then all of them drawn. ^/
     @Inject(method = "renderEntities", at = @At("TAIL"))
     private void livinghorizon$drawDistant(PoseStack pose, MultiBufferSource.BufferSource buffers, Camera camera,
                                           DeltaTracker deltaTracker, List<Entity> entities, CallbackInfo ci) {
@@ -226,6 +248,7 @@ abstract class LevelRendererMixin {
         Sink sink = new Sink(buffers);
         AmbientRenderer.submit(pose, camera.position(), sink);
         ImpostorRenderer.submit(pose, sink);
+        DistancePreview.submit(pose, camera.position(), sink);
         buffers.endBatch();
         FarDepth.after();
         FarFog.end();
@@ -236,6 +259,8 @@ abstract class LevelRendererMixin {
 import com.mojang.blaze3d.vertex.PoseStack;
 import fr.clixmods.livinghorizon.ambient.AmbientRenderer;
 import fr.clixmods.livinghorizon.compat.FarDepth;
+import fr.clixmods.livinghorizon.compat.FarFog;
+import fr.clixmods.livinghorizon.render.DistancePreview;
 import fr.clixmods.livinghorizon.render.GhostRenderer;
 import fr.clixmods.livinghorizon.render.Sink;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorRenderer;
@@ -272,12 +297,20 @@ abstract class LevelRendererMixin {
     }
     ^///?}
 
+    /^* The world is drawn, Ecstatic's terrain included, drawn after the entities: the depth view's last picture. ^/
+    @Inject(method = "renderLevel", at = @At("TAIL"))
+    private void livinghorizon$worldDrawn(CallbackInfo ci) {
+        FarDepth.worldDrawn();
+    }
+
     @Inject(method = "renderLevel", at = @At(value = "INVOKE_STRING",
             target = "Lnet/minecraft/util/profiling/ProfilerFiller;popPush(Ljava/lang/String;)V", args = "ldc=entities"))
     private void livinghorizon$beginFrame(CallbackInfo ci) {
         GhostRenderer.beginFrame();
         FarDepth.arm();
         FarDepth.before();
+        FarFog.arm();
+        FarFog.begin(null);
     }
 
     @Inject(method = "renderEntity", at = @At("HEAD"))
@@ -286,7 +319,7 @@ abstract class LevelRendererMixin {
         GhostRenderer.extracted(entity);
     }
 
-    /^* The game has drawn what it chose: the figures, the silhouette birds and the impostors, then all of them. ^/
+    /^* The game has drawn what it chose: the figures, the silhouette birds, the impostors and a distance being set, then all of them. ^/
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;endLastBatch()V", ordinal = 0))
     private void livinghorizon$drawDistant(CallbackInfo ci, @Local(argsOnly = true) Camera camera
@@ -304,8 +337,10 @@ abstract class LevelRendererMixin {
         Sink sink = new Sink(buffers);
         AmbientRenderer.submit(pose, camera.position(), sink);
         ImpostorRenderer.submit(pose, sink);
+        DistancePreview.submit(pose, camera.position(), sink);
         buffers.endBatch();
         FarDepth.after();
+        FarFog.end();
     }
 }
 *///?}

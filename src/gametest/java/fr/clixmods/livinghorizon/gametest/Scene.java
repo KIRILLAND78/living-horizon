@@ -2,12 +2,14 @@ package fr.clixmods.livinghorizon.gametest;
 
 import fr.clixmods.livinghorizon.FarConfig;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorAtlas;
+import fr.clixmods.livinghorizon.render.impostor.ImpostorKey;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.Consumer;
 
@@ -186,11 +188,39 @@ public final class Scene {
         *///?}
     }
 
-    /** The impostor pages as they are in memory, at half size, side by side. */
-    public static void screenshotAtlas(ClientGameTestContext context, Scenario scenario) {
+    /** The impostor pages as they are in memory, at half size, side by side; where it was saved. */
+    public static java.nio.file.Path screenshotAtlas(ClientGameTestContext context, Scenario scenario) {
         context.setScreen(AtlasScreen::new);
-        screenshot(context, scenario, "atlas");
+        java.nio.file.Path path = screenshot(context, scenario, "atlas");
         context.setScreen(() -> null);
+        return path;
+    }
+
+    /**
+     * Where one baked sheet is in the atlas screenshot: left, top, width and height in its
+     * pixels, laid out as {@link AtlasScreen} draws the pages. Null when the sheet is not baked.
+     */
+    public static int @Nullable [] atlasRect(ImpostorKey key) {
+        ImpostorAtlas.Sheet sheet = ImpostorAtlas.sheet(key);
+        if (sheet == null) return null;
+        int width = minecraft().getWindow().getGuiScaledWidth();
+        int x = 0, y = 0, line = 0;
+        for (int number = 0; number < ImpostorAtlas.pages(); number++) {
+            int wide = ImpostorAtlas.pageWidth(number), tall = ImpostorAtlas.pageHeight(number);
+            if (tall == 0) continue;
+            if (x + wide / 2 > width) {
+                x = 0;
+                y += line + 8;
+                line = 0;
+            }
+            if (number == sheet.page()) {
+                int rowHeight = sheet.tile();
+                return new int[]{x, y + sheet.row() * rowHeight / 2, wide / 2, rowHeight / 2};
+            }
+            x += wide / 2 + 8;
+            line = Math.max(line, tall / 2);
+        }
+        return null;
     }
 
     /** The impostor pages, for {@link #screenshotAtlas}. */

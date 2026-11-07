@@ -4,6 +4,7 @@ package fr.clixmods.livinghorizon.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import fr.clixmods.livinghorizon.compat.DhFog;
 import fr.clixmods.livinghorizon.compat.FarFog;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.client.renderer.fog.FogRenderer;
@@ -17,9 +18,9 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import java.nio.ByteBuffer;
 
 /**
- * Writes the fog the world's entities get with Voxy ({@link FarFog}) next to the game's own,
- * in the same buffer: room is made for it after the game's, and it is written whenever the
- * game's is, from the same values, Voxy's changes in them.
+ * Writes the fog the world's entities get with Voxy or Distant Horizons ({@link FarFog}) next to
+ * the game's own, in the same buffer: room is made for it after the game's, and it is written
+ * whenever the game's is, from the same values, that mod's changes in them.
  */
 @Mixin(FogRenderer.class)
 abstract class FogRendererMixin {
@@ -49,12 +50,12 @@ abstract class FogRendererMixin {
                 renderDistanceStart, renderDistanceEnd, skyEnd, cloudEnd);
         GpuBuffer written = regularBuffer.currentBuffer();
         // Only where the room was made: a loader that builds the buffer its own way leaves the game's fog.
-        float[] far = buffer.capacity() >= offset + FarFog.OFFSET + FogRenderer.FOG_UBO_SIZE
-                ? FarFog.capped(environmentalStart, environmentalEnd, renderDistanceStart) : null;
+        DhFog.Ramps far = buffer.capacity() >= offset + FarFog.OFFSET + FogRenderer.FOG_UBO_SIZE
+                ? FarFog.capped(environmentalStart, environmentalEnd, renderDistanceStart, renderDistanceEnd) : null;
         if (far != null) {
-            Vector4f fogColor = new Vector4f(color.x(), color.y(), color.z(), color.w() * far[1]);
-            original.call(self, buffer, offset + FarFog.OFFSET, fogColor, environmentalStart, far[0],
-                    renderDistanceStart, renderDistanceEnd, skyEnd, cloudEnd);
+            Vector4f fogColor = new Vector4f(color.x(), color.y(), color.z(), color.w() * far.alpha());
+            original.call(self, buffer, offset + FarFog.OFFSET, fogColor, far.environmentalStart(), far.environmentalEnd(),
+                    far.renderDistanceStart(), far.renderDistanceEnd(), skyEnd, cloudEnd);
         }
         FarFog.written(written.slice(offset, FogRenderer.FOG_UBO_SIZE),
                 far == null ? null : written.slice(offset + FarFog.OFFSET, FogRenderer.FOG_UBO_SIZE));

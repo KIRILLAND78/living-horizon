@@ -15,6 +15,7 @@ public final class Profile {
     public enum Section {
         TICK_MOBS_FOLLOW("tickMobsFollow"),
         TICK_MOBS_CHOOSE("tickMobsChoose"),
+        TICK_MOBS_FORESEE("tickMobsForesee"),
         TICK_MOBS_BUILD("tickMobsBuild"),
         TICK_MOBS_GROUND("tickMobsGround"),
         TICK_MOBS_MOTION("tickMobsMotion"),
@@ -41,6 +42,7 @@ public final class Profile {
         PUBLISH("publish");
 
         private final String id;
+        private final String profilerName;
         private final boolean gpu;
         private final Stat cpuStat = new Stat();
         private final Stat gpuStat = new Stat();
@@ -51,6 +53,7 @@ public final class Profile {
 
         Section(String id, boolean gpu) {
             this.id = id;
+            this.profilerName = "livinghorizon:" + id;
             this.gpu = gpu;
         }
 
@@ -65,7 +68,7 @@ public final class Profile {
 
         /** The name that the game's profiler shows (F3 pie chart, spark). */
         public String profilerName() {
-            return "livinghorizon:" + id;
+            return profilerName;
         }
 
         public Stat cpu() {

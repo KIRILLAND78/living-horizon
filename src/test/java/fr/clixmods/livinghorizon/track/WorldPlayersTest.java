@@ -62,6 +62,18 @@ class WorldPlayersTest {
     }
 
     @Test
+    void leavesOutSpectatorsWhenTheServerHidesThem(@TempDir Path server) throws Exception {
+        Path world = server.resolve("world");
+        Path folder = world.resolve("playerdata");
+        Files.createDirectories(folder);
+        Files.writeString(server.resolve("usercache.json"),
+                "[{\"name\":\"Steve\",\"uuid\":\"" + STEVE + "\",\"expiresOn\":\"2030-01-01 00:00:00 +0000\"}]");
+        write(folder.resolve(STEVE + ".dat"), "{Pos:[10.5d,64.0d,-20.25d],playerGameType:3}");
+        assertEquals(List.of(), WorldPlayers.read(folder, world, true));
+        assertEquals(1, WorldPlayers.read(folder, world, false).size());
+    }
+
+    @Test
     void nothingWithoutPlayers(@TempDir Path server) {
         assertEquals(List.of(), WorldPlayers.read(server.resolve("world/playerdata"), server.resolve("world")));
     }

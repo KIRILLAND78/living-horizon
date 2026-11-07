@@ -40,6 +40,25 @@ public record BirdFigure(Ambience.Species species, boolean perched, int beat, in
         return new BirdFigure(species, perched, beat, nearest(perched ? PERCHED : FLYING, elevation));
     }
 
+    /** The key of {@link #of}'s sheet, without making the figure: asked for every bird every frame. */
+    static ImpostorKey keyOf(Ambience.Species species, boolean perched, float wingDegrees, double elevation) {
+        int beat = perched ? 0 : nearest(BEATS, wingDegrees);
+        return key(species, perched, beat, nearest(perched ? PERCHED : FLYING, elevation));
+    }
+
+    /** Every key made so far, by species, pose, beat and height. */
+    private static final ImpostorKey[] KEYS = new ImpostorKey[Ambience.Species.values().length * 2 * BEATS.length * 3];
+
+    private static ImpostorKey key(Ambience.Species species, boolean perched, int beat, int height) {
+        int index = ((species.ordinal() * 2 + (perched ? 1 : 0)) * BEATS.length + beat) * 3 + height;
+        ImpostorKey key = KEYS[index];
+        if (key == null) {
+            KEYS[index] = key = new ImpostorKey(KEY + species.name().toLowerCase(Locale.ROOT),
+                    (perched ? 100 : 0) + beat * 10 + height);
+        }
+        return key;
+    }
+
     /** Every sheet of a species in one pose, to bake them together. */
     public static List<BirdFigure> all(Ambience.Species species, boolean perched) {
         List<BirdFigure> all = new ArrayList<>();
@@ -60,7 +79,7 @@ public record BirdFigure(Ambience.Species species, boolean perched, int beat, in
     }
 
     public ImpostorKey key() {
-        return new ImpostorKey(KEY + species.name().toLowerCase(Locale.ROOT), (perched ? 100 : 0) + beat * 10 + height);
+        return key(species, perched, beat, height);
     }
 
     /**

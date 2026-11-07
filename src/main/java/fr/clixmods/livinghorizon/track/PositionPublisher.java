@@ -2,7 +2,9 @@ package fr.clixmods.livinghorizon.track;
 
 import com.mojang.authlib.properties.Property;
 import fr.clixmods.livinghorizon.Profile;
+import fr.clixmods.livinghorizon.ServerConfig;
 import fr.clixmods.livinghorizon.platform.Network;
+import fr.clixmods.livinghorizon.platform.Platform;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
@@ -15,6 +17,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +51,9 @@ import java.util.WeakHashMap;
  * mount they took away with them, and of the mobs in chunks no longer loaded, in a file of the
  * world ({@link #FILE}), so that a player who joins later sees them too. A mob is forgotten when
  * its chunk is loaded and it is not there any more.
+ *
+ * <p>What it shares, and with whom, follows the owner's settings ({@link ServerConfig},
+ * {@link ShareRules}), read again a few seconds after the file changes.
  *
  * <p>Everything here runs on the server's thread.
  */
@@ -106,10 +112,16 @@ public final class PositionPublisher {
     private final LinkedHashMap<UUID, PositionsMessage.Mob> mobs = new LinkedHashMap<>();
     /** What was last read of each mob's saved data. */
     private final Map<UUID, Read> reads = new HashMap<>();
+    /** The animals of the chunks not generated yet, from the seed: shared with the mobs, never saved. */
+    private final SeedMobs seeded = new SeedMobs();
     /** Test players the host placed with the debug command: shared, never saved. */
     private Map<String, PositionsMessage.Player> tests = Map.of();
     /** Test players handed over by the host's game, not taken yet. */
     private volatile @Nullable List<PositionsMessage.Player> offered;
+    /** The owner's settings, read again when their file changes. */
+    private final ServerConfig.Watched settings;
+    /** The players online left out right now, by name: in spectator mode or invisible. */
+    private final Set<String> hidden = new HashSet<>();
     /** The players already sent everything: one who is not gets it all at once. */
     private Set<UUID> greeted = new HashSet<>();
     private boolean loaded;
@@ -122,6 +134,7 @@ public final class PositionPublisher {
 
     private PositionPublisher(MinecraftServer server) {
         this.server = server;
+        this.settings = new ServerConfig.Watched(Platform.configDir().resolve(ServerConfig.FILE));
     }
 
     /** One publication; call it every {@link #PERIOD} ticks. */
@@ -137,31 +150,43 @@ public final class PositionPublisher {
 
     private void publish(long[] sentBytes) {
         if (!server.isRunning()) return;
-        if (!loaded) load();
+        boolean full = runs % FULL_EVERY == 0;
+        // Settings changed: everyone is sent everything again, as they now say.
+        if (full && settings.refresh()) greeted = new HashSet<>();
+        ServerConfig config = settings.get();
+        if (!loaded) load(config);
         tell();
         List<PositionsMessage.Player> placed = offered;
         if (placed != null) {
             offered = null;
             testPlayers(placed);
         }
-        boolean full = runs % FULL_EVERY == 0;
+        ShareRules rules = new ShareRules(config, this::teamOf);
         List<ServerPlayer> online = server.getPlayerList().getPlayers();
-        update(online);
+        update(online, config);
         // A player who just joined is sent the mobs as they are now, not as they were a few seconds ago.
         boolean joined = false;
         for (ServerPlayer player : online) joined |= !greeted.contains(player.getUUID()) && Network.canSend(player);
-        if (full || joined) refreshMobs();
+        if (full || joined) {
+            refreshMobs();
+            foresee(online, config, rules);
+        }
 
         Set<UUID> sent = new HashSet<>();
+        List<PositionsMessage.Player> shown = onlinePlayers();
         byte[] plain = null;
+        byte[] seed = null;
         for (ServerPlayer player : online) {
             if (!Network.canSend(player)) continue;
             sent.add(player.getUUID());
+            ShareRules.Viewer viewer = viewer(player);
             if (full || !greeted.contains(player.getUUID())) {
                 // Every few seconds, and at once to a player who just joined: everything.
-                byte[] everyone = PositionsMessage.players(withLooks(onlinePlayers(), player));
-                List<byte[]> offline = PositionsMessage.offline(withLooks(offlinePlayers(), player));
-                byte[] around = PositionsMessage.mobs(mobsAround(player));
+                byte[] everyone = PositionsMessage.players(withLooks(rules.online(shown, viewer), player));
+                List<byte[]> offline = PositionsMessage.offline(
+                        withLooks(rules.offline(offlinePlayers(), viewer), player));
+                byte[] around = PositionsMessage.mobs(
+                        rules.mobs(viewer.dimension()) ? mobsAround(player, config) : noMobs(player));
                 sentBytes[0] += everyone.length + around.length;
                 Network.send(player, everyone);
                 for (byte[] part : offline) {
@@ -169,10 +194,17 @@ public final class PositionPublisher {
                     Network.send(player, part);
                 }
                 Network.send(player, around);
-            } else {
-                if (plain == null) plain = PositionsMessage.players(onlinePlayers());
+                if (seed == null) seed = PositionsMessage.seed(seed(config, rules));
+                sentBytes[0] += seed.length;
+                Network.send(player, seed);
+            } else if (rules.sameForAll()) {
+                if (plain == null) plain = PositionsMessage.players(rules.online(shown, null));
                 sentBytes[0] += plain.length;
                 Network.send(player, plain);
+            } else {
+                byte[] own = PositionsMessage.players(rules.online(shown, viewer));
+                sentBytes[0] += own.length;
+                Network.send(player, own);
             }
         }
         greeted = sent;
@@ -207,11 +239,17 @@ public final class PositionPublisher {
         }
     }
 
-    private void update(List<ServerPlayer> online) {
+    private void update(List<ServerPlayer> online, ServerConfig config) {
         Set<String> names = new HashSet<>();
+        hidden.clear();
         for (ServerPlayer player : online) {
             String name = player.getScoreboardName();
             names.add(name);
+            // Left as they were last seen, online or not: they log off from there.
+            if (config.hideSpectators && player.isSpectator() || config.hideInvisible && player.isInvisible()) {
+                hidden.add(name);
+                continue;
+            }
             Entity vehicle = player.getVehicle();
             PositionsMessage.Mount mount = vehicle != null ? mountOf(player, name) : null;
             if (mount != null) {
@@ -221,11 +259,15 @@ public final class PositionPublisher {
                 ridden.remove(name);
             }
             if (runs % LOOK_EVERY == 0 || !looks.containsKey(name)) looks.put(name, lookOf(player));
-            UUID published = vehicle != null && KINDS.containsKey(EntityType.getKey(vehicle.getType()).toString())
-                    ? vehicle.getUUID() : null;
+            // What they ride, whatever it is: a client that remembers it (a mob shared, a plane it
+            // met) draws it under them, and never on its own again.
+            Entity root = player.getRootVehicle();
+            UUID published = root != player ? root.getUUID() : null;
+            // Gliding with an elytra: their pitch too, which tilts the body along the flight.
+            boolean gliding = player.isFallFlying();
             players.put(name, new PositionsMessage.Player(name, player.getX(), player.getY(), player.getZ(),
                     player.getYRot(), SharedPositions.dimensionId(player.level().dimension()), true,
-                    vehicle != null, published));
+                    vehicle != null, published, null, null, 0, false, gliding, gliding ? player.getXRot() : 0f));
             dirty = true;
         }
         // Those who logged off stay where they were last, as they looked, on what they rode.
@@ -284,19 +326,35 @@ public final class PositionPublisher {
                 root.getYRot(), player.yBodyRot - root.getYRot());
     }
 
+    /** The players online, but those left out right now. */
     private List<PositionsMessage.Player> onlinePlayers() {
         List<PositionsMessage.Player> now = new ArrayList<>();
         for (PositionsMessage.Player player : players.values()) {
-            if (player.online()) now.add(player);
+            if (player.online() && !hidden.contains(player.name())) now.add(player);
         }
         return now;
     }
 
-    /** Every player who logged off, and the host's test players. A client chooses how many it shows. */
+    private ShareRules.Viewer viewer(ServerPlayer player) {
+        String name = player.getScoreboardName();
+        return new ShareRules.Viewer(name, SharedPositions.dimensionId(player.level().dimension()), player.getX(),
+                player.getZ(), teamOf(name));
+    }
+
+    /** The name of a player's team, online or not; null when they have none. */
+    private @Nullable String teamOf(String name) {
+        PlayerTeam team = server.getScoreboard().getPlayersTeam(name);
+        return team == null ? null : team.getName();
+    }
+
+    /**
+     * Every player who logged off, but those online again and left out, and the host's test
+     * players. A client chooses how many it shows.
+     */
     private List<PositionsMessage.Player> offlinePlayers() {
         List<PositionsMessage.Player> gone = new ArrayList<>();
         for (PositionsMessage.Player player : players.values()) {
-            if (!player.online() && !tests.containsKey(player.name())) gone.add(player);
+            if (!player.online() && !tests.containsKey(player.name()) && !hidden.contains(player.name())) gone.add(player);
         }
         gone.addAll(tests.values());
         return gone;
@@ -374,14 +432,60 @@ public final class PositionPublisher {
         return new Read(variant, extra != null && extra.length() <= MAX_EXTRA ? extra : null, runs);
     }
 
-    private PositionsMessage.Mobs mobsAround(ServerPlayer player) {
+    private PositionsMessage.Mobs mobsAround(ServerPlayer player, ServerConfig config) {
         String dimension = SharedPositions.dimensionId(player.level().dimension());
         PositionsMessage.Mobs around = new PositionsMessage.Mobs(new ArrayList<>(), dimension,
                 player.getX(), player.getZ(), MOB_RANGE);
         for (PositionsMessage.Mob mob : mobs.values()) {
             if (around.covers(mob.dimension(), mob.x(), mob.z())) around.mobs().add(mob);
         }
+        if (config.seedMobs) {
+            seeded.addAround((ServerLevel) player.level(), player.getX(), player.getZ(), config.seedMobRange, around.mobs());
+        }
         return around;
+    }
+
+    /**
+     * The world's seed, when the owner shares it ({@code shareSeed}), with the dimensions whose
+     * generator a client can build again: the game's own, where mobs are shared.
+     */
+    private PositionsMessage.Seed seed(ServerConfig config, ShareRules rules) {
+        if (!config.shareSeed || !config.seedMobs) return PositionsMessage.Seed.NONE;
+        List<PositionsMessage.SeedGround> grounds = new ArrayList<>();
+        long seed = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            String dimension = SharedPositions.dimensionId(level.dimension());
+            if (!rules.mobs(dimension)) continue;
+            String[] keys;
+            try {
+                keys = SeedDraws.vanillaKeys(level);
+            } catch (RuntimeException e) {
+                keys = null;
+            }
+            if (keys == null) continue;
+            grounds.add(new PositionsMessage.SeedGround(dimension, keys[0], keys[1]));
+            seed = level.getSeed();
+        }
+        return grounds.isEmpty() ? PositionsMessage.Seed.NONE : new PositionsMessage.Seed(seed, grounds);
+    }
+
+    /** The animals of the chunks not generated yet, worked out around the players they are shared with. */
+    private void foresee(List<ServerPlayer> online, ServerConfig config, ShareRules rules) {
+        List<ServerPlayer> viewers = new ArrayList<>();
+        if (config.seedMobs) {
+            for (ServerPlayer player : online) {
+                if (Network.canSend(player) && rules.mobs(SharedPositions.dimensionId(player.level().dimension()))) {
+                    viewers.add(player);
+                }
+            }
+        }
+        seeded.update(server, viewers, config.seedMobRange);
+    }
+
+    /** No mobs, in a circle that covers nothing: the client keeps the mobs it remembers. */
+    private static PositionsMessage.Mobs noMobs(ServerPlayer player) {
+        return new PositionsMessage.Mobs(List.of(), SharedPositions.dimensionId(player.level().dimension()),
+                player.getX(), player.getZ(), -1);
     }
 
     // --- The file ------------------------------------------------------------------------
@@ -390,12 +494,12 @@ public final class PositionPublisher {
         return server.getWorldPath(LevelResource.ROOT).resolve(FILE);
     }
 
-    private void load() {
+    private void load(ServerConfig config) {
         loaded = true;
         readFile();
         // Those the world saved before the mod saw them log off: logged off where they were.
         int found = 0;
-        for (PositionsMessage.Player player : WorldPlayers.read(server)) {
+        for (PositionsMessage.Player player : WorldPlayers.read(server, config.hideSpectators)) {
             if (players.putIfAbsent(player.name(), player) == null) found++;
         }
         if (found > 0) {

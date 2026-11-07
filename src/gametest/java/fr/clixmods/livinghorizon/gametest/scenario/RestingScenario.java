@@ -204,8 +204,12 @@ public final class RestingScenario implements Scenario {
 
             // The debug command: a test player where the camera stands, logged off 90 minutes
             // ago, looked at from 6 blocks back (nothing under the crosshair), then from 2.5
-            // (the date under the crosshair), then removed.
-            Scene.configure(context, config -> config.offlinePlayers = true);
+            // (the date under the crosshair), then removed. Seated, so that it does not stroll
+            // off the crosshair once it has looked around.
+            Scene.configure(context, config -> {
+                config.offlinePlayers = true;
+                config.offlineLife = false;
+            });
             Scene.command(world, "tp @a 0.5 " + GROUND + " -10.5 0 0");
             wait(context, world, 10);
             clientCommand(context, "livinghorizon debug offline test spawn Tester 90");
@@ -231,6 +235,7 @@ public final class RestingScenario implements Scenario {
                     .noneMatch(s -> s.name().equals("Tester")));
             if (!gone) throw new AssertionError("resting test player still there after clear");
             Scene.log("resting test player cleared");
+            Scene.configure(context, config -> config.offlineLife = true);
 
             // A crowd of them: twelve, all within 20 blocks, on the ground, gone with clear.
             clientCommand(context, "livinghorizon debug offline test crowd 12 20");

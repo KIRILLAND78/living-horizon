@@ -27,12 +27,12 @@ class FarConfigTest {
         FarConfig fresh = new FarConfig();
         fresh.version = migrated.version;
         assertEquals(GSON.toJson(fresh), GSON.toJson(migrated));
-        assertEquals(10, migrated.version);
+        assertEquals(14, migrated.version);
     }
 
     @Test
     void leavesAnUpToDateFileAsItIs() {
-        String json = "{\"version\": 10, \"minApparentPixels\": 14, \"birdSize\": 2, \"depthOcclusion\": false,"
+        String json = "{\"version\": 11, \"minApparentPixels\": 14, \"birdSize\": 2, \"depthOcclusion\": false,"
                 + " \"maxDistantMobs\": 200, \"mobMaxDistance\": 0, \"impostors\": false, \"easterEggs\": false,"
                 + " \"mobTypes\": [\"minecraft:cow\"], \"stillMobTypes\": []}";
         FarConfig config = migrated(json);
@@ -103,6 +103,43 @@ class FarConfigTest {
     }
 
     @Test
+    void version13KeepsNoLimitPastTheOldTop() {
+        FarConfig unlimited = migrated("{\"version\": 12, \"maxDistantMobs\": 1000, \"maxDistantEntities\": 1000}");
+        assertEquals(FarConfig.UNLIMITED_MOBS, unlimited.maxDistantMobs);
+        assertEquals(FarConfig.UNLIMITED_MOBS, unlimited.maxDistantEntities);
+        assertEquals(9000, unlimited.most(true, 9000));
+        FarConfig chosen = migrated("{\"version\": 12, \"maxDistantMobs\": 999}");
+        assertEquals(999, chosen.maxDistantMobs);
+        assertEquals(1000, migrated("{\"version\": 13, \"maxDistantMobs\": 1000}").maxDistantMobs);
+        assertEquals(FarConfig.UNLIMITED_OFFLINE, migrated("{\"version\": 12, \"maxOfflinePlayers\": 1000}").maxOfflinePlayers);
+        // A number typed past the slider is a limit, not no limit.
+        FarConfig typed = migrated("{\"version\": 13, \"maxDistantMobs\": 6000}");
+        assertEquals(6000, typed.most(true, 9000));
+    }
+
+    @Test
+    void version13GivesLimitsToWhatWasNotChosenByHand() {
+        // The old High and Ultra presets go to the new ones, with limits.
+        FarConfig high = migrated("{\"version\": 12, \"impostorDistance\": 256, \"maxDistantMobs\": 1000,"
+                + " \"mobMaxDistance\": 1024, \"birdDensity\": 200, \"birdMaxDistance\": 1500}");
+        assertEquals(QualityPreset.HIGH, QualityPreset.of(high));
+        FarConfig ultra = migrated("{\"version\": 12, \"impostorDistance\": 512, \"maxDistantMobs\": 1000,"
+                + " \"mobMaxDistance\": 0, \"birdDensity\": 400, \"birdMaxDistance\": 3000}");
+        assertEquals(QualityPreset.ULTRA, QualityPreset.of(ultra));
+        // The distances whose default was no limit.
+        FarConfig distances = migrated("{\"version\": 12, \"playerMaxDistance\": 0, \"entityMaxDistance\": 0,"
+                + " \"animationMaxDistance\": 0}");
+        assertEquals(FarConfig.MAX_DISTANCE, distances.playerMaxDistance);
+        assertEquals(FarConfig.MAX_DISTANCE, distances.entityMaxDistance);
+        assertEquals(FarConfig.MAX_DISTANCE, distances.animationMaxDistance);
+        // No limit set by hand, outside a preset, is kept.
+        FarConfig chosen = migrated("{\"version\": 12, \"maxDistantMobs\": 1000, \"mobMaxDistance\": 0}");
+        assertEquals(FarConfig.UNLIMITED_MOBS, chosen.maxDistantMobs);
+        assertEquals(0, chosen.mobMaxDistance);
+        assertEquals(1200, migrated("{\"version\": 12, \"playerMaxDistance\": 1200}").playerMaxDistance);
+    }
+
+    @Test
     void version8SplitsTheOutlines() {
         FarConfig glow = migrated("{\"version\": 7, \"glowOutline\": true}");
         assertTrue(glow.outlineLiveMobs && glow.outlineCopies && glow.outlinePlayers && glow.outlineImpostors);
@@ -129,14 +166,159 @@ class FarConfigTest {
     }
 
     @Test
+    void version11OffersEveryOtherMob() {
+        FarConfig config = migrated("{\"version\": 10, \"mobTypes\": [\"minecraft:cow\"],"
+                + " \"knownModdedMobs\": [\"othermod:zombie\"]}");
+        // The old defaults keep the player's choice; the game's monsters are left to be offered.
+        assertTrue(config.knownMobTypes.contains("minecraft:horse"));
+        assertTrue(config.knownMobTypes.contains("othermod:zombie"));
+        assertFalse(config.knownMobTypes.contains("minecraft:enderman"));
+        assertEquals(java.util.List.of("minecraft:cow"), config.mobTypes);
+        assertFalse(migrated("{\"version\": 11, \"knownMobTypes\": []}").knownMobTypes.contains("minecraft:horse"));
+    }
+
+    @Test
+    void version12SplitsTheSimplifiedFigures() {
+        // The one switch off stays off for mobs and for the other entities alike.
+        assertFalse(migrated("{\"version\": 11, \"impostors\": false}").impostorEntities);
+        assertTrue(migrated("{\"version\": 11, \"impostors\": true}").impostorEntities);
+        assertTrue(migrated("{\"version\": 12, \"impostors\": false}").impostorEntities);
+    }
+
+    @Test
+    void version14ListsTheKindsSwitchedOff() {
+        FarConfig config = migrated("{\"version\": 12, \"mobTypes\": [\"minecraft:cow\"],"
+                + " \"knownMobTypes\": [\"minecraft:cow\", \"minecraft:horse\", \"minecraft:minecart\"],"
+                + " \"seatedVehicles\": [\"minecraft:minecart\"]}");
+        assertEquals(java.util.List.of("minecraft:horse"), config.hiddenMobs);
+        assertTrue(migrated("{\"version\": 14, \"mobTypes\": [], \"knownMobTypes\": [\"minecraft:horse\"]}")
+                .hiddenMobs.isEmpty());
+    }
+
+    @Test
+    void version14HidesWhatWasTakenOutByHand() {
+        // A file from before every kind was offered: the old defaults and other mods' mobs it knew.
+        FarConfig config = migrated("{\"version\": 10, \"mobTypes\": [\"minecraft:cow\", \"othermod:deer\"],"
+                + " \"knownModdedMobs\": [\"othermod:zombie\", \"othermod:deer\", \"othermod:boar\","
+                + " \"removedmod:ghost\"]}");
+        // The game's kinds were all shown by default: one missing was taken out by hand.
+        assertTrue(config.hiddenMobs.contains("minecraft:horse"));
+        assertTrue(config.hiddenMobs.contains(MANNEQUIN));
+        assertFalse(config.hiddenMobs.contains("minecraft:cow"));
+        // Never offered before: shown once the game offers it, as before this list.
+        assertFalse(config.hiddenMobs.contains("minecraft:enderman"));
+        // Other mods' kinds wait for the game to say which are monsters.
+        assertFalse(config.hiddenMobs.contains("othermod:boar"));
+        assertFalse(config.hiddenMobs.contains("othermod:zombie"));
+
+        // Saved and read again before the game has started: still to sort.
+        config = migrated(GSON.toJson(config));
+        assertTrue(config.sortUnsure(java.util.Map.of("othermod:zombie", true, "othermod:boar", false,
+                "othermod:deer", false)));
+        // Shown by default in every version: taken out by hand.
+        assertTrue(config.hiddenMobs.contains("othermod:boar"));
+        assertFalse(config.showsMob("othermod:boar", false));
+        // A monster, hidden by default before: no telling, so shown.
+        assertFalse(config.hiddenMobs.contains("othermod:zombie"));
+        assertTrue(config.showsMob("othermod:zombie", false));
+        // A mod taken out since: no telling either, shown, and harmless.
+        assertTrue(config.showsMob("removedmod:ghost", false));
+        // Shown already: left alone.
+        assertFalse(config.hiddenMobs.contains("othermod:deer"));
+        // Sorted once.
+        assertFalse(config.sortUnsure(java.util.Map.of()));
+        assertFalse(GSON.toJson(config).contains("unsortedMobs"));
+    }
+
+    @Test
+    void version14KeepsWhatTheFileAlreadyHid() {
+        FarConfig config = migrated("{\"version\": 12, \"mobTypes\": [\"minecraft:cow\"],"
+                + " \"knownMobTypes\": [\"minecraft:cow\", \"minecraft:horse\"],"
+                + " \"hiddenMobs\": [\"minecraft:horse\", \"cobblemon:*\"]}");
+        assertEquals(java.util.List.of("minecraft:horse", "cobblemon:*"), config.hiddenMobs);
+        // An old file shown every kind it knew: nothing to hide.
+        assertTrue(migrated("{\"version\": 1}").hiddenMobs.isEmpty());
+    }
+
+    @Test
+    void keepsIdsTheGameDoesNotHave() {
+        FarConfig config = migrated("{\"version\": 14, \"hiddenMobs\": [\"removedmod:ghost\", \"removedmod:*\","
+                + " \"not a mob at all\"]}");
+        assertEquals(java.util.List.of("removedmod:ghost", "removedmod:*", "minecraft:not a mob at all"), config.hiddenMobs);
+        assertFalse(config.showsMob("removedmod:ghost", true));
+        assertFalse(config.showsMob("removedmod:anything", true));
+        assertTrue(config.showsMob("minecraft:horse", false));
+        // Read again, written again: the same list.
+        assertEquals(config.hiddenMobs, migrated(GSON.toJson(config)).hiddenMobs);
+    }
+
+    @Test
+    void tidiesTheListWrittenByHand() {
+        FarConfig config = migrated("{\"version\": 14, \"hiddenMobs\": [null, \"\", \"   \", \" Minecraft:Pig \","
+                + " \"pig\", \"minecraft:pig\", \"Cobblemon:*\"]}");
+        assertEquals(java.util.List.of("minecraft:pig", "cobblemon:*"), config.hiddenMobs);
+        assertFalse(config.showsMob("minecraft:pig", true));
+        assertFalse(config.showsMob("cobblemon:pokemon", false));
+    }
+
+    @Test
+    void switchesWriteTheList() {
+        FarConfig config = migrated("{\"version\": 14, \"mobTypes\": [\"minecraft:cow\", \"minecraft:pig\"],"
+                + " \"hiddenMobs\": [\"cobblemon:*\", \"removedmod:ghost\"]}");
+        // Shown, switched off: listed.
+        config.setMobShown("minecraft:cow", false);
+        assertTrue(config.hiddenMobs.contains("minecraft:cow"));
+        assertFalse(config.mobTypes.contains("minecraft:cow"));
+        // Switched off twice: listed once.
+        config.setMobShown("minecraft:cow", false);
+        assertEquals(1, java.util.Collections.frequency(config.hiddenMobs, "minecraft:cow"));
+        // Back on: out of the list.
+        config.setMobShown("minecraft:cow", true);
+        assertFalse(config.hiddenMobs.contains("minecraft:cow"));
+        assertTrue(config.showsMob("minecraft:cow", false));
+        // Never shown (a vehicle waiting to be chosen), switched off: not listed.
+        config.setMobShown("minecraft:minecart", false);
+        assertFalse(config.hiddenMobs.contains("minecraft:minecart"));
+        // Its whole mod hidden: the switch does nothing.
+        config.setMobShown("cobblemon:pokemon", true);
+        assertFalse(config.mobTypes.contains("cobblemon:pokemon"));
+        assertFalse(config.showsMob("cobblemon:pokemon", false));
+        // A mob of a mod taken out: listed, and shown again like any other.
+        config.setMobShown("removedmod:ghost", true);
+        assertFalse(config.hiddenMobs.contains("removedmod:ghost"));
+        assertTrue(config.showsMob("removedmod:ghost", false));
+        // Defaults: whole mods stay hidden, single kinds are shown again.
+        config.setMobShown("minecraft:pig", false);
+        config.resetMobs(java.util.List.of());
+        assertEquals(java.util.List.of("cobblemon:*"), config.hiddenMobs);
+    }
+
+    @Test
+    void hiddenMobsBeatEveryOtherChoice() {
+        FarConfig config = migrated("{\"version\": 14, \"mobTypes\": [\"minecraft:cow\", \"cobblemon:pokemon\","
+                + " \"minecraft:pig\"], \"hiddenMobs\": [\"minecraft:pig\", \"cobblemon:*\"]}");
+        assertTrue(config.showsMob("minecraft:cow", false));
+        assertTrue(config.showsMob("minecraft:zombie", true));
+        assertFalse(config.showsMob("minecraft:zombie", false));
+        assertFalse(config.showsMob("minecraft:pig", true));
+        assertFalse(config.showsMob("cobblemon:pokemon", true));
+        assertEquals("cobblemon:*", FarConfig.wholeMod("cobblemon:pokemon"));
+        assertEquals("minecraft:*", FarConfig.wholeMod("pig"));
+    }
+
+    @Test
     void fillsInWhatTheFileLeftOut() {
-        FarConfig config = migrated("{\"version\": 10, \"mobTypes\": null, \"hiddenBirds\": null, \"birdStyle\": null,"
-                + " \"knownModdedMobs\": null, \"stillMobTypes\": null}");
+        FarConfig config = migrated("{\"version\": 11, \"mobTypes\": null, \"hiddenBirds\": null, \"birdStyle\": null,"
+                + " \"knownMobTypes\": null, \"knownVehicles\": null, \"seatedVehicles\": null, \"stillMobTypes\": null,"
+                + " \"hiddenMobs\": null}");
         assertTrue(config.mobTypes.contains("minecraft:horse"));
         assertTrue(config.stillMobTypes.contains(MANNEQUIN));
         assertEquals(java.util.List.of(), config.hiddenBirds);
         assertEquals("3d", config.birdStyle);
-        assertEquals(java.util.List.of(), config.knownModdedMobs);
+        assertTrue(config.knownMobTypes.contains("minecraft:horse"));
+        assertEquals(java.util.List.of(), config.knownVehicles);
+        assertEquals(java.util.List.of(), config.seatedVehicles);
+        assertEquals(java.util.List.of(), config.hiddenMobs);
     }
 
     @Test

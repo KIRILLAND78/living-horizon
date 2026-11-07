@@ -86,11 +86,26 @@ public final class DepthFar {
         //?}
     }
 
+    /** {@link #openGl()} as worked out at the start of this frame: 1 yes, 0 no, -1 before the first frame. */
+    private static volatile int openGl = -1;
+
     /**
-     * Whether the game draws with OpenGL on this thread. From 26.2 it can draw with Vulkan
-     * instead, and then nothing that talks to OpenGL directly may run.
+     * Whether the game draws with OpenGL. From 26.2 it can draw with Vulkan instead, and then
+     * nothing that talks to OpenGL directly may run. Worked out once a frame ({@link #noteFrame}):
+     * with Vulkan, asking OpenGL throws, and an exception for every distant mob of every frame
+     * cost more than the rest of their occlusion test.
      */
     public static boolean openGl() {
+        int known = openGl;
+        return known >= 0 ? known == 1 : onThisThread();
+    }
+
+    /** A new frame starts, on the render thread: whether it draws with OpenGL is worked out again. */
+    public static void noteFrame() {
+        openGl = onThisThread() ? 1 : 0;
+    }
+
+    private static boolean onThisThread() {
         try {
             GL.getCapabilities();
             return true;

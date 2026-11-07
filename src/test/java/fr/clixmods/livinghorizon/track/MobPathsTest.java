@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** A cow at (10.5, 64, 20.5), on different grounds: the animation it gets never leaves its ground. */
@@ -137,6 +138,43 @@ class MobPathsTest {
         ground[R][R] = 64;
         assertNull(choose(ground, WIDTH, 5).animation());
         assertNull(MobPaths.stand(X, Y, Z).animation());
+    }
+
+    @Test
+    void crampedPlayerPacesWhereNothingElseFits() {
+        // A player who logged off in a 1x2 nook: no mob animation fits, a step there and back does.
+        double[][] ground = ground(Double.NaN);
+        ground[R][R] = 64;
+        ground[R][R + 1] = 64;
+        MobPaths.Choice none = choose(ground, 0.6, 9);
+        assertNull(none.animation());
+        MobPaths.Choice cramped = MobPaths.orCramped(none, 0.6, 9);
+        assertNotNull(cramped.animation());
+        assertTrue(MobAnimations.CRAMPED.contains(cramped.animation()));
+        staysOnGround(cramped, 0.6);
+        // Where a mob animation fits, it is kept.
+        MobPaths.Choice open = choose(ground(64), 0.6, 9);
+        assertEquals(open.animation(), MobPaths.orCramped(open, 0.6, 9).animation());
+    }
+
+    @Test
+    void neverPastItsRoam() {
+        // Open ground all round, but its spot 3 blocks to the west and a roam of 4: nothing of the
+        // animation it plays goes more than 4 blocks from that spot.
+        double cx = X - 3, cz = Z, roam = 4;
+        MobPaths.Choice open = choose(ground(64), 0.6, 9);
+        MobPaths.Choice kept = MobPaths.within(open, cx, cz, roam, 0.6, 9);
+        MobAnimations.Animation animation = kept.animation();
+        assertNotNull(animation);
+        for (int t = 0; t < animation.duration; t++) {
+            MobAnimations.Pose pose = animation.sample(t);
+            double x = X + MobAnimations.worldX(pose.x(), pose.z(), kept.angle(), kept.mirror());
+            double z = Z + MobAnimations.worldZ(pose.x(), pose.z(), kept.angle(), kept.mirror());
+            assertTrue(Math.hypot(x - cx, z - cz) <= roam + 1, animation + " goes " + Math.hypot(x - cx, z - cz) + " blocks from its spot");
+        }
+        staysOnGround(kept, 0.6);
+        // Well inside its roam, nothing changes.
+        assertSame(open, MobPaths.within(open, X, Z, 50, 0.6, 9));
     }
 
     @Test

@@ -35,6 +35,7 @@ public final class RememberedMobsScenario implements Scenario {
         Scene.configure(context, config -> {
             config.impostors = true;
             config.impostorDistance = 100;
+            config.impostorPixels = 0;
             config.hideOccludedMobs = false;
         });
         try (TestSingleplayerContext world = Scene.flatWorld(context)) {

@@ -40,3 +40,9 @@ modId = "distanthorizons"
 type = "optional"
 versionRange = "[0,)"
 side = "CLIENT"
+
+[[dependencies.${id}]]
+modId = "ecstatic"
+type = "optional"
+versionRange = "[0,)"
+side = "CLIENT"

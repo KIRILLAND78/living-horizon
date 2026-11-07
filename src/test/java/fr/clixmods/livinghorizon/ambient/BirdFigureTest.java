@@ -1,5 +1,7 @@
 package fr.clixmods.livinghorizon.ambient;
 
+import fr.clixmods.livinghorizon.GameBoot;
+import fr.clixmods.livinghorizon.render.impostor.ImpostorKey;
 import fr.clixmods.livinghorizon.render.impostor.ImpostorRenderer;
 import org.junit.jupiter.api.Test;
 
@@ -7,6 +9,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The impostor sheets of the 3D birds: which one shows a bird, and whether it fits its tiles. */
@@ -33,6 +36,25 @@ class BirdFigureTest {
         Set<BirdFigure> distinct = new HashSet<>(BirdFigure.all(Ambience.Species.GOOSE, false));
         distinct.addAll(BirdFigure.all(Ambience.Species.GOOSE, true));
         assertEquals(BirdFigure.BEATS.length * BirdFigure.FLYING.length + BirdFigure.PERCHED.length, distinct.size());
+    }
+
+    /**
+     * The keys come from a table made once, and stay what they were: the pictures kept on disk
+     * from an earlier game are found by them.
+     */
+    @Test
+    void keysAreMadeOnceAndKeepTheirValues() {
+        GameBoot.start();
+        for (Ambience.Species species : Ambience.Species.values()) {
+            for (boolean perched : new boolean[]{false, true}) {
+                for (BirdFigure figure : BirdFigure.all(species, perched)) {
+                    BirdFigure same = new BirdFigure(species, perched, figure.beat(), figure.height());
+                    assertSame(figure.key(), same.key());
+                    assertEquals(new ImpostorKey("livinghorizon:bird/" + species.name().toLowerCase(java.util.Locale.ROOT),
+                            (perched ? 100 : 0) + figure.beat() * 10 + figure.height()), figure.key());
+                }
+            }
+        }
     }
 
     /**

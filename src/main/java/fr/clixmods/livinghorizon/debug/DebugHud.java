@@ -1,6 +1,7 @@
 package fr.clixmods.livinghorizon.debug;
 
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.ModVersion;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.compat.FarDepth;
 import fr.clixmods.livinghorizon.compat.OcclusionQueries;
@@ -135,7 +136,7 @@ public final class DebugHud {
 
     private static List<Line> lines(FarConfig config, Minecraft minecraft) {
         List<Line> lines = new ArrayList<>();
-        lines.add(new Line(I18n.get("livinghorizon.debug.hud.title"), WHITE));
+        lines.add(new Line(I18n.get("livinghorizon.debug.hud.title") + " v" + ModVersion.get(), WHITE));
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.cost", Stats.tickMillis(), Stats.extractMillis(),
                 Stats.drawn(), Stats.skipped()), GREY));
         MobMemory mobs = FarPlayerTracker.get().mobs();
@@ -164,11 +165,11 @@ public final class DebugHud {
         }
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.reach", reach.isEmpty() ? "?" : reach), GREY));
         lines.add(new Line(I18n.get("livinghorizon.debug.hud.opts"), GREY));
-        String[] names = {"view", "tiny", "depth", "lazy", "parallel", "cache", "occluded", "queries", "fade", "shadows", "fog", "background",
+        String[] names = {"view", "tiny", "depth", "lazy", "parallel", "cache", "occluded", "queries", "fade", "shadows", "fog", "dhfog", "background",
                 "animation", "freeze"};
         boolean[] values = {config.optViewCulling, config.optTinyCulling, config.depthOcclusion, config.optLazyDepth,
                 config.optParallelRead, config.optColumnCache, config.hideOccludedMobs, config.optOcclusionQueries,
-                config.optDhFade, config.optVoxyShadows, config.optVoxyFog, config.optBackgroundBuild, config.optStillTiny, config.optFreezeHidden};
+                config.optDhFade, config.optVoxyShadows, config.optVoxyFog, config.optDhFog, config.optBackgroundBuild, config.optStillTiny, config.optFreezeHidden};
         for (int i = 0; i < names.length; i++) {
             lines.add(new Line("  " + (values[i] ? "✔ " : "✘ ") + I18n.get("livinghorizon.debug.opt." + names[i]),
                     values[i] ? ON : OFF));

@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.gametest.scenario;
 
 import com.mojang.authlib.GameProfile;
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.Stats;
 import fr.clixmods.livinghorizon.gametest.Scenario;
 import fr.clixmods.livinghorizon.gametest.Scene;
@@ -41,9 +42,16 @@ public final class PerfScenario implements Scenario {
     private static final int CROWD = 40;
     /** Ticks each phase is left to settle, then measured: one frame per tick in a game test. */
     private static final int SETTLE = 60, FRAMES = 200;
+    /** The mod's steps inside a frame, reported one by one: where a change in the frame time comes from. */
+    private static final Profile.Section[] STEPS = {Profile.Section.EXTRACT, Profile.Section.DEPTH_BEFORE,
+            Profile.Section.DEPTH_AFTER, Profile.Section.OCCLUSION_RUN, Profile.Section.OCCLUSION_COLLECT,
+            Profile.Section.SUBMIT_IMPOSTORS, Profile.Section.SUBMIT_BIRDS, Profile.Section.BAKE};
+    private static final String[] STEP_NAMES = {"preparing the figures", "far depth before the entities",
+            "far depth after them", "drawing the hidden-mob boxes", "reading their answers", "submitting the impostors",
+            "submitting the birds", "baking pictures"};
     /** Settings that only act on Voxy's or Distant Horizons' terrain, neither of which runs here. */
     private static final java.util.Set<String> FAR_WORLD =
-            java.util.Set.of("optLazyDepth", "optParallelRead", "optColumnCache", "optDhFade", "optVoxyShadows", "optVoxyFog");
+            java.util.Set.of("optLazyDepth", "optParallelRead", "optColumnCache", "optDhFade", "optVoxyShadows", "optVoxyFog", "optDhFog");
 
     @Override
     public String name() {
@@ -119,6 +127,7 @@ public final class PerfScenario implements Scenario {
     private static void off(FarConfig config) {
         config.enabled = false;
         config.distantMobs = false;
+        config.distantEntities = false;
         config.offlinePlayers = false;
         config.skyBirds = false;
     }
@@ -171,6 +180,14 @@ public final class PerfScenario implements Scenario {
         }
         row.allocated = (allocated(thread) - allocatedBefore) / FRAMES;
         row.drawn = context.computeOnClient(minecraft -> Stats.drawn());
+        // Each step's smoothed average, as the debug panel shows it, at the end of the lap.
+        row.steps = context.computeOnClient(minecraft -> {
+            double[] steps = new double[STEPS.length];
+            for (int i = 0; i < STEPS.length; i++) {
+                steps[i] = STEPS[i].cpu().seen() ? STEPS[i].cpu().average() / 1_000_000.0 : 0;
+            }
+            return steps;
+        });
         return row;
     }
 
@@ -210,6 +227,7 @@ public final class PerfScenario implements Scenario {
             with.own.addAll(row.own);
             with.allocated += row.allocated / defaults.size();
             with.drawn = row.drawn;
+            for (int step = 0; step < STEPS.length; step++) with.steps[step] += row.steps[step] / defaults.size();
             if (i == 0) continue;
             Row before = defaults.get(i - 1);
             frameNoise = Math.max(frameNoise, Math.abs(row.frame.average() - before.frame.average()));
@@ -233,6 +251,12 @@ public final class PerfScenario implements Scenario {
         line(String.format(Locale.ROOT, "  memory ................. %+6.0f KB allocated per frame",
                 (with.allocated - (off.allocated + offAgain.allocated) / 2.0) / 1024));
         line(String.format(Locale.ROOT, "  figures drawn .......... %6d", with.drawn));
+        StringBuilder steps = new StringBuilder("  steps inside a frame ... ");
+        for (int step = 0; step < STEPS.length; step++) {
+            if (step > 0) steps.append(", ");
+            steps.append(String.format(Locale.ROOT, "%s %.2f ms", STEP_NAMES[step], with.steps[step]));
+        }
+        line(steps.toString());
         line(String.format(Locale.ROOT, "Noise: the defaults, measured %d times, differ by up to %.1f ms per frame and %.2f ms",
                 defaults.size(), frameNoise, codeNoise));
         line("of the mod's code. Smaller differences below are not results.");
@@ -326,6 +350,8 @@ public final class PerfScenario implements Scenario {
         final Times frame = new Times(), tick = new Times(), extract = new Times(), own = new Times();
         long allocated;
         int drawn;
+        /** Milliseconds per frame of each of {@link #STEPS}, smoothed. */
+        double[] steps = new double[STEPS.length];
     }
 
     /** Nanoseconds, given in; read back in milliseconds. */

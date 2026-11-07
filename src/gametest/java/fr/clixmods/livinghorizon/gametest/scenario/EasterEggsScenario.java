@@ -18,8 +18,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * The easter eggs, each called the way {@code /livinghorizon eeN} calls it, one after the
- * other: the saucer over a remembered cow (1), the pass across the sky (2), the ghosts (3)
- * and the watcher (4). Screenshots of each, and checks that they go when they should.
+ * other: the saucer over a remembered cow (1), the pass across the sky (2), the ghosts (3),
+ * the watcher (4), and the others up to the villager (8). Screenshots of each, and checks
+ * that they go when they should.
  *
  * <p>The cows must be remembered, so the scene is the one of {@link RememberedMobsScenario}:
  * met up close, then left 200 blocks behind.
@@ -71,12 +72,14 @@ public final class EasterEggsScenario implements Scenario {
             waver(context);
             bigfoot(context, world);
             boat(context, world);
+            villager(context, world);
         }
     }
 
     /**
-     * The calendar: a day for each dawn; from the second or third, the watcher (4) comes on his
-     * own a while into the night, and goes once he is looked in the eyes.
+     * The calendar: a day for each dawn; from the second or third, the daily ones come on their
+     * own once a day, by day as well as by night, and together (their moments hurried here): the
+     * watcher (4) and the ghost (3). The watcher goes once he is looked in the eyes.
      */
     private void calendar(ClientGameTestContext context, TestSingleplayerContext world) {
         int before = context.computeOnClient(minecraft -> ambience().calendar().days());
@@ -89,24 +92,32 @@ public final class EasterEggsScenario implements Scenario {
         int after = context.computeOnClient(minecraft -> ambience().calendar().days());
         Scene.log("eggs calendar " + before + " -> " + after + " days");
         if (after != before + 3) throw new AssertionError("the calendar counted " + (after - before) + " dawns, not 3");
-        Scene.command(world, "time set 14000");
-        Vec3 at = null;
-        for (int i = 0; i < 2400 && at == null; i += 20) {
+        // By day, both at once: they wait neither for the night nor for each other.
+        context.runOnClient(minecraft -> {
+            ambience().herobrine().soon();
+            ambience().ghosts().soon();
+        });
+        Vec3 at = null, ghost = null;
+        for (int i = 0; i < 2400 && (at == null || ghost == null); i += 20) {
             context.waitTicks(20);
-            at = context.computeOnClient(minecraft -> {
+            if (at == null) at = context.computeOnClient(minecraft -> {
                 RemotePlayer him = ambience().herobrine().figure();
                 return him == null ? null : him.position();
             });
+            if (ghost == null) ghost = context.computeOnClient(minecraft -> ambience().ghosts().position());
         }
-        if (at == null) throw new AssertionError("ee4 did not come by night");
-        drawn(context, at, "ee4 by night");
+        if (at == null) throw new AssertionError("ee4 did not come by day");
+        if (ghost == null) throw new AssertionError("ee3 did not come by day beside ee4");
+        Vec3 walking = ghost;
+        context.runOnClient(minecraft -> Scene.log("eggs ee3 by day at " + walking));
+        drawn(context, at, "ee4 by day");
         Vec3 him = at;
         context.runOnClient(minecraft -> {
-            Scene.log("eggs ee4 by night at " + him + ", " + (int) him.distanceTo(minecraft.player.position()) + " blocks");
+            Scene.log("eggs ee4 by day at " + him + ", " + (int) him.distanceTo(minecraft.player.position()) + " blocks");
             lookAt(minecraft.player, him.x, him.y + 1.6, him.z);
             minecraft.options.fov().set(30);
         });
-        Scene.screenshot(context, this, "ee4-night");
+        Scene.screenshot(context, this, "ee4-day");
         context.waitTicks(110);
         if (context.computeOnClient(minecraft -> ambience().herobrine().busy())) {
             throw new AssertionError("ee4 still there 5 seconds after being looked in the eyes");
@@ -336,6 +347,55 @@ public final class EasterEggsScenario implements Scenario {
         context.waitTicks(10);
         if (context.computeOnClient(minecraft -> ambience().ghostBoat().busy())) {
             throw new AssertionError("ee7 still there with the player next to it");
+        }
+        context.runOnClient(minecraft -> minecraft.options.fov().set(70));
+        Scene.command(world, "time set noon");
+    }
+
+    /** 8: in a village made ahead (a bell by a street), at night, fading in, and gone when the player comes near. */
+    private void villager(ClientGameTestContext context, TestSingleplayerContext world) {
+        Scene.command(world, "tp @a 0 ~ 400 0 0");
+        context.waitTicks(100);
+        Scene.command(world, "execute at @p run fill ~-30 ~-1 ~60 ~30 ~-1 ~120 minecraft:dirt_path");
+        Scene.command(world, "execute at @p run setblock ~ ~ ~90 minecraft:bell");
+        Scene.command(world, "time set midnight");
+        context.waitTicks(20);
+        boolean on = context.computeOnClient(minecraft -> ambience().ghostVillager().summon(minecraft.level, minecraft.player, true));
+        if (!on) throw new AssertionError("ee8 found no village");
+        Vec3 came = await(context, () -> ambience().ghostVillager().position(), "ee8");
+        // Not looked at, it wanders about the village as a villager does.
+        context.runOnClient(minecraft -> minecraft.player.setYRot(minecraft.player.getYRot() + 180f));
+        context.waitTicks(400);
+        Vec3 at = context.computeOnClient(minecraft -> ambience().ghostVillager().position());
+        if (at == null) throw new AssertionError("ee8 gone while it wandered");
+        Scene.log("eggs ee8 wandered " + (int) at.distanceTo(came) + " blocks from where it came");
+        if (at.distanceTo(came) < 1) throw new AssertionError("ee8 never moved");
+        context.runOnClient(minecraft -> {
+            double across = Math.hypot(at.x - minecraft.player.getX(), at.z - minecraft.player.getZ());
+            Scene.log("eggs ee8 at " + at + ", " + (int) across + " blocks");
+            if (across < 20) throw new AssertionError("ee8 at " + (int) across + " blocks, too near");
+            lookAt(minecraft.player, at.x, at.y + 1.2, at.z);
+            minecraft.options.fov().set(30);
+        });
+        context.waitTicks(60);
+        if (!context.computeOnClient(minecraft -> ambience().ghostVillager().busy())) throw new AssertionError("ee8 gone too soon");
+        Scene.screenshot(context, this, "ee8-night");
+        // Closer, still farther than where it goes, to see the figure.
+        Vec3 seen = context.computeOnClient(minecraft -> ambience().ghostVillager().position());
+        Scene.command(world, "tp @a " + seen.x + " ~ " + (seen.z - 40));
+        context.waitTicks(5);
+        context.runOnClient(minecraft -> {
+            Vec3 here = ambience().ghostVillager().position();
+            if (here == null) throw new AssertionError("ee8 gone at 40 blocks");
+            lookAt(minecraft.player, here.x, here.y + 1.1, here.z);
+        });
+        context.waitTicks(3);
+        Scene.screenshot(context, this, "ee8-close");
+        Vec3 now = context.computeOnClient(minecraft -> ambience().ghostVillager().position());
+        Scene.command(world, "tp @a " + (now.x + 6) + " ~ " + (now.z - 6));
+        context.waitTicks(10);
+        if (context.computeOnClient(minecraft -> ambience().ghostVillager().busy())) {
+            throw new AssertionError("ee8 still there with the player next to it");
         }
         context.runOnClient(minecraft -> minecraft.options.fov().set(70));
         Scene.command(world, "time set noon");

@@ -40,6 +40,24 @@ class RestingPlayersTest {
         assertEquals(spots, RestingPlayers.read(new StringReader(out.toString())));
     }
 
+    /** Where they were found to rest - the ground under them, a shore, a boat - comes back with them. */
+    @Test
+    void keepsWhereTheyRest() throws IOException {
+        List<RestingPlayers.Spot> spots = List.of(
+                new RestingPlayers.Spot("Glider", null, null, null, OVERWORLD, 5.5, 140, -3.5, 0f, 0, null, null,
+                        new RestingPlayers.Rest(5.5, 64, -3.5, false)),
+                new RestingPlayers.Spot("Rower", null, null, null, OVERWORLD, 30.5, 62.9, 12.5, 90f, 0, null, null,
+                        new RestingPlayers.Rest(30.5, 62.888, 12.5, true)),
+                new RestingPlayers.Spot("Walker", null, null, null, OVERWORLD, 0, 64, 0, 0f, 0, null, null));
+        StringWriter out = new StringWriter();
+        RestingPlayers.write(spots, out);
+        assertEquals(spots, RestingPlayers.read(new StringReader(out.toString())));
+        // A file written before the mod kept it: found again from the blocks.
+        assertEquals(null, RestingPlayers.read(new StringReader(
+                "{\"version\": 2, \"players\": [{\"name\": \"Alex\", \"dimension\": \"minecraft:overworld\", "
+                        + "\"x\": 1, \"y\": 2, \"z\": 3, \"yaw\": 0}]}")).get(0).rest());
+    }
+
     @Test
     void keepsADamagedFileAside() throws IOException {
         Path file = folder.resolve("server.json");

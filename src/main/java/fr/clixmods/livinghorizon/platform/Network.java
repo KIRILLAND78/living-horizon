@@ -77,7 +77,8 @@ public final class Network {
 
     /^* On both sides, while the mod is built. ^/
     public static void register() {
-        channel = ChannelBuilder.named(ID).optional().networkProtocolVersion(1).eventNetworkChannel();
+        // The version first: optional() freezes the versions each side accepts to the one set so far.
+        channel = ChannelBuilder.named(ID).networkProtocolVersion(1).optional().eventNetworkChannel();
         channel.addListener((CustomPayloadEvent event) -> {
             FriendlyByteBuf buf = event.getPayload();
             if (buf != null && event.getSource().isClientSide()) receiver.accept(buf.readByteArray());

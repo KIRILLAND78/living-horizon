@@ -135,7 +135,7 @@ public final class FarDepthGpu {
     private static @Nullable GpuTextureView preparedDepth;
     /^* Distant Horizons' projection terms of this frame, and the game's, for the fade mask. ^/
     private static final float[] PREPARED_DH = new float[4], PREPARED_GAME = new float[2];
-    /^* The inverse of Distant Horizons' whole projection this frame, when known: see {@link DhDepth#inverse()}. ^/
+    /^* The inverse of Distant Horizons' whole projection this frame, when known: see {@link DhFrame#inverse()}. ^/
     private static final Matrix4f PREPARED_INVERSE = new Matrix4f();
     private static boolean preparedExact;
     private static String preparedReason = "no frame yet";
@@ -169,13 +169,13 @@ public final class FarDepthGpu {
         FarDepth.gpuAvailable();
         if (broken || !FarDepth.gpuPath() || !DhDepth.available() || DhDepth.shaderPackOn()) return;
         try {
-            Object[] dh = DhDepth.readView();
-            if (dh == null) {
+            DhFrame dh = DhDepth.readView();
+            if (dh == null || !(dh.view() instanceof GpuTextureView dhView)) {
                 preparedReason = DhDepth.reason();
                 return;
             }
             float[] game = DepthFar.terms(Minecraft.getInstance());
-            org.joml.Matrix4fc inverse = DhDepth.inverse();
+            org.joml.Matrix4fc inverse = dh.inverse();
             preparedExact = inverse != null;
             if (inverse != null) PREPARED_INVERSE.set(inverse);
             else PREPARED_INVERSE.identity();
@@ -185,14 +185,17 @@ public final class FarDepthGpu {
             GpuBuffer uniforms = next(mergeUniforms);
             try (GpuBufferSlice.MappedView view = uniforms.map(false, true)) {
                 Std140Builder.intoBuffer(view.data())
-                        .putVec4((float) dh[1], (float) dh[2], (float) dh[3], (float) dh[4])
+                        .putVec4(dh.a(), dh.b(), dh.signedFlag(), dh.nothing())
                         .putVec4(game[0], game[1], DepthFar.REVERSED ? 1f : 0f, DepthFar.zeroToOne() ? 1f : 0f)
                         .putMat4f(PREPARED_INVERSE)
                         .putVec4(preparedExact ? 1f : 0f, 0f, 0f, 0f);
             }
             preparedUniforms = uniforms;
-            preparedDepth = (GpuTextureView) dh[0];
-            for (int i = 0; i < 4; i++) PREPARED_DH[i] = (float) dh[i + 1];
+            preparedDepth = dhView;
+            PREPARED_DH[0] = dh.a();
+            PREPARED_DH[1] = dh.b();
+            PREPARED_DH[2] = dh.signedFlag();
+            PREPARED_DH[3] = dh.nothing();
             PREPARED_GAME[0] = game[0];
             PREPARED_GAME[1] = game[1];
         } catch (Throwable e) {
@@ -338,7 +341,7 @@ public final class FarDepthGpu {
             GpuBuffer uniforms = next(visibilityUniforms);
             try (GpuBufferSlice.MappedView view = uniforms.map(false, true)) {
                 Std140Builder builder = Std140Builder.intoBuffer(view.data())
-                        .putMat4f(new Matrix4f().set(OcclusionQueries.viewProjection()))
+                        .putMat4f(new Matrix4f(FarDepth.viewProjection()))
                         .putVec4(n, DepthFar.REVERSED ? 1f : 0f, DepthFar.zeroToOne() ? 1f : 0f, 0f);
                 for (int i = 0; i < n; i++) {
                     builder.putVec4(BOXES[6 * i], BOXES[6 * i + 1], BOXES[6 * i + 2], 0f)
@@ -439,7 +442,7 @@ public final class FarDepthGpu {
             try (GpuBufferSlice.MappedView view = uniforms.map(false, true)) {
                 Std140Builder.intoBuffer(view.data())
                         .putVec4(1f - 0.4f - margin, 8f / Math.max(1, main.height), 0.4f, 0.4f)
-                        .putVec4(terms[0], terms[1], planes[0], planes[1])
+                        .putVec4(terms[0], terms[1], planes[0], FarDepth.VIEW_FAR)
                         .putVec4(DepthFar.REVERSED ? 1f : 0f, DepthFar.zeroToOne() ? 1f : 0f, 0f, 0f);
             }
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
@@ -488,6 +491,18 @@ public final class FarDepthGpu {
 
     private static GpuSampler nearest() {
         return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+    }
+
+    /^*
+     * Compiles the four pipelines here, through the game's own shader loader, and throws at the
+     * first that does not: for the game tests, which run without Distant Horizons.
+     ^/
+    public static void compileAll() {
+        for (RenderPipeline pipeline : new RenderPipeline[]{MERGE, FADE_MASK, VIEW, VISIBILITY}) {
+            if (RenderSystem.getCompiledPipelineNullable(pipeline) == null) {
+                throw new IllegalStateException(pipeline.getLocation() + " did not compile");
+            }
+        }
     }
 
     private static void fail(Throwable e) {

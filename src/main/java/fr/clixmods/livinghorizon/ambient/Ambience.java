@@ -264,8 +264,23 @@ public final class Ambience {
     private final Waver waver = new Waver(calendar);
     private final Bigfoot bigfoot = new Bigfoot(calendar);
     private final GhostBoat ghostBoat = new GhostBoat(calendar);
+    private final GhostVillager ghostVillager = new GhostVillager(calendar);
+    private final Sect sect = new Sect(calendar);
+    private final Statue statue = new Statue(calendar);
+    private final Watcher watcher = new Watcher(calendar);
+    private final Glider glider = new Glider(calendar);
+    private final SkyLanterns skyLanterns = new SkyLanterns(calendar);
+    private final Herd herd = new Herd(calendar);
+    private final LostPet lostPet = new LostPet(calendar);
+    private final SeaCreature seaCreature = new SeaCreature(calendar);
+    private final BirdShape birdShape = new BirdShape(calendar);
+    private final Campfire campfire = new Campfire(calendar);
+    private final Fireworks fireworks = new Fireworks(calendar);
+    /** The easter eggs from 9 on, in their order: 14 and 20 are no more. */
+    private final List<Egg> more = List.of(sect, statue, watcher, glider, skyLanterns, herd, lostPet,
+            seaCreature, birdShape, campfire, fireworks);
 
-    /** When the easter eggs may come by chance, per world. */
+    /** When the easter eggs may come, per world. */
     public EggCalendar calendar() {
         return calendar;
     }
@@ -305,6 +320,77 @@ public final class Ambience {
         return ghostBoat;
     }
 
+    /** Easter egg 8. */
+    public GhostVillager ghostVillager() {
+        return ghostVillager;
+    }
+
+    /** Easter egg 9. */
+    public Sect sect() {
+        return sect;
+    }
+
+    /** Easter egg 10. */
+    public Statue statue() {
+        return statue;
+    }
+
+    /** Easter egg 11. */
+    public Watcher watcher() {
+        return watcher;
+    }
+
+    /** Easter egg 12. */
+    public Glider glider() {
+        return glider;
+    }
+
+    /** Easter egg 13. */
+    public SkyLanterns skyLanterns() {
+        return skyLanterns;
+    }
+
+    /** Easter egg 15. */
+    public Herd herd() {
+        return herd;
+    }
+
+    /** Easter egg 16. */
+    public LostPet lostPet() {
+        return lostPet;
+    }
+
+    /** Easter egg 17. */
+    public SeaCreature seaCreature() {
+        return seaCreature;
+    }
+
+    /** Easter egg 18. */
+    public BirdShape birdShape() {
+        return birdShape;
+    }
+
+    /** Easter egg 19. */
+    public Campfire campfire() {
+        return campfire;
+    }
+
+    /** Easter egg 21. */
+    public Fireworks fireworks() {
+        return fireworks;
+    }
+
+    /** The easter eggs from 9 on. */
+    public List<Egg> more() {
+        return more;
+    }
+
+    /** Easter egg {@code number}, from 9 on; null for another number. */
+    public @Nullable Egg egg(int number) {
+        for (Egg egg : more) if (egg.number() == number) return egg;
+        return null;
+    }
+
     /** Everything flying or perched this tick. */
     public List<Flyer> flyers() {
         return flyers;
@@ -318,18 +404,20 @@ public final class Ambience {
             level = current;
         }
         // The easter eggs: by chance only on the days the calendar allows, one at a time. The
-        // watcher keeps his own nights, out of the others' way: he waits for them, not they for him.
+        // daily ones (3, 4, 5) keep days of their own, alongside the others: nobody waits for them.
         calendar.tick(current);
         boolean eggs = config.easterEggs && current.dimension() == Level.OVERWORLD;
-        boolean free = !ufo.busy() && !pass.busy() && !ghosts.busy()
-                && !waver.busy() && !bigfoot.busy() && !ghostBoat.busy();
+        boolean free = !ufo.busy() && !pass.busy() && !bigfoot.busy() && !ghostBoat.busy() && !ghostVillager.busy();
+        for (Egg egg : more) free &= !egg.busy();
         ufo.tick(current, self, eggs, free && calendar.allows(1));
         pass.tick(current, self, eggs, free && calendar.allows(2));
-        ghosts.tick(current, self, eggs, free && calendar.allows(3));
-        herobrine.tick(current, self, eggs, free);
-        waver.tick(current, self, eggs, free && calendar.allows(5));
+        ghosts.tick(current, self, eggs);
+        herobrine.tick(current, self, eggs);
+        waver.tick(current, self, eggs);
         bigfoot.tick(current, self, eggs, free && calendar.allows(6));
         ghostBoat.tick(current, self, eggs, free && calendar.allows(7));
+        ghostVillager.tick(current, self, eggs, free && calendar.allows(8));
+        for (Egg egg : more) egg.tick(current, self, eggs, free && (!egg.paced() || calendar.allows(egg.number())));
         flyers.clear();
         if (!config.skyBirds || current.dimension() != Level.OVERWORLD) {
             groups.clear();

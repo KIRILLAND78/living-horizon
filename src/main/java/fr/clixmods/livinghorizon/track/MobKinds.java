@@ -1,5 +1,7 @@
 package fr.clixmods.livinghorizon.track;
 
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -27,6 +29,14 @@ public final class MobKinds {
             "minecraft:dark_oak_chest_boat", "minecraft:pale_oak_chest_boat", "minecraft:mangrove_chest_boat",
             "minecraft:bamboo_chest_raft");
 
+    /**
+     * A mob, as the list of mobs files it: a living kind, mannequins excepted. Boats, vehicles and
+     * mannequins are the other entities, with a switch, a limit and a distance of their own.
+     */
+    public static boolean creature(EntityType<?> type) {
+        return DefaultAttributes.hasSupplier(type) && !EntityType.getKey(type).toString().equals("minecraft:mannequin");
+    }
+
     /** Every boat and raft, chest or not; before 1.21.2, the one boat of every wood. */
     public static boolean isBoat(String type) {
         return type.endsWith("_boat") || type.endsWith("_raft") || type.equals("minecraft:boat");
@@ -37,6 +47,11 @@ public final class MobKinds {
 
     public static @Nullable String type(int kind) {
         return kind >= 1 && kind <= TYPES.size() ? TYPES.get(kind - 1) : null;
+    }
+
+    /** The number a type is shared by, 0 for one a server does not share. */
+    public static int kind(String type) {
+        return TYPES.indexOf(type) + 1;
     }
 
     /**

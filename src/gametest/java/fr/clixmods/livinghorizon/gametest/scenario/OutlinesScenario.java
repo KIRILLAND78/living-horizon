@@ -32,6 +32,7 @@ public final class OutlinesScenario implements Scenario {
         Scene.configure(context, config -> {
             config.impostors = true;
             config.impostorDistance = 215;
+            config.impostorPixels = 0;
             config.hideOccludedMobs = false;
             config.maxDistantMobs = 18;
         });

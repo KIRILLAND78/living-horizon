@@ -113,9 +113,45 @@ public final class SodiumControlsScenario implements Scenario {
             if (!distance.equals(saved)) failures.add("preset: impostor distance shown " + distance + ", saved " + saved);
             screenshot(context, "preset");
 
+            // 3b. Max Mobs dragged to its right end, no limit: Apply asks first. No keeps the value
+            // and the row reads it again; yes sets no limit.
+            int mobs = context.computeOnClient(minecraft -> FarConfig.get().maxDistantMobs);
+            drag(context, "maxDistantMobs", 1.0);
+            apply(context);
+            screenshot(context, "unlimited-asked");
+            if (!context.computeOnClient(minecraft -> minecraft.screen instanceof ConfirmScreen)) {
+                failures.add("maxDistantMobs: no limit kept without asking (" + context.computeOnClient(minecraft -> FarConfig.get().maxDistantMobs) + ")");
+            } else {
+                clickConfirm(context, false);
+                int kept = context.computeOnClient(minecraft -> FarConfig.get().maxDistantMobs);
+                Object shownBack = value(context, "maxDistantMobs");
+                if (kept != mobs) failures.add("maxDistantMobs: " + kept + " after no, not " + mobs);
+                if (!String.valueOf(shownBack).equals(String.valueOf(mobs))) failures.add("maxDistantMobs: the row reads " + shownBack + " after no");
+                if (!SodiumUi.isSodiumScreen(screen(context))) failures.add("maxDistantMobs: not back on Sodium's screen after no");
+                drag(context, "maxDistantMobs", 1.0);
+                apply(context);
+                if (context.computeOnClient(minecraft -> minecraft.screen instanceof ConfirmScreen)) clickConfirm(context, true);
+                int unlimited = context.computeOnClient(minecraft -> FarConfig.get().maxDistantMobs);
+                if (unlimited != FarConfig.UNLIMITED_MOBS) failures.add("maxDistantMobs: " + unlimited + " after yes");
+                Scene.log("sodiumcontrols: Unlimited asked at Apply, no kept " + kept + ", yes set " + unlimited);
+            }
+
+            // 3c. A number typed past the end on the mod's screen: the row shows it at its last place,
+            // and saving another row leaves it as it is.
+            context.runOnClient(minecraft -> FarConfig.get().maxDistantMobs = 10000);
+            openSodium(context, firstPage);
+            reveal(context, "maxDistantMobs");
+            screenshot(context, "typed-past");
+            drag(context, "maxDistantEntities", 0.3);
+            apply(context);
+            int typedPast = context.computeOnClient(minecraft -> FarConfig.get().maxDistantMobs);
+            if (typedPast != 10000) failures.add("maxDistantMobs: typed 10000 became " + typedPast + " once Sodium saved");
+            Scene.log("sodiumcontrols: typed 10000 past the end, kept " + typedPast);
+
             // 4. The buttons: each opens its screen, which goes back to Sodium's when closed with Escape.
             for (String name : names(context, "button")) {
-                if (name.equals("scanMobs") || name.equals("restoreDefaults")) continue;
+                // These close the screen and start their work: no screen to come back from.
+                if (name.equals("scanMobs") || name.equals("foreseeMobs") || name.equals("restoreDefaults")) continue;
                 click(context, name);
                 context.waitTicks(5);
                 String opened = context.computeOnClient(minecraft -> minecraft.screen == null ? "none" : minecraft.screen.getClass().getSimpleName());

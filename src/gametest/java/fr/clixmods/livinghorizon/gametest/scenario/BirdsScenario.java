@@ -132,6 +132,7 @@ public final class BirdsScenario implements Scenario {
             config.birdStyle = "3d";
             config.impostors = false;
             config.impostorDistance = 32;
+            config.impostorPixels = 0;
         });
         float[] beat = {40f, 5f, -30f};
         for (int i = 0; i < SPECIES.length; i++) {

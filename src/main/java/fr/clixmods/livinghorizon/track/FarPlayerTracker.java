@@ -5,6 +5,7 @@ import fr.clixmods.livinghorizon.LivingHorizonClient;
 import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.ambient.Ambience;
 import fr.clixmods.livinghorizon.compat.LodWorld;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -13,6 +14,7 @@ import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.storage.LevelResource;
@@ -54,6 +56,7 @@ public final class FarPlayerTracker {
     private Map<UUID, Float> lastCarriedYaw = Map.of();
     private int sinceJoin;
     private boolean warnedNoSharing;
+    private @Nullable String warning;
 
     public static FarPlayerTracker get() {
         return INSTANCE;
@@ -131,6 +134,7 @@ public final class FarPlayerTracker {
                 // maybe before this first tick. It was cleared when the last world was left.
                 sinceJoin = 0;
                 warnedNoSharing = false;
+                warning = null;
                 // Opening the memory forgets the mobs sent so far: the level may have loaded
                 // those round the player before this first tick, and loads them only once.
                 for (Entity entity : current.entitiesForRendering()) mobs.onLoad(entity);
@@ -141,7 +145,7 @@ public final class FarPlayerTracker {
         if (minecraft.isPaused()) return;
         FarConfig config = FarConfig.get();
         // A world the mod has never been in: read its mobs at once, the way a scan would later.
-        if (mobs.takeFirstVisit() && config.distantMobs && MobScan.available(minecraft)) {
+        if (mobs.takeFirstVisit() && (config.distantMobs || config.distantEntities) && MobScan.available(minecraft)) {
             MobScan.start(minecraft, config.scanRadius);
         }
         String dimension = SharedPositions.dimensionId(current.dimension());
@@ -154,23 +158,28 @@ public final class FarPlayerTracker {
         }
 
         // The server stops sending a player at the edge of its view distance. Lost well
-        // inside it, the player was removed rather than left behind.
-        double vanishRadius = Math.max(16, minecraft.options.getEffectiveRenderDistance() * 16 - 40);
+        // inside it, the player was removed rather than left behind. The server's, not the
+        // render distance: Bobby draws terrain past it, with nobody on it.
+        double vanishRadius = Math.max(16, ServerView.chunks(minecraft.options) * 16 - 40);
 
         shared.update();
-        // Ten seconds after joining a server, no sharing at all: say so once, in the console.
+        // Ten seconds after joining a server, no sharing at all: say so once, in the log, and in
+        // the chat while distant players are on (turning them off silences it).
         // A world played alone is shared by its own server; never warned about.
         if (!warnedNoSharing && ++sinceJoin >= 200) {
             warnedNoSharing = true;
             PositionsMessage.Format unreadable = shared.unreadable();
             if (!shared.active() && unreadable != null) {
                 // The server has the mod, in a version too far from this one.
+                boolean newer = unreadable.version() > PositionsMessage.VERSION;
                 LivingHorizonClient.LOGGER.warn("Living Horizon: the server shares format v{}, this mod reads v{}, so distant "
                         + "players are not shown. Update the mod on {}.", unreadable.version(), PositionsMessage.VERSION,
-                        unreadable.version() > PositionsMessage.VERSION ? "this game" : "the server");
+                        newer ? "this game" : "the server");
+                if (config.enabled) warn(minecraft, newer ? "livinghorizon.sharing.updateGame" : "livinghorizon.sharing.updateServer");
             } else if (!shared.active() && minecraft.getSingleplayerServer() == null) {
                 LivingHorizonClient.LOGGER.warn("Living Horizon: this server does not have the mod, so distant players are not shown. "
                         + "Put the mod in the server's mods folder, or ask the host of a LAN world to use the mod.");
+                if (config.enabled) warn(minecraft, "livinghorizon.sharing.none");
             }
         }
 
@@ -263,7 +272,7 @@ public final class FarPlayerTracker {
         lastCarried = carried;
         lastCarriedYaw = carriedYaw;
         mobs.carried(carried.keySet());
-        mobs.tick(current, self, minecraft.options.getEffectiveRenderDistance() * 16, config,
+        mobs.tick(current, self, ServerView.chunks(minecraft.options) * 16, config,
                 shared.active() ? shared : null);
     }
 
@@ -278,6 +287,22 @@ public final class FarPlayerTracker {
             resting.rest(player.profile, player.knownDimension(), player.x(), player.y(), player.z(), player.yaw(),
                     player.mountToRest(), player.gearToRest());
         }
+    }
+
+    /** Says in the chat why distant players are not shown on this server: {@code key} names why. */
+    private void warn(Minecraft minecraft, String key) {
+        warning = key;
+        Component message = Component.translatable(key).withStyle(ChatFormatting.YELLOW);
+        //? if >=26.1 {
+        /*minecraft.gui.getChat().addClientSystemMessage(message);
+        *///?} else {
+        minecraft.gui.getChat().addMessage(message);
+        //?}
+    }
+
+    /** What the chat was last told about this server's sharing, as a translation key: null when nothing. For the game tests. */
+    public @Nullable String warning() {
+        return warning;
     }
 
     /** Which server this is, as a name for the file of who rests where. */

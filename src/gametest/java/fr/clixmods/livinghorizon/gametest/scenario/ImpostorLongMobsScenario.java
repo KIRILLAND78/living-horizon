@@ -29,6 +29,7 @@ public final class ImpostorLongMobsScenario implements Scenario {
         Scene.configure(context, config -> {
             config.impostors = true;
             config.impostorDistance = 32;
+            config.impostorPixels = 0;
             config.hideOccludedMobs = false;
         });
         try (TestSingleplayerContext world = Scene.flatWorld(context)) {

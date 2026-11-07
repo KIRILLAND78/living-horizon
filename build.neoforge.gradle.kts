@@ -122,7 +122,7 @@ tasks {
         inputs.property("java", requiredJava.majorVersion)
         inputs.property("sodium", props.getValue("sodium"))
         inputs.property("mixins", project.extra["lhMixins"] as String)
-        filesMatching(listOf("META-INF/neoforge.mods.toml", "livinghorizon.mixins.json")) { expand(props) }
+        filesMatching(listOf("META-INF/neoforge.mods.toml", "livinghorizon.mixins.json", "assets/livinghorizon/version.txt")) { expand(props) }
         // The other loaders' metadata has nothing to say to NeoForge, and it reads its
         // access transformer, not an access widener.
         exclude("fabric.mod.json", "META-INF/mods.toml", "quilt.mod.json",
@@ -134,6 +134,8 @@ tasks {
         val id = project.property("mod.id")
         inputs.property("mod_id", id)
         from(rootProject.file("LICENSE")) { rename { "${it}_$id" } }
+        // The changelog the game shows in its own screen, the waiting entries in it (gradle/target.gradle.kts).
+        from(project.extra["lhChangelog"] as File) { into("assets/livinghorizon/changelog") }
     }
 
     register<Copy>("buildAndCollect") {

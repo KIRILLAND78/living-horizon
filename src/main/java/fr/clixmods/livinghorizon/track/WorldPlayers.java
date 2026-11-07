@@ -38,17 +38,28 @@ import java.util.stream.Stream;
  */
 final class WorldPlayers {
     private static final Logger LOGGER = LoggerFactory.getLogger("Living Horizon");
+    /** The game mode a player file saves for spectator mode. */
+    private static final int SPECTATOR = 3;
 
     private WorldPlayers() {
     }
 
-    /** Every player the world saved whose name is known, as logged off. */
-    static List<PositionsMessage.Player> read(MinecraftServer server) {
-        return read(server.getWorldPath(LevelResource.PLAYER_DATA_DIR), server.getWorldPath(LevelResource.ROOT));
+    /**
+     * Every player the world saved whose name is known, as logged off; those saved in spectator
+     * mode left out when {@code leaveOutSpectators}, since the server hides them.
+     */
+    static List<PositionsMessage.Player> read(MinecraftServer server, boolean leaveOutSpectators) {
+        return read(server.getWorldPath(LevelResource.PLAYER_DATA_DIR), server.getWorldPath(LevelResource.ROOT),
+                leaveOutSpectators);
+    }
+
+    /** The same, from a world's folder and its players' folder, spectators kept. */
+    static List<PositionsMessage.Player> read(Path folder, Path world) {
+        return read(folder, world, false);
     }
 
     /** The same, from a world's folder and its players' folder. */
-    static List<PositionsMessage.Player> read(Path folder, Path world) {
+    static List<PositionsMessage.Player> read(Path folder, Path world, boolean leaveOutSpectators) {
         if (!Files.isDirectory(folder)) return List.of();
         Map<UUID, String> names = names(world);
         if (names.isEmpty()) return List.of();
@@ -72,7 +83,9 @@ final class WorldPlayers {
             }
             if (name == null) continue;
             try {
-                PositionsMessage.Player player = player(name, readTag(file), modified(file));
+                CompoundTag tag = readTag(file);
+                if (leaveOutSpectators && number(tag, "playerGameType") == SPECTATOR) continue;
+                PositionsMessage.Player player = player(name, tag, modified(file));
                 if (player != null) players.add(player);
             } catch (IOException | RuntimeException e) {
                 LOGGER.debug("Could not read the saved player {}", file, e);
