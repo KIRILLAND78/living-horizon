@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ MOD入りのサーバーが共有：出会ったことがなくても表示されます。歩き回る：周りを歩きます。静止：その場にとどまります。",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - サーバーが共有しない：出会った場所にのみ表示されます。歩き回る：周りを歩きます。静止：その場にとどまります。",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - livinghorizon.json の「%s」により、MODのすべてのMobとともに非表示です。",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ MOD入りのサーバーが共有：出会ったことがなくても表示されます。置いていった場所にとどまります。",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - サーバーが共有しない：出会った場所にのみ表示されます。置いていった場所にとどまります。",
   "livinghorizon.options.mobTypes.all": "すべて",

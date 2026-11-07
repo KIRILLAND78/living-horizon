@@ -159,17 +159,25 @@ public final class MobTypesScreen extends SideOptionsScreen {
             /*CycleButton<Mode> button = CycleButton.builder(Mode::label).withInitialValue(Mode.of(id, alive))
             *///?}
                     .withValues(alive ? Mode.MOVING : Mode.PLACED)
-                    .withTooltip(OptionInstance.cachedConstantTooltip(Component.translatable(KEY + tooltip, id)))
+                    .withTooltip(OptionInstance.cachedConstantTooltip(locked(id)
+                            ? Component.translatable(KEY + "locked.tooltip", id, FarConfig.wholeMod(id))
+                            : Component.translatable(KEY + tooltip, id)))
                     .create(0, 0, ICON_ROOM, 20, label, (b, mode) -> {
                         mode.apply(id);
                         changed();
                     });
+            button.active = !locked(id);
             buttons.put(id, button);
             ItemStack icon = icon(id);
             if (!icon.isEmpty()) icons.put(id, icon);
             switches.add(button);
         }
         list.addSmall(switches);
+    }
+
+    /** Hidden for its whole mod in the file ({@code "cobblemon:*"}): a switch cannot show it. */
+    private static boolean locked(String id) {
+        return FarConfig.get().locksMob(id);
     }
 
     /** A switch leaves 20 pixels of its 150-wide cell for the icon. */
@@ -234,16 +242,16 @@ public final class MobTypesScreen extends SideOptionsScreen {
 
         static Mode of(String id, boolean alive) {
             FarConfig config = FarConfig.get();
-            if (!config.mobTypes.contains(id)) return HIDDEN;
+            if (config.hidesMob(id) || !config.mobTypes.contains(id)) return HIDDEN;
             if (!alive) return SHOWN;
             return config.stillMobTypes.contains(id) ? STILL : ANIMATED;
         }
 
         void apply(String id) {
             FarConfig config = FarConfig.get();
-            config.mobTypes.remove(id);
+            if (locked(id)) return;
+            config.setMobShown(id, this != HIDDEN);
             config.stillMobTypes.remove(id);
-            if (this != HIDDEN) config.mobTypes.add(id);
             if (this == STILL) config.stillMobTypes.add(id);
         }
     }

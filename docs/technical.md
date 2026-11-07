@@ -451,6 +451,8 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
 - **Every kind of mob**, the game's and other mods', is shown from the start, walking, then left
   as the player sets it (`knownMobTypes`, offered once the game has registered them). Each client
   remembers other mods' mobs itself: the server only shares vanilla kinds.
+- **Hidden kinds.** `hiddenMobs` beats every other choice, name tags included: a mob of a kind
+  there (or of a mod named `modid:*`) is neither remembered nor drawn (`FarConfig.showsMob`).
 - **Vehicles** that are neither mobs nor the game's boats (an aircraft, a car, a minecart) are
   told by what their class does, never by a list of ids (`track/Vehicles`): one whose class
   answers who steers it (`getControllingPassenger`, as a boat's does: Immersive Aircraft's
@@ -1521,6 +1523,9 @@ Every setting is in `config/livinghorizon.json` (`FarConfig`). The file is read 
 written back with every setting in it, including the ones a newer version adds. Its
 `version` field is the file's layout, not a setting: an older file is brought up to date on
 load, one step per version (`FarConfig.migrate`, each step tested in `FarConfigTest`).
+`src/test/oldconfig` holds the file each released version wrote on its first start, its defaults
+as Gson saved them: `OldConfigTest` reads every one, brings it up to date, and checks that a
+player's choices survive. A release that changes the file's layout adds its own.
 
 ### The client's files
 
@@ -1639,6 +1644,7 @@ In three parts, on both screens: *General*, *Mobs* (the living kinds, mannequins
 | Setting | In game | Default | Range | What it does |
 |---|---|---|---|---|
 | `mobTypes` | General: Mobs & Entities... | Every mob and boat of the game and of other mods, and the vehicles their rider steers | | Which mobs and entities are shown, and remembered by this client. A change shows at once, the game paused or not (`MobMemory.kindsChanged`) |
+| `hiddenMobs` | Mobs & Entities..., *Hidden* | Empty | | Kinds never shown, over `mobTypes` and name tags: a type id, or `modid:*` for every kind of a mod (its switches then locked). A kind shown until now and switched to *Hidden* is written here, so a modpack can ship the list; *Defaults* keeps the `modid:*` entries. Ids the game does not have (a mod taken out) are kept, harmless; entries are tidied on load (lower case, a bare name read as `minecraft:`, empty ones and repeats dropped). Version 14 of the file lists there the kinds it knew and did not show that were shown by default: the game's, and other mods' that are not monsters (sorted once the game has registered them, `unsortedMobs`); other mods' monsters, hidden by default before 0.13, and kinds the game no longer has cannot be told apart from a choice and are shown |
 | `stillMobTypes` | Mobs & Entities..., *Still* | Happy ghast, mannequin | | Mobs shown standing still instead of walking their loop; a boat or a vehicle is only *Shown* or *Hidden* |
 | `scanRadius` | General: Scan Radius | `32` chunks | 4 to 1024 | Chunks around you read by a scan, in single player (32 chunks = 512 blocks) |
 | `foreseeRadius` | General: Guess Radius | `64` chunks | 4 to 1024 | Chunks around you *Guess Nearby Mobs* foresees the animals of the land nobody explored in |

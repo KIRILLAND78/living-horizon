@@ -78,9 +78,9 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>Only mobs that stay put are worth remembering: animals do, hostile mobs despawn as
  * soon as nobody is around. Which ones is {@link FarConfig#mobTypes}, plus every mob with
- * a name tag ({@link FarConfig#rememberNamedMobs}). A memory is dropped
- * when the mob is seen dying, or when this client comes back within range of where it
- * was and it is not there any more.
+ * a name tag ({@link FarConfig#rememberNamedMobs}), but never one of {@link FarConfig#hiddenMobs}.
+ * A memory is dropped when the mob is seen dying, or when this client comes back within
+ * range of where it was and it is not there any more.
  *
  * <p>Remembered per server across sessions, in {@code config/livinghorizon/mobs/<server>.json}.
  */
@@ -693,8 +693,7 @@ public final class MobMemory {
     }
 
     private static boolean worthRemembering(Entity mob, FarConfig config) {
-        if (config.rememberNamedMobs && mob.hasCustomName()) return true;
-        return config.mobTypes.contains(EntityType.getKey(mob.getType()).toString());
+        return config.showsMob(EntityType.getKey(mob.getType()).toString(), mob.hasCustomName());
     }
 
     /** A mount under another player belongs to that player's copy. */
@@ -1319,6 +1318,7 @@ public final class MobMemory {
     private void choose(String dimension, FarConfig config) {
         chooseSoon = false;
         Set<String> wanted = new HashSet<>(config.mobTypes);
+        Map<String, Boolean> hidden = new HashMap<>();
         // The mobs and the other entities, each shown or not and each limited on its own: a
         // crowd of mobs never pushes an aircraft out.
         List<Remembered> creatures = new ArrayList<>(), others = new ArrayList<>();
@@ -1326,6 +1326,7 @@ public final class MobMemory {
             if (!mob.dimension.equals(dimension) || !isHere(mob)
                     || (live.containsKey(mob.id) && mob.handover == null) || carried.contains(mob.id)) continue;
             if (!wanted.contains(mob.type) && !(config.rememberNamedMobs && mob.named)) continue;
+            if (hidden.computeIfAbsent(mob.type, config::hidesMob)) continue;
             boolean creature = creature(mob);
             if (!config.shows(creature)) continue;
             mob.distance = distance(mob.x, mob.y, mob.z);

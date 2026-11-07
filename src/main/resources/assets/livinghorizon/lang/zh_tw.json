@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ 由裝有本模組的伺服器共享：即使從未遇到也會顯示。遊蕩：四處走動。靜止：留在原處。",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - 不由伺服器共享：只在遇到過的地方顯示。遊蕩：四處走動。靜止：留在原處。",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - 已與其模組的所有生物一起被 livinghorizon.json 中的「%s」隱藏。",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ 由裝有本模組的伺服器共享：即使從未遇到也會顯示。停在被留下的地方。",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - 不由伺服器共享：只在遇到過的地方顯示。停在被留下的地方。",
   "livinghorizon.options.mobTypes.all": "全部",

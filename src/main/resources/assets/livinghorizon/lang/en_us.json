@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ shared by a server with the mod: shown even if never met. Roaming: walks around. Still: stays where it was.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - not shared by the server: shown only where it was met. Roaming: walks around. Still: stays where it was.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - hidden along with every mob of its mod by \"%s\" in livinghorizon.json.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ shared by a server with the mod: shown even if never met. Stays where it was left.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - not shared by the server: shown only where it was met. Stays where it was left.",
   "livinghorizon.options.mobTypes.all": "All",

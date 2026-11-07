@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ von einem Server mit der Mod geteilt: wird angezeigt, auch wenn nie angetroffen. Wandernd: läuft umher. Reglos: bleibt, wo es war.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - nicht vom Server geteilt: wird nur dort angezeigt, wo es angetroffen wurde. Wandernd: läuft umher. Reglos: bleibt, wo es war.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - zusammen mit allen Kreaturen seiner Mod durch „%s“ in livinghorizon.json versteckt.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ von einem Server mit der Mod geteilt: wird angezeigt, auch wenn nie angetroffen. Bleibt, wo es zurückgelassen wurde.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - nicht vom Server geteilt: wird nur dort angezeigt, wo es angetroffen wurde. Bleibt, wo es zurückgelassen wurde.",
   "livinghorizon.options.mobTypes.all": "Alle",

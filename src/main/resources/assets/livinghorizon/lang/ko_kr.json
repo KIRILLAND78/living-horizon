@@ -198,6 +198,7 @@
   "livinghorizon.options.mobTypes.shared": "%s ★",
   "livinghorizon.options.mobTypes.shared.tooltip": "%s - ★ 모드가 있는 서버가 공유: 만난 적이 없어도 표시됩니다. 돌아다님: 주변을 걸어 다닙니다. 정지: 있던 자리에 머뭅니다.",
   "livinghorizon.options.mobTypes.local.tooltip": "%s - 서버가 공유하지 않음: 만난 곳에서만 표시됩니다. 돌아다님: 주변을 걸어 다닙니다. 정지: 있던 자리에 머뭅니다.",
+  "livinghorizon.options.mobTypes.locked.tooltip": "%s - livinghorizon.json의 \"%s\"에 의해 해당 모드의 모든 몹과 함께 숨겨졌습니다.",
   "livinghorizon.options.mobTypes.vehicle.shared.tooltip": "%s - ★ 모드가 있는 서버가 공유: 만난 적이 없어도 표시됩니다. 두고 온 자리에 머뭅니다.",
   "livinghorizon.options.mobTypes.vehicle.local.tooltip": "%s - 서버가 공유하지 않음: 만난 곳에서만 표시됩니다. 두고 온 자리에 머뭅니다.",
   "livinghorizon.options.mobTypes.all": "모두",
