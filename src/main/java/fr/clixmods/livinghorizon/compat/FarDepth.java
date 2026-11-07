@@ -172,13 +172,25 @@ public final class FarDepth {
 
     /** Something is drawn past the render distance this frame, where Voxy's terrain could hide it. */
     private static boolean needed;
+    /** Something is drawn past the render distance this frame whose place on screen is not known. */
+    private static boolean anywhere;
 
     /**
-     * Called for anything drawn past the render distance. Without it the frame is left
-     * alone: three copies of a full-screen depth texture are no small cost for nothing.
+     * Called for anything drawn past the render distance, whose place on screen is handed over
+     * with {@link #figure} or {@link #around}. Without it the frame is left alone: copies of
+     * the depth texture are no small cost for nothing.
      */
     public static void needed() {
         needed = true;
+    }
+
+    /**
+     * {@link #needed()}, for something whose place on screen is not handed over: the far
+     * terrain's depth is worked on over the whole picture this frame.
+     */
+    public static void neededAnywhere() {
+        needed = true;
+        anywhere = true;
     }
 
     /** The world's entities are submitted: the next drawing of features is theirs. */
@@ -285,7 +297,10 @@ public final class FarDepth {
         FarConfig config = FarConfig.get();
         // The depth view shows the far terrain merged even when nothing far is drawn this frame.
         boolean wanted = needed || !config.optLazyDepth || config.debugDepthView != 0;
+        // The depth view shows the copies whole.
+        whole = anywhere || !figuresKnown || !config.optDepthRegion || config.debugDepthView != 0;
         needed = false;
+        anywhere = false;
         try {
             if (gpuPath()) {
                 // Distant Horizons alone: Voxy draws with OpenGL only. No shader pack either.
@@ -559,6 +574,7 @@ public final class FarDepth {
         if (w <= 0 || h <= 0) return false;
         prepare(w, h, f);
         notePicture(w, h);
+        region();
         if (FarConfig.get().debugDepthView != 0) copy(depthTexture, saved);
         copy(depthTexture, written);
         return true;
@@ -667,7 +683,8 @@ public final class FarDepth {
         if (broken) return "off";
         return switch (state) {
             // On in an earlier frame says nothing of this one: why this one did nothing, then.
-            case 1 -> mergedLastFrame ? "on, " + width + "x" + height : "waiting: " + reason;
+            case 1 -> mergedLastFrame ? "on, " + width + "x" + height
+                    + (partial() ? " (around the figures: " + REGION[2] + "x" + REGION[3] + ")" : "") : "waiting: " + reason;
             case 2 -> "not needed (Voxy writes its own depth)";
             default -> "waiting: " + reason;
         };
@@ -778,12 +795,13 @@ public final class FarDepth {
         prepare(w, h, f);
         notePicture(voxyWidth > 0 ? voxyWidth : w, voxyHeight > 0 ? voxyHeight : h);
         if (late) prepareLate();
+        else region();
 
         copy(depthTexture, late ? lateSaved : saved);
         // Voxy's blit is not ours, and draws into a framebuffer with colour: all it might touch is put back.
         GlState gl = GlState.save(3, GlState.COLOUR | GlState.SCISSOR_BOX | GlState.READ_FRAMEBUFFER);
         try {
-            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            scissor();
             GL11C.glColorMask(false, false, false, false);
             GL11C.glDepthMask(true);
             //? if >=26.3 {
@@ -796,6 +814,12 @@ public final class FarDepth {
             GL11C.glViewport(0, 0, pictureWidth, pictureHeight);
             Matrix4f transform = new Matrix4f(VoxyLink.gameProjection(viewport)).mul(VoxyLink.modelView(viewport));
             VoxyLink.blitDepth(pipeline, voxyTexture, target, viewport, transform);
+            // Voxy's blit leaves the scissor alone (0.2.16 to 0.2.20). One that turns it off wrote
+            // its depth outside the part put back this frame: from the next one on, all of it is.
+            if (!GL11C.glIsEnabled(GL11C.GL_SCISSOR_TEST) && partial() && !voxyUnscissored) {
+                voxyUnscissored = true;
+                LivingHorizonClient.LOGGER.warn("Voxy's depth blit turned the scissor off: the far terrain's depth is merged over the whole screen from now on");
+            }
         } finally {
             gl.restore();
         }
@@ -824,14 +848,15 @@ public final class FarDepth {
         prepare(w, h, f);
         notePicture(w, h);
         if (late) prepareLate();
+        else region();
         prepareDhProgram();
 
         copy(depthTexture, late ? lateSaved : saved);
         // No colour attached: blending and the colour masks are left alone.
-        GlState gl = GlState.save(1, 0);
+        GlState gl = GlState.save(1, GlState.SCISSOR_BOX);
         try {
             GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, target);
-            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            scissor();
             GL11C.glDisable(GL11C.GL_CULL_FACE);
             GL11C.glDisable(GL11C.GL_STENCIL_TEST);
             GL11C.glEnable(GL11C.GL_DEPTH_TEST);
@@ -915,6 +940,7 @@ public final class FarDepth {
         prepare(w, h, f);
         notePicture(w, h);
         if (late) prepareLate();
+        else region();
         prepareDhProgram();
         if (lodProgram == 0) {
             lodProgram = GlPrograms.fullScreen("Lodistance depth", LOD_MERGE, "gameDepth");
@@ -927,10 +953,10 @@ public final class FarDepth {
         float[] terms = DepthFar.terms(minecraft);
         boolean reversed = DepthFar.reversed(), zeroToOne = DepthFar.zeroToOne();
         // No colour attached: blending and the colour masks are left alone.
-        GlState gl = GlState.save(1, 0);
+        GlState gl = GlState.save(1, GlState.SCISSOR_BOX);
         try {
             GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, target);
-            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            scissor();
             GL11C.glDisable(GL11C.GL_CULL_FACE);
             GL11C.glDisable(GL11C.GL_STENCIL_TEST);
             GL11C.glEnable(GL11C.GL_DEPTH_TEST);
@@ -1046,10 +1072,11 @@ public final class FarDepth {
         // The framebuffer Voxy drew into has colour; ours has none, and needs neither blending
         // nor the colour masks touched.
         boolean colour = target != ownTarget;
-        GlState gl = GlState.save(3, colour ? GlState.COLOUR : 0);
+        GlState gl = GlState.save(3, (colour ? GlState.COLOUR : 0) | GlState.SCISSOR_BOX);
         try {
             GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, target);
-            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            // Outside the part merged, the depth is as the game left it: nothing to put back.
+            scissor();
             GL11C.glDisable(GL11C.GL_CULL_FACE);
             GL11C.glDisable(GL11C.GL_STENCIL_TEST);
             if (colour) {
@@ -1072,23 +1099,156 @@ public final class FarDepth {
         }
     }
 
+    // --- Where the depth is worked on -------------------------------------------------------
+
+    /** Pixels added round the figures' rectangle: a model outgrows its sphere a little (a tail, a wing). */
+    private static final int REGION_MARGIN = 8;
+    /** Past this share of the picture, all of the texture is worked on: a rectangle saves little then. */
+    private static final float REGION_MOST = 0.75f;
+    /** Past this many spheres in a frame, all of the texture is worked on. */
+    private static final int SPHERES_MAX = 8192;
+    /**
+     * The part of the depth texture this frame's copies and passes cover, from its bottom left
+     * corner: {@code x, y, width, height}. See {@link #region()}.
+     */
+    private static final int[] REGION = new int[4];
+    private static final int[] BOUNDS = new int[4], NEAR_BOUNDS = new int[4];
+    /** This frame works on all of the texture: see {@link #region()}. */
+    private static boolean whole;
+    /** Every figure of this frame was handed over before the entities are drawn: see {@link #figuresKnown()}. */
+    private static boolean figuresKnown;
+    /** Something else the far terrain's depth must cover this frame: a sphere each, around the camera. */
+    private static float[] around = new float[4 * 256];
+    private static int arounds;
+    /** Voxy's blit turned the scissor off once: it is not scissored again. */
+    private static boolean voxyUnscissored;
+
+    /**
+     * The figures of this frame were all handed over, and the entities are not drawn yet. From
+     * 1.21.9 the figures, birds and impostors are submitted before the entities are drawn; before
+     * that, they are drawn after {@link #before()}, which then does not know where they are and
+     * works on the whole texture.
+     */
+    public static void figuresKnown() {
+        figuresKnown = true;
+    }
+
+    /**
+     * Something drawn this frame that the far terrain's depth must cover, but not written into
+     * Voxy's: a figure nearer than the render distance, a bird, a box the occlusion queries test.
+     * A sphere {@code radius} blocks wide around {@code (x, y, z)} from the camera.
+     */
+    public static void around(double x, double y, double z, double radius) {
+        if (arounds * 4 >= around.length) {
+            if (around.length >= 4 * SPHERES_MAX) {
+                anywhere = true;
+                return;
+            }
+            around = java.util.Arrays.copyOf(around, around.length * 2);
+        }
+        int i = arounds++ * 4;
+        around[i] = (float) x;
+        around[i + 1] = (float) y;
+        around[i + 2] = (float) z;
+        around[i + 3] = (float) radius;
+    }
+
+    /**
+     * Works out the part of the depth texture this frame's copies and passes cover: the rectangle
+     * around the figures, the birds and the occlusion queries' boxes, a few pixels wider. Outside
+     * it the game's depth is never written, so there is nothing to put back, and the copies hold
+     * an older frame that nothing reads there. All of the texture when the figures were not known
+     * in time, something far was drawn somewhere unknown, a sphere reaches behind the camera, the
+     * rectangle covers most of the picture, the depth view is on (it shows the copies whole) or
+     * {@code optDepthRegion} is off. Called once the picture's size is known, before any copy.
+     */
+    private static void region() {
+        REGION[0] = REGION[1] = 0;
+        REGION[2] = width;
+        REGION[3] = height;
+        if (whole || voxyUnscissored) return;
+        int w = Math.min(pictureWidth, width), h = Math.min(pictureHeight, height);
+        if (w <= 0 || h <= 0) return;
+        int[] near = NEAR_BOUNDS;
+        if (!DepthMath.bounds(VIEW_PROJECTION, FIGURES, figures, BOUNDS, w, h, REGION_MARGIN)
+                || !DepthMath.bounds(VIEW_PROJECTION, around, arounds, near, w, h, REGION_MARGIN)) return;
+        if (near[2] > 0 && near[3] > 0) {
+            if (BOUNDS[2] > 0 && BOUNDS[3] > 0) {
+                int x1 = Math.max(BOUNDS[0] + BOUNDS[2], near[0] + near[2]);
+                int y1 = Math.max(BOUNDS[1] + BOUNDS[3], near[1] + near[3]);
+                BOUNDS[0] = Math.min(BOUNDS[0], near[0]);
+                BOUNDS[1] = Math.min(BOUNDS[1], near[1]);
+                BOUNDS[2] = x1 - BOUNDS[0];
+                BOUNDS[3] = y1 - BOUNDS[1];
+            } else {
+                System.arraycopy(near, 0, BOUNDS, 0, 4);
+            }
+        }
+        if ((float) BOUNDS[2] * BOUNDS[3] > REGION_MOST * w * h) return;
+        System.arraycopy(BOUNDS, 0, REGION, 0, 4);
+    }
+
+    /**
+     * For the game tests, between two frames: the last frame's part of the texture
+     * ({@code x, y, width, height}), the texture's size, how many spheres were handed over, and
+     * how many of their rectangles on screen reach out of that part (none, or a figure there
+     * showed through the far terrain).
+     */
+    public static int[] regionReport() {
+        int w = Math.min(pictureWidth, width), h = Math.min(pictureHeight, height);
+        int[] one = new int[4];
+        float[] sphere = new float[4];
+        int outside = 0;
+        for (int list = 0; list < 2; list++) {
+            float[] spheres = list == 0 ? FIGURES : around;
+            int count = list == 0 ? figures : arounds;
+            for (int i = 0; i < count; i++) {
+                System.arraycopy(spheres, i * 4, sphere, 0, 4);
+                if (DepthMath.rectangles(VIEW_PROJECTION, sphere, 1, one, w, h) == 0) continue;
+                if (one[0] < REGION[0] || one[1] < REGION[1] || one[0] + one[2] > REGION[0] + REGION[2]
+                        || one[1] + one[3] > REGION[1] + REGION[3]) outside++;
+            }
+        }
+        return new int[]{REGION[0], REGION[1], REGION[2], REGION[3], width, height, figures + arounds, outside};
+    }
+
+    /** Whether this frame works on less than all of the texture. */
+    private static boolean partial() {
+        return REGION[0] != 0 || REGION[1] != 0 || REGION[2] != width || REGION[3] != height;
+    }
+
+    /** Draws only inside this frame's part of the texture. */
+    private static void scissor() {
+        GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
+        GL11C.glScissor(REGION[0], REGION[1], REGION[2], REGION[3]);
+    }
+
     // --- Into Voxy's depth -------------------------------------------------------------------
 
     /** Our figures drawn past the render distance this frame: a sphere each, around the camera. */
-    private static final float[] FIGURES = new float[4 * 512];
+    private static float[] FIGURES = new float[4 * 512];
     private static int figures;
 
     /** A new frame: the figures of the last one are forgotten. */
     public static void beginFigures() {
         figures = 0;
+        arounds = 0;
+        figuresKnown = false;
     }
 
     /**
      * A figure drawn past the render distance this frame: a sphere {@code radius} blocks wide
-     * around {@code (x, y, z)} from the camera. Only there is Voxy's depth ever written.
+     * around {@code (x, y, z)} from the camera. Only there is Voxy's depth ever written, and the
+     * far terrain's depth covers it.
      */
     public static void figure(double x, double y, double z, double radius) {
-        if (figures >= FIGURES.length / 4) return;
+        if (figures * 4 >= FIGURES.length) {
+            if (FIGURES.length >= 4 * SPHERES_MAX) {
+                anywhere = true;
+                return;
+            }
+            FIGURES = java.util.Arrays.copyOf(FIGURES, FIGURES.length * 2);
+        }
         int i = figures++ * 4;
         FIGURES[i] = (float) x;
         FIGURES[i + 1] = (float) y;
@@ -1173,7 +1333,12 @@ public final class FarDepth {
             for (int framebuffer : new int[]{voxyOpaqueTarget, voxyTranslucentTarget}) {
                 GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, framebuffer);
                 for (int i = 0; i < count; i++) {
-                    GL11C.glScissor(RECTANGLES[i * 4], RECTANGLES[i * 4 + 1], RECTANGLES[i * 4 + 2], RECTANGLES[i * 4 + 3]);
+                    // Held to this frame's part of the copies: outside it they hold an older frame.
+                    int x0 = Math.max(RECTANGLES[i * 4], REGION[0]), y0 = Math.max(RECTANGLES[i * 4 + 1], REGION[1]);
+                    int x1 = Math.min(RECTANGLES[i * 4] + RECTANGLES[i * 4 + 2], REGION[0] + REGION[2]);
+                    int y1 = Math.min(RECTANGLES[i * 4 + 1] + RECTANGLES[i * 4 + 3], REGION[1] + REGION[3]);
+                    if (x1 <= x0 || y1 <= y0) continue;
+                    GL11C.glScissor(x0, y0, x1 - x0, y1 - y0);
                     GL11C.glDrawArrays(GL11C.GL_TRIANGLES, 0, 3);
                 }
             }
@@ -1253,10 +1418,11 @@ public final class FarDepth {
             copy(depthTexture, faded);
             // Our own framebuffer (the mask is only made there), depth only: blending and the
             // colour masks are left alone.
-            GlState gl = GlState.save(3, 0);
+            GlState gl = GlState.save(3, GlState.SCISSOR_BOX);
             try {
                 GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, target);
-                GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+                // The copies are this frame's only there; the figures are all inside it.
+                scissor();
                 GL11C.glDisable(GL11C.GL_CULL_FACE);
                 GL11C.glDisable(GL11C.GL_STENCIL_TEST);
                 GL11C.glEnable(GL11C.GL_DEPTH_TEST);
@@ -1332,8 +1498,9 @@ public final class FarDepth {
 
     // --- GPU objects ----------------------------------------------------------------------
 
+    /** Copies this frame's part of the texture: see {@link #region()}. */
     private static void copy(int from, int to) {
-        GlCalls.copyDepth(from, to, width, height, format);
+        GlCalls.copyDepth(from, to, REGION[0], REGION[1], REGION[2], REGION[3], format);
     }
 
     private static void prepare(int w, int h, int f) {

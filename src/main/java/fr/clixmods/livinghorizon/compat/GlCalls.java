@@ -235,9 +235,15 @@ public final class GlCalls {
      * format, from their bottom left corner, stencil included.
      */
     static void copyDepth(int from, int to, int width, int height, int format) {
+        copyDepth(from, to, 0, 0, width, height, format);
+    }
+
+    /** {@link #copyDepth(int, int, int, int, int)} of the rectangle at {@code x, y} only, the same place in both. */
+    static void copyDepth(int from, int to, int x, int y, int width, int height, int format) {
+        if (width <= 0 || height <= 0) return;
         know();
         if (copyImage) {
-            GL43C.glCopyImageSubData(from, GL11C.GL_TEXTURE_2D, 0, 0, 0, 0, to, GL11C.GL_TEXTURE_2D, 0, 0, 0, 0, width, height, 1);
+            GL43C.glCopyImageSubData(from, GL11C.GL_TEXTURE_2D, 0, x, y, 0, to, GL11C.GL_TEXTURE_2D, 0, x, y, 0, width, height, 1);
             return;
         }
         boolean stencil = hasStencil(format);
@@ -265,7 +271,7 @@ public final class GlCalls {
         GL30C.glFramebufferTexture2D(GL30C.GL_DRAW_FRAMEBUFFER, attachment, GL11C.GL_TEXTURE_2D, to, 0);
         // A blit is cut by the scissor test, and by nothing else that is set.
         if (scissor) GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
-        GL30C.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
+        GL30C.glBlitFramebuffer(x, y, x + width, y + height, x, y, x + width, y + height,
                 GL11C.GL_DEPTH_BUFFER_BIT | (stencil ? GL11C.GL_STENCIL_BUFFER_BIT : 0), GL11C.GL_NEAREST);
         if (scissor) GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
         GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, read);

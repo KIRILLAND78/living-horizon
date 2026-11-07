@@ -279,6 +279,12 @@ come back, add it here in the same pull request: this file is what the next sess
 - **Far terrain depth missing** (depth view without Voxy's or Distant Horizons' terrain,
   mobs not hidden behind its hills): read the *Far terrain depth* line of the debug panel or
   `/livinghorizon lod`, with *Lazy far depth* off, since lazy depth hides the real reason.
+- **Part of the far terrain's depth missing, cut along a straight line** (a far mob showing
+  through Voxy's or Distant Horizons' terrain on one side of an edge, the depth view fine):
+  the merge is held to a rectangle round the figures (`FarDepth.region`, *Local Far Depth*).
+  Something drawn past the render distance must hand its place over (`FarDepth.figure` or
+  `around`) or say it has none (`neededAnywhere`), before `FarDepth.before`. Turn
+  `optDepthRegion` off to tell.
 - **Distant Horizons version.** Players run old ones: `DhDepth` and `DhSource` work from
   2.3 on and fall back where its API is missing. Before 3.3.2 there is no depth layout
   (`getDepthRange`, `getDepthDirection`: OpenGL's usual one), before 3.3 the depth texture is
