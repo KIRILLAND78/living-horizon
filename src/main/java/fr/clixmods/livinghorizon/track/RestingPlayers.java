@@ -116,6 +116,12 @@ public final class RestingPlayers {
             return new Spot(name, id, textures, signature, dimension, x, y, z, yaw, lastSeen, mount, gear, rest);
         }
 
+        /** Resting where {@code other} rests, on the same mount: only how they look may differ. */
+        boolean restsLike(Spot other) {
+            return dimension.equals(other.dimension) && x == other.x && y == other.y && z == other.z && yaw == other.yaw
+                    && Objects.equals(mount, other.mount) && Objects.equals(rest, other.rest);
+        }
+
         GameProfile profile() {
             UUID uuid = id != null ? id : UUIDUtil.createOfflinePlayerUUID(name);
             if (textures == null) return new GameProfile(uuid, name);
@@ -392,7 +398,9 @@ public final class RestingPlayers {
 
     /** Whether a spot shows what the server says of how its player looks. */
     private static boolean looksLike(Spot spot, PositionsMessage.Look look) {
-        return (look.textures() == null || look.textures().equals(spot.textures())) && look.gear().equals(spot.gear());
+        // No gear known here is none at all, as the server writes it.
+        List<String> gear = spot.gear() != null ? spot.gear() : List.of();
+        return (look.textures() == null || look.textures().equals(spot.textures())) && look.gear().equals(gear);
     }
 
     /** The host's test players the server no longer lists: the host cleared them. */
@@ -452,7 +460,13 @@ public final class RestingPlayers {
     private void put(Spot spot) {
         Spot old = spots.put(key(spot.name()), spot);
         shownStale = true;
-        if (old != null) puppets.remove(old);
+        RestingPuppet puppet = old != null ? puppets.remove(old) : null;
+        if (puppet != null && old.restsLike(spot)) {
+            // Only how they look changed: the same puppet goes on where it is, dressed again.
+            puppet.dress(spot);
+            puppets.put(spot, puppet);
+            if (lookedAt == old) lookedAt = spot;
+        }
         if (!fakes.contains(key(spot.name()))) dirty = true;
     }
 

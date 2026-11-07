@@ -675,6 +675,14 @@ come back, add it here in the same pull request: this file is what the next sess
   spot in the air, the shore, the boat) is kept with the spot and saved, and a new puppet starts
   there; before the blocks are ever loaded, the far world is asked (`guess`). The `restkept`
   scenario checks it.
+- **Players who logged off jumping back a few blocks, near the camera** (as their skin arrives,
+  or every few seconds in single player): a new `Spot` for the same place made a new
+  `RestingPuppet`, which starts on the spot. A skin fetched from Mojang, the server's word on
+  their look, and the host's own test players echoed by its server (gear `null` here, `[]`
+  there) all did. `RestingPlayers.put` keeps the puppet and dresses it again
+  (`RestingPuppet.dress`) when only the look changed (`Spot.restsLike`). One shoved off a ledge
+  and standing in the air: shoved until its box no longer meets yours, it kept a sliver of the
+  rim under it; past `RIM` it goes over and falls (`tipOver`). The `restingedge` scenario checks both.
 - **A rider turned sideways** (a player resting in a boat facing left or right of it): the seat's
   yaw is the rider's body (`yBodyRot`), which the boat keeps in line with itself, never the head
   (`getYRot`), which looks wherever the player looked as they left.

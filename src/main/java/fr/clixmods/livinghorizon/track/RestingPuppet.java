@@ -121,6 +121,8 @@ public final class RestingPuppet extends RemotePlayer {
     private static final int STAND_TICKS = 15;
     /** Ticks it stands at night with no bed, looking around, before looking for one again. */
     private static final int AWAKE = 200;
+    /** Half the width under the middle of its feet that must stand on something once shoved: less, it goes over the edge. */
+    private static final double RIM = 0.15;
     /** Blocks it is shoved aside in a tick at most, out of the way of whoever walks into it. */
     private static final double SHOVE = 0.25;
     /** Ticks a walk may keep running into you before it gives up and goes another way. */
@@ -194,8 +196,8 @@ public final class RestingPuppet extends RemotePlayer {
     /** In ten players, how many take shelter from the rain; and blocks above a spot looked at for a roof. */
     private static final int SHELTERING = 6, ROOF = 20;
 
-    private final RestingPlayers.Spot spot;
-    private final PlayerInfo info;
+    private RestingPlayers.Spot spot;
+    private PlayerInfo info;
     private final Random random;
     private final Footing.Source blocks;
     private final @Nullable RestingMount mount;
@@ -304,6 +306,24 @@ public final class RestingPuppet extends RemotePlayer {
         Gear.apply(this, spot.gear(), level.registryAccess());
         held = getItemBySlot(EquipmentSlot.MAINHAND).copy();
         heldOff = getItemBySlot(EquipmentSlot.OFFHAND).copy();
+    }
+
+    /**
+     * The same player, resting in the same place, in a new skin or new gear (fetched from
+     * Mojang, or what the server says): dressed again where it stands, never made again,
+     * which would put it back where its player logged off.
+     */
+    void dress(RestingPlayers.Spot now) {
+        spot = now;
+        info = new PlayerInfo(now.profile(), false);
+        boolean sword = armed, shield = raised;
+        Gear.apply(this, now.gear(), level().registryAccess());
+        held = getItemBySlot(EquipmentSlot.MAINHAND).copy();
+        heldOff = getItemBySlot(EquipmentSlot.OFFHAND).copy();
+        // The sword and shield it holds now are its own, given back in hand over the new gear.
+        armed = false;
+        raised = false;
+        arm(sword, shield);
     }
 
     @Override
@@ -538,8 +558,27 @@ public final class RestingPuppet extends RemotePlayer {
         double x = getX() + dx / d * step, z = getZ() + dz / d * step;
         if (!Footing.fits(blocks, x, getY(), z, Footing.STANDING)) return true;
         setPos(x, getY(), z);
+        if (!Footing.supported(blocks, x, getY(), z, RIM)) {
+            tipOver(dx / d, dz / d);
+            return true;
+        }
         if (activity == Activity.SIT) start(Activity.IDLE, 40 + random.nextInt(40));
         return true;
+    }
+
+    /**
+     * Shoved over an edge, its feet on the rim alone: it goes over, along {@code nx},
+     * {@code nz}, until nothing holds it, and falls ({@link #settle}) rather than stand in the air.
+     */
+    private void tipOver(double nx, double nz) {
+        double y = getY();
+        for (int i = 0; i < 12 && Footing.supported(blocks, getX(), y, getZ()); i++) {
+            double x = getX() + nx * 0.05, z = getZ() + nz * 0.05;
+            if (!Footing.fits(blocks, x, y, z, Footing.STANDING)) break;
+            setPos(x, y, z);
+        }
+        // Whatever it was doing, or walking to, it falls first.
+        start(Activity.IDLE, 40 + random.nextInt(40));
     }
 
     // --- In the saddle ----------------------------------------------------------------------

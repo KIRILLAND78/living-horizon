@@ -44,6 +44,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -360,7 +361,7 @@ public final class LivingHorizonCommand {
             double x = self.getX() + Math.cos(angle) * distance, z = self.getZ() + Math.sin(angle) * distance;
             BlockPos column = BlockPos.containing(x, self.getY(), z);
             double y = self.level().getChunkSource().hasChunk(column.getX() >> 4, column.getZ() >> 4)
-                    ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING, column.getX(), column.getZ())
+                    ? groundNear(self.level(), column)
                     : self.getY();
             if (mount != null) y += mount.seatY();
             // On a mount that flies, at your height, as you fly: above the ground still where it rises higher.
@@ -384,6 +385,26 @@ public final class LivingHorizonCommand {
             source.feedback(Component.translatable("livinghorizon.offline.test.switchedOff", names.get(0)));
         }
         return count;
+    }
+
+    /**
+     * The ground of a column near {@code at}'s height: its top, or under a ceiling (the Nether's
+     * roof) the first floor with room for a player below a few blocks over {@code at}; at its
+     * height when there is none.
+     */
+    private static double groundNear(Level level, BlockPos at) {
+        int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, at.getX(), at.getZ());
+        if (!level.dimensionType().hasCeiling()) return top;
+        BlockPos.MutableBlockPos feet = new BlockPos.MutableBlockPos(at.getX(), Math.min(top, at.getY() + 4), at.getZ());
+        for (int i = 0; i < 64 && feet.getY() > level.getMinY(); i++, feet.move(0, -1, 0)) {
+            BlockPos below = feet.below();
+            if (!level.getBlockState(below).getCollisionShape(level, below).isEmpty()
+                    && level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()
+                    && level.getBlockState(feet.above()).getCollisionShape(level, feet.above()).isEmpty()) {
+                return feet.getY();
+            }
+        }
+        return at.getY();
     }
 
     private static boolean taken(RestingPlayers resting, String name) {
