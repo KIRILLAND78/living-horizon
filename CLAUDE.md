@@ -817,7 +817,9 @@ server, a LAN host included), then **Client** (what a player sees and feels in g
 player included), each with the kinds it needs, New, Improved, Fixed. Versions released
 before the split keep their flat `### New` headings. The `changelog` CI job checks all of
 this; `node .github/scripts/changelog-notes.js unreleased en` prints the next version's
-section as it will read.
+section as it will read. A branch started before the entry files moves its bullets into them
+with `node .github/scripts/changelog-split.js`, then keeps `develop`'s `en.md` and `fr.md`
+where they conflict.
 
 The release turns the files into the version's section of `changelog/en.md` and
 `changelog/fr.md` (`### Server` / `#### New` and so on, in the order of the file names),

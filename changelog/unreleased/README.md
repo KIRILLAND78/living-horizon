@@ -30,3 +30,7 @@ node .github/scripts/changelog-notes.js unreleased en
 ```
 
 `node .github/scripts/changelog-check.js origin/develop` checks them, as the CI does.
+
+A branch started before these files, with bullets written into `en.md` and `fr.md`: run
+`node .github/scripts/changelog-split.js` on it, commit, then merge `develop` and keep
+`develop`'s `changelog/en.md` and `changelog/fr.md` where they conflict.
