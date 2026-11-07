@@ -544,6 +544,16 @@ come back, add it here in the same pull request: this file is what the next sess
   GeckoLib 4's `createRenderState()` returns null and its `render` draws the entity it was
   last handed. `GhostRenderer.drawable` leaves such types out (issue #67 is about drawing
   them), and a renderer that throws while extracting is left out too, logged once.
+- **Lycanites Mobs blank or through the far terrain** (Forge 1.20.1: its pictures empty in the
+  impostor screen, its far models seen through Voxy's or Distant Horizons' hills): Lycanites queues
+  the opaque parts of its OBJ models (`VBOBatcher.queueDeferred`) and draws them at Forge's
+  `AFTER_ENTITIES` stage, after the bake and after `FarDepth.after`. `compat/LycaniteMobs.drawQueued`
+  draws the queue after each baked view and before the bracket closes. Another mod that defers its
+  draws that way needs the same.
+- **Entities on a Valkyrien Skies ship drawn in the wrong place far away** (a seat, a vehicle or its
+  rider floating, or nowhere): Valkyrien Skies keeps them in its shipyard, far from the world, and its
+  renderer moves them onto the ship from the camera, whatever place it is handed.
+  `compat/ValkyrienSkies.onShip` leaves them to the game (`GhostRenderer.drawable`).
 - **Perched birds darting to and fro, standing in the air or inside a block** (tits, robins,
   ducks): a move's progress is `timer / length`, so the rest after landing is `rest`, never
   added to `length` (which put an arrived bird back part of the way). Where a bird lands comes
