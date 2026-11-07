@@ -2,9 +2,11 @@
 /*
  * Checks the changelog of a pull request against its base branch:
  *
- * - entries only go into the Unreleased section: a released version never gains an
- *   entry, and no new dated section appears for a version that was never tagged
- *   (the release dates the Unreleased section by itself);
+ * - a new entry is a file of its own in changelog/unreleased/, in English and French
+ *   (changelog-fragments.js has the format), never a bullet written into en.md or fr.md:
+ *   the release puts the files under the version it dates;
+ * - a released version never gains an entry, and no new dated section appears for a
+ *   version that was never tagged;
  * - the section headings are the ones the release scripts read: "### Server" and
  *   "### Client" (Serveur, Client), each with "#### New", "#### Improved", "#### Fixed"
  *   (Nouveautés, Améliorations, Corrections). Released versions written before the
@@ -19,6 +21,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const fragments = require('./changelog-fragments');
 
 const base = process.argv[2];
 if (!base) {
@@ -65,7 +68,8 @@ function parse(text, lang) {
 
 const entries = r => r.kinds.reduce((n, k) => n + k.entries, 0);
 const tags = new Set(git(['tag', '--list', 'v*']).split('\n').map(t => t.trim().slice(1)));
-const errors = [];
+const read = fragments.read();
+const errors = read.errors.slice();
 const files = {};
 
 for (const lang of ['en', 'fr']) {
@@ -92,6 +96,9 @@ for (const lang of ['en', 'fr']) {
       if (kindsSeen.has(key)) errors.push(name + ': "' + (k.flat ? '### ' : '#### ') + k.heading + '" appears twice' + (k.area ? ' under "### ' + k.area + '"' : '') + ' of "' + r.title + '": merge its entries into the first one.');
       kindsSeen.add(key);
     }
+    if (r.unreleased && entries(r)) {
+      errors.push(name + ': "## ' + r.title + '" has ' + entries(r) + ' entries written into it. Write each one as a file of its own in changelog/unreleased/ (see its README.md) instead: the release adds them here.');
+    }
     if (!r.version) continue;
     const old = before.find(o => o.version === r.version);
     if (old && entries(r) > entries(old)) {
@@ -115,4 +122,4 @@ for (let i = 0; i < Math.max(en.length, fr.length); i++) {
 
 for (const e of errors) console.log('::error::' + e);
 if (errors.length) process.exit(1);
-console.log('The changelog is in order.');
+console.log('The changelog is in order: ' + read.fragments.length + ' entries wait for the next release.');

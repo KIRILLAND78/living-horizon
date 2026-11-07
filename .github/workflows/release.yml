@@ -271,9 +271,10 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add stonecutter.properties.toml
           # The changelog is dated in the same commit, so the tag carries it: the
-          # "Unreleased" section becomes this version.
+          # entries waiting in changelog/unreleased/ become this version's section,
+          # and their files are deleted.
           node .github/scripts/changelog-release.js "${VERSION}"
-          git add changelog
+          git add -A changelog
           git commit -m "chore: release v${VERSION}"
           git tag "v${VERSION}"
           git push origin HEAD:"${{ github.ref_name }}"

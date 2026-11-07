@@ -1,6 +1,6 @@
 ---
 name: changelog-writing
-description: Write, edit or rewrite the changelog of Living Horizon (changelog/en.md and changelog/fr.md) as professional release notes for Minecraft players - a benefit-first title, then what the player now sees or can do, why it matters and any condition, with no implementation details and no over-promising. Use for every changelog entry added in a pull request, for any rewording of existing entries, and when the user asks to clean up, rewrite or proofread the changelog.
+description: Write, edit or rewrite the changelog of Living Horizon (the entry files of changelog/unreleased/, and changelog/en.md and changelog/fr.md) as professional release notes for Minecraft players - a benefit-first title, then what the player now sees or can do, why it matters and any condition, with no implementation details and no over-promising. Use for every changelog entry added in a pull request, for any rewording of existing entries, and when the user asks to clean up, rewrite or proofread the changelog.
 ---
 
 # Writing the changelog
@@ -13,24 +13,39 @@ the code does.
 
 ## Steps
 
-1. Read `changelog/en.md` and `changelog/fr.md` as they are now, and the diff the entry is for.
+1. Read what waits for the next release (`node .github/scripts/changelog-notes.js unreleased en`,
+   then `fr`), the last version of `changelog/en.md` for the tone, and the diff the entry is for.
 2. Check every fact against the code or the diff: what the change does, where it applies
    (Minecraft version, loader, shaders, Voxy or Distant Horizons), any default value, and
    whether it needs the mod on the server. Setting and screen names come from
    `src/main/resources/assets/livinghorizon/lang/en_us.json` and `fr_fr.json`, exactly as
    the game shows them.
-3. Write the English and the French entry together (*Voice*, *Entry pattern*, *Rules*). Both
-   files keep the same parts, kinds and number of bullets, in the same order.
+3. Write the English and the French entry together (*Voice*, *Entry pattern*, *Rules*), in a
+   new file of `changelog/unreleased/` named after the change, one file per bullet (*Structure*).
+   Never write a new bullet into `changelog/en.md` or `changelog/fr.md`: the release does.
 4. Read each entry back as a player would and check it against *Before you finish*.
-5. Run `node .github/scripts/changelog-check.js origin/develop` (headings, a released version
-   gains no entry, both files match).
+5. Run `node .github/scripts/changelog-check.js origin/develop` (the entry files, a released
+   version gains no entry, both languages match).
 
 ## Structure
 
-Keep the structure the CI checks (CLAUDE.md, *Changelog*). Never add an empty section.
+Keep the structure the CI checks (CLAUDE.md, *Changelog*). An entry is a file of
+`changelog/unreleased/` (`mac-crash.md`), English and French together:
 
 ```
-## Unreleased                         ## Prochaine version
+part: client
+kind: fixed
+
+en: **Crash on Mac fixed** — The game no longer crashes about a second after you join a world on a Mac.
+
+fr: **Plantage sur Mac corrigé** — Le jeu ne plante plus environ une seconde après que vous avez rejoint un monde sur Mac.
+```
+
+The release puts it under the version it dates, in both files, with the headings below
+(the order of the file names inside each kind). A dated section that is reworded keeps them.
+
+```
+## 0.17.0 — 2026-11-20                ## 0.17.0 — 2026-11-20
 ### Server                            ### Serveur
 #### New / Improved / Fixed           #### Nouveautés / Améliorations / Corrections
 ### Client                            ### Client
@@ -43,7 +58,7 @@ Keep the structure the CI checks (CLAUDE.md, *Changelog*). Never add an empty se
 - A change felt on both sides gets a bullet in each, each from its own side.
 
 Versions released before the Server/Client split keep their flat `### New` headings. New
-entries only go under *Unreleased*; a dated section is only reworded when the user asks for
+entries only go into `changelog/unreleased/`; a dated section is only reworded when the user asks for
 a rewrite of released versions, and then never gains a bullet, never changes order and
 keeps every real feature.
 
@@ -177,11 +192,11 @@ Typical drafts, and what they become:
 
 ## Reference
 
-What a finished section looks like (illustration only: never copy an entry that is not in
-the diff).
+What a released section looks like once the release has merged its files (illustration
+only: never copy an entry that is not in the diff).
 
 ```
-## Unreleased
+## 0.15.0 — 2026-10-31
 
 ### Server
 
@@ -227,7 +242,8 @@ The French register, for the same kind of entries:
 - Is every estimate called an estimate, and every sensitive server option said to be on
   or off by default?
 - Same terms as the table, *vous* in French, compatibility last?
-- Same bullets, in the same order, in both files?
+- One file per bullet in `changelog/unreleased/`, with its `en:` and `fr:`, and nothing
+  written into `changelog/en.md` or `changelog/fr.md`?
 
-Give the user the result, not a commentary on each change: the files are the deliverable.
+Give the user the result, not a commentary on each change: the entry files are the deliverable.
 Say if an entry was ambiguous and how it was read.

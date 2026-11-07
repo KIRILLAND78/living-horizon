@@ -15,9 +15,10 @@ clone private and open a pull request when it is ready.
 5. Add yourself to `CREDITS.md` in your pull request, with a few words on what you brought,
    and to the other places the `add-contributor` skill lists (an AI agent does it for you if
    you are not credited yet).
-6. If the change shows to players, add it to `changelog/en.md` and `changelog/fr.md`, under
-   *Unreleased* / *Prochaine version*, in one short sentence a player understands, under
-   *Server* or *Client* (*Serveur* / *Client*) and *New*, *Improved* or *Fixed*.
+6. If the change shows to players, add a file to `changelog/unreleased/` (its `README.md`
+   shows how): one short sentence a player understands, in English and French, for
+   *Server* or *Client* and *New*, *Improved* or *Fixed*. Never edit `changelog/en.md` or
+   `changelog/fr.md` yourself: the release writes them.
 
 `CLAUDE.md` describes the full conventions of this repository.
 

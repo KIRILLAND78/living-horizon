@@ -800,27 +800,33 @@ come back, add it here in the same pull request: this file is what the next sess
 ## Changelog
 
 **Every change, every push.** Whenever you work on something, write its changelog entry
-in the same pull request, and before every push re-read both changelog files against what
+in the same pull request, and before every push re-read its entry files against what
 you are about to push: each player-visible change has its bullet, in both languages, and
 no bullet describes something that is not in the diff. Never push first and fix the
 changelog in a later commit or pull request.
 
-A pull request that changes what a player sees or feels adds its entry to
-`changelog/en.md` and `changelog/fr.md`, under `## Unreleased` / `## Prochaine version`
-and nowhere else: a dated section is a version already released, never given an entry, and
-reworded only when the user asks for it. A version
-is split in two parts, **Server** first (what a server owner installs, sets up or gets, and
-what the mod does on a server, a LAN host included), then **Client** (what a player sees and
-feels in game, single player included): `### Server` / `### Client` (`### Serveur` /
-`### Client`), each with the kinds it needs under it, `#### New`, `#### Improved`,
-`#### Fixed` (`#### Nouveautés`, `#### Améliorations`, `#### Corrections`); a kind with
-nothing in it is left out. Both files have the same parts, kinds and number of bullets, in
-the same order. Versions released before the split keep their flat `### New` headings. The
-`changelog` CI job checks all of this.
+A pull request that changes what a player sees or feels adds each of its entries as a file
+of its own in `changelog/unreleased/` (named after the change; its `README.md` has the
+format): `part: server` or `client`, `kind: new`, `improved` or `fixed`, then the bullet in
+English (`en:`) and in French (`fr:`). **Never write a bullet into `changelog/en.md` or
+`changelog/fr.md`**: two pull requests editing the same lines there conflicted on every
+rebase, while two files never do. A dated section there is a version already released, never
+given an entry, and reworded only when the user asks for it. A version is split in two parts,
+**Server** first (what a server owner installs, sets up or gets, and what the mod does on a
+server, a LAN host included), then **Client** (what a player sees and feels in game, single
+player included), each with the kinds it needs, New, Improved, Fixed. Versions released
+before the split keep their flat `### New` headings. The `changelog` CI job checks all of
+this; `node .github/scripts/changelog-notes.js unreleased en` prints the next version's
+section as it will read. A branch started before the entry files moves its bullets into them
+with `node .github/scripts/changelog-split.js`, then keeps `develop`'s `en.md` and `fr.md`
+where they conflict.
 
-The release dates the section, opens a new empty one, and posts the entries on Modrinth
-(Changelog tab), CurseForge (file page) and Discord, and the game shows them in its
-changelog screen. Players read them, so **every entry is written with the
+The release turns the files into the version's section of `changelog/en.md` and
+`changelog/fr.md` (`### Server` / `#### New` and so on, in the order of the file names),
+deletes them, and posts the entries on Modrinth
+(Changelog tab), CurseForge (file page) and Discord. The game shows them in its changelog
+screen, under *Unreleased* until then: the build merges the files into the jar's copy
+(`gradle/target.gradle.kts`, the same layout as `.github/scripts/changelog-fragments.js`). Players read them, so **every entry is written with the
 `changelog-writing` skill** (`.claude/skills/changelog-writing/`), which holds the style,
 the vocabulary and examples. In short:
 
