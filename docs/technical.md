@@ -485,6 +485,14 @@ starts its loop at its own moment, drawn from its UUID. `track/MobMemory` keeps 
   stands where it was left, as a boat does: no animation, and only this client remembers it.
   So a kind that is not alive, a boat included, is only *Shown* or *Hidden* there, never
   *Roaming* or *Still*.
+- **Minecarts rolling on.** The server sends a minecart 128 blocks away at most (8 chunks, two
+  less than an animal), but moves it in every chunk within its simulation distance of a
+  player. One still moving when the server stops sending it rolls on along its rails
+  (`track/MinecartCoast`: the server's rail physics, `OldMinecartBehavior.moveAlongTrack`,
+  with its slopes, curves, powered rails and friction), while it stays within
+  `getServerSimulationDistance()` of this player and on blocks this client has; off its rails
+  it stops. In single player `ServerMobs` puts it where the server has it every few ticks, and
+  its run ends once the server no longer moves it.
 - **A save that fails.** On the client a chest boat or minecart has the game's own hold, 27
   slots, sized again only when it is loaded from a save, which the client never does: another
   mod's larger one that writes its slots one by one (Shippy Ships' galleon, 504) threw as the

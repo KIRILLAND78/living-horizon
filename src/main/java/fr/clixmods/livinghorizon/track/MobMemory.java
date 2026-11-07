@@ -18,6 +18,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.util.Util;
@@ -160,6 +161,8 @@ public final class MobMemory {
         transient int chosenIn;
         /** When it was last drawn, in nanoseconds; 0 if never. */
         transient long drawnAt;
+        /** A minecart still rolling along its rails, where the server keeps moving it; null once it stands. */
+        transient @Nullable MinecartCoast coast;
 
         /** Said by the renderer each frame it draws this copy. */
         public void drawn() { drawnAt = System.nanoTime(); }
@@ -680,6 +683,7 @@ public final class MobMemory {
         Remembered fresh = mobs.get(entity.getUUID());
         if (fresh != null) {
             if (mob instanceof LivingEntity living) fresh.head = living.yHeadRot;
+            fresh.coast = MinecartCoast.of(mob, mob.isVehicle());
             if (joinedPuppet != null) {
                 fresh.puppet = joinedPuppet;
                 fresh.motion = joined.motion;
@@ -1067,6 +1071,7 @@ public final class MobMemory {
                 motionNanos += System.nanoTime() - moving;
             } else {
                 long holding = System.nanoTime();
+                if (mob.coast != null) roll(level, mob);
                 hold(mob.puppet, mob);
                 motionNanos += System.nanoTime() - holding;
             }
@@ -1085,7 +1090,22 @@ public final class MobMemory {
         return mob.motion;
     }
 
-    /** Where it was, facing where it faced, not moving: a boat or another vehicle, which has no animation. */
+    /**
+     * A minecart that left rolling rolls on, as long as the server would move it: in a
+     * chunk within its simulation distance of this player (other players are not counted).
+     */
+    private void roll(ClientLevel level, Remembered cart) {
+        int cx = (int) Math.floor(cart.x) >> 4, cz = (int) Math.floor(cart.z) >> 4;
+        int range = level.getServerSimulationDistance();
+        if (Math.max(Math.abs(cx - ((int) Math.floor(selfX) >> 4)), Math.abs(cz - ((int) Math.floor(selfZ) >> 4))) > range) return;
+        MinecartCoast coast = cart.coast;
+        if (coast == null) return;
+        MinecartCoast.Ground ground = (x, y, z) -> level.hasChunk(x >> 4, z >> 4) ? level.getBlockState(new BlockPos(x, y, z)) : null;
+        if (!coast.tick(ground, cart)) cart.coast = null;
+        dirty = true;
+    }
+
+    /** Where it is, facing where it faces: a boat or another vehicle, which has no animation. */
     private static void hold(Entity puppet, Remembered mob) {
         puppet.setOldPosAndRot();
         puppet.setPos(mob.x, mob.y, mob.z);
@@ -1333,6 +1353,9 @@ public final class MobMemory {
                 mob.serverBody = where.body();
                 mob.serverHead = where.head();
                 sit(mob, where.sitting());
+                // A minecart rolls on between two answers from where the server has it, and
+                // stops where the server no longer moves it.
+                if (!where.simulated()) mob.coast = null;
             }
             for (UUID id : answer.gone()) {
                 if (!live.containsKey(id)) forget(id);
