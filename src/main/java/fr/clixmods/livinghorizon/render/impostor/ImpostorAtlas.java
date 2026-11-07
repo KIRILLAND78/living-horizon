@@ -839,17 +839,18 @@ public final class ImpostorAtlas {
     /** A figure's state for one view, still and lit evenly; seated if its key says so. */
     private static EntityRenderState staged(Minecraft minecraft, Request request, int view) {
         Entity puppet = request.puppet;
-        if (!(puppet instanceof LivingEntity)) {
-            // A boat, a minecart: no body to turn in its state, the entity itself is turned
-            // for each view, the way stage turns a mob's body. Put back after the bake.
-            float facing = ImpostorViews.facing(view);
-            puppet.setYRot(facing);
-            puppet.yRotO = facing;
-            puppet.setXRot(0f);
-            puppet.xRotO = 0f;
-        }
+        // A boat, a minecart: no body to turn in its state, the entity itself is turned
+        // for each view, the way stage turns a mob's body. Put back after the bake.
+        if (!(puppet instanceof LivingEntity)) turn(puppet, ImpostorViews.facing(view));
         EntityRenderState state = GhostRenderer.extract(minecraft.getEntityRenderDispatcher(), puppet, 1.0f, FULL_BRIGHT);
         if (state == null) throw new LeftOut();
+        if (puppet instanceof LivingEntity && !(state instanceof LivingEntityRenderState)) {
+            // A mob drawn by another mod's renderer that reads its body from the mob itself
+            // (Ambient Birds' birds): no body in its state either, the mob is turned as well.
+            turn(puppet, ImpostorViews.facing(view));
+            state = GhostRenderer.extract(minecraft.getEntityRenderDispatcher(), puppet, 1.0f, FULL_BRIGHT);
+            if (state == null) throw new LeftOut();
+        }
         stage(state, view);
         Posture.baked(state, request.key.posture());
         // Water mobs were in water when last seen; a puppet is in no world.
@@ -870,16 +871,39 @@ public final class ImpostorAtlas {
         return request.rider == null ? Posture.bakedLift(request.key.posture()) : 0;
     }
 
-    /** What puts back the way an entity that is not a mob faces, turned view by view while baked. */
+    /** Turns an entity itself to face {@code facing}, level, for the view being baked. */
+    private static void turn(Entity puppet, float facing) {
+        puppet.setYRot(facing);
+        puppet.yRotO = facing;
+        puppet.setXRot(0f);
+        puppet.xRotO = 0f;
+        if (puppet instanceof LivingEntity living) {
+            living.yBodyRot = living.yBodyRotO = facing;
+            living.yHeadRot = living.yHeadRotO = facing;
+        }
+    }
+
+    /** What puts back the way an entity faces, turned view by view while baked ({@link #turn}). */
     private static Runnable facingBack(Entity puppet) {
-        if (puppet instanceof LivingEntity) return () -> {
-        };
         float yaw = puppet.getYRot(), yawO = puppet.yRotO, pitch = puppet.getXRot(), pitchO = puppet.xRotO;
+        if (!(puppet instanceof LivingEntity living)) {
+            return () -> {
+                puppet.setYRot(yaw);
+                puppet.yRotO = yawO;
+                puppet.setXRot(pitch);
+                puppet.xRotO = pitchO;
+            };
+        }
+        float body = living.yBodyRot, bodyO = living.yBodyRotO, head = living.yHeadRot, headO = living.yHeadRotO;
         return () -> {
-            puppet.setYRot(yaw);
-            puppet.yRotO = yawO;
-            puppet.setXRot(pitch);
-            puppet.xRotO = pitchO;
+            living.setYRot(yaw);
+            living.yRotO = yawO;
+            living.setXRot(pitch);
+            living.xRotO = pitchO;
+            living.yBodyRot = body;
+            living.yBodyRotO = bodyO;
+            living.yHeadRot = head;
+            living.yHeadRotO = headO;
         };
     }
 
