@@ -276,6 +276,8 @@ public final class MobMemory {
      * a lot - vanilla sends animals as far as the view distance, Paper only to 48 blocks.
      */
     private final Map<MobCategory, Double> reach = new EnumMap<>(MobCategory.class);
+    /** Per kind, the mobs the server stopped sending well inside the reach since the last look: how many, the nearest. */
+    private final Map<MobCategory, double[]> dropped = new EnumMap<>(MobCategory.class);
     /** A mob just left or came back: choose what is drawn on the next tick, not in a second. */
     private boolean chooseSoon;
     /** The mounts far players ride: their copy is drawn under the player, never on its own. */
@@ -547,6 +549,7 @@ public final class MobMemory {
         riders.clear();
         joining.clear();
         reach.clear();
+        dropped.clear();
         dismissed.clear();
         takenAway.clear();
         stranded.clear();
@@ -674,6 +677,7 @@ public final class MobMemory {
         // Remembered when it was stranded, and its copy flies or walks on from there.
         if (stranded.remove(entity.getUUID(), entity)) return;
         live.remove(entity.getUUID());
+        if (level == bound && rememberable(entity)) unlearnReach(entity);
         // Gone again before its copy reached it: that copy carries on from where it got to.
         Remembered joined = joining.remove(entity);
         if (joined != null) joined.handover = null;
@@ -1493,14 +1497,52 @@ public final class MobMemory {
      * How far this server sends each kind of mob: the farthest one of them it sends now,
      * if that is farther than any before. A mob carried or carrying is left out: the
      * server sends a whole stack as far as the farthest-seen of its riders.
+     *
+     * <p>It comes down when the server sends less far than it did: on LAN the host's game
+     * sends as far as the host's "Entity Distance" slider says, which the host may lower. Then
+     * several mobs of a kind stop being sent at once, well inside the reach, and the reach
+     * comes down to the nearest of them, or the farthest of that kind still sent. Kept at its
+     * height, the copies between the two distances would be hidden as too close, then forgotten.
+     * Two at least: one alone may have despawned.
      */
     private void learnReach() {
+        Map<MobCategory, Double> now = new EnumMap<>(MobCategory.class);
         for (Entity entity : live.values()) {
             if (entity.isPassenger() || entity.isVehicle()) continue;
             double across = Math.hypot(entity.getX() - selfX, entity.getZ() - selfZ);
-            reach.merge(entity.getType().getCategory(), across, Math::max);
+            now.merge(entity.getType().getCategory(), across, Math::max);
         }
+        for (Map.Entry<MobCategory, double[]> drop : dropped.entrySet()) {
+            Double known = reach.get(drop.getKey());
+            if (drop.getValue()[0] < 2 || known == null) continue;
+            double lowered = Math.max(drop.getValue()[1], now.getOrDefault(drop.getKey(), 0.0));
+            if (lowered < known) reach.put(drop.getKey(), lowered);
+        }
+        dropped.clear();
+        for (Map.Entry<MobCategory, Double> sent : now.entrySet()) reach.merge(sent.getKey(), sent.getValue(), Math::max);
     }
+
+    /**
+     * A mob the server stopped sending well inside the reach of its kind, kept until the next
+     * {@link #learnReach}: see there. Not one carried, dying, or gone close by (killed, picked
+     * up), nor one a few blocks inside the reach, whose chunk was dropped before it was.
+     */
+    private void unlearnReach(Entity entity) {
+        if (entity.isPassenger() || entity.isVehicle()) return;
+        if (entity instanceof LivingEntity living && living.isDeadOrDying()) return;
+        MobCategory category = entity.getType().getCategory();
+        Double known = reach.get(category);
+        LocalPlayer self = Minecraft.getInstance().player;
+        if (known == null || self == null) return;
+        double across = Math.hypot(entity.getX() - self.getX(), entity.getZ() - self.getZ());
+        if (across < 32 || across > known - REACH_SLACK) return;
+        double[] seen = dropped.computeIfAbsent(category, c -> new double[]{0, Double.MAX_VALUE});
+        seen[0]++;
+        seen[1] = Math.min(seen[1], across);
+    }
+
+    /** How far inside the reach a mob may stop being sent without lowering it: its chunk dropped first. */
+    private static final double REACH_SLACK = 24;
 
     /**
      * Back within range of a remembered mob and it is not there: it moved on, or died.
