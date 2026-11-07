@@ -36,7 +36,9 @@ import java.util.function.Function;
  * Life in the sky and around, purely a picture, on this client only; nothing is spawned
  * anywhere and no AI runs. Flocks cross the sky, birds of prey circle, gulls hang about
  * the coast, pigeons sit on high buildings, robins hop in the fields, tits flit in the
- * trees, bats come out at night. Perched birds fly off when you come close.
+ * trees, bats come out at night. Perched birds fly off when you come close, and nothing
+ * here ever lets you near enough to reach it: it cannot be touched, so it must not look
+ * like it could be.
  *
  * <p>Where each kind goes is read off the terrain: a few columns at a time, from the
  * chunks loaded here or, farther, from Voxy's world - the top block and the biome say
@@ -148,7 +150,32 @@ public final class Ambience {
             y = yo = ny;
             z = zo = nz;
         }
+
+        /**
+         * The last word on where it flies: never within {@code CLEARANCE} of the player's
+         * body, pushed out along the line between them when it would be. Perched birds are
+         * left alone; they take off long before.
+         */
+        void keepClear(LocalPlayer self) {
+            if (perched) return;
+            double bodyY = Mth.clamp(y, self.getY(), self.getEyeY());
+            double dx = x - self.getX(), dy = y - bodyY, dz = z - self.getZ();
+            double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance >= CLEARANCE) return;
+            if (distance < 1e-3) {
+                dx = dz = 0;
+                dy = distance = 1;
+            }
+            double out = CLEARANCE / distance;
+            x = self.getX() + dx * out;
+            y = bodyY + dy * out;
+            z = self.getZ() + dz * out;
+            if (puppet != null) puppet.setPos(x, y, z);
+        }
     }
+
+    /** How close a flyer may come to the player: a block past the reach of a hand. */
+    private static final double CLEARANCE = 4.0;
 
     /** Some flyers that move together, and know when they are done. */
     private abstract static class Group {
@@ -450,8 +477,13 @@ public final class Ambience {
 
         groups.removeIf(group -> {
             group.age++;
-            if (group.departing >= 0) return !group.depart();
+            if (group.departing >= 0) {
+                boolean gone = !group.depart();
+                for (Flyer flyer : group.flyers) flyer.keepClear(self);
+                return gone;
+            }
             boolean keep = group.tick(this, self, reach) && !config.hiddenBirds.contains(group.type.id);
+            for (Flyer flyer : group.flyers) flyer.keepClear(self);
             // Bats go home at dawn; birds take shelter when it rains.
             if (!group.summoned && group.type == Type.BATS && day) keep = false;
             if (!group.summoned && group.type != Type.BATS && rain && group.age > 200) keep = false;
@@ -1422,10 +1454,17 @@ public final class Ambience {
     /**
      * A few bats around a spot: flitting about, erratic and quick - or, near you, hanging
      * upside down under leaves, a roof, an overhang, until you come close and they drop and
-     * fly off.
+     * fly off. Walk towards them and the whole lot moves off ahead of you, each bat veering
+     * away whenever it strays near.
      */
     private static final class Bats extends Group {
-        final double cx, cy, cz;
+        /** How near the player may come to the middle of the group before it moves off. */
+        private static final double SHY = 16;
+        /** Within this, a bat veers away from the player, the harder the closer. */
+        private static final double VEER = 8;
+
+        double cx, cz;
+        final double cy;
         final double[] vx, vy, vz;
         final boolean[] hanging;
         final int life;
@@ -1487,6 +1526,15 @@ public final class Ambience {
         @Override
         boolean tick(Ambience a, LocalPlayer self, double reach) {
             RandomSource r = a.random;
+            // Someone walking into the swarm: the spot moves off, a little faster than a sprint.
+            double fromSelf = Math.hypot(cx - self.getX(), cz - self.getZ());
+            if (fromSelf < SHY) {
+                double ax = fromSelf < 1e-3 ? 1 : (cx - self.getX()) / fromSelf;
+                double az = fromSelf < 1e-3 ? 0 : (cz - self.getZ()) / fromSelf;
+                double step = Math.min(0.32, SHY - fromSelf);
+                cx += ax * step;
+                cz += az * step;
+            }
             for (int i = 0; i < flyers.size(); i++) {
                 Flyer flyer = flyers.get(i);
                 if (hanging[i]) {
@@ -1508,6 +1556,16 @@ public final class Ambience {
                 vx[i] += r.nextGaussian() * 0.06 + (cx - flyer.x) * 0.004;
                 vy[i] += r.nextGaussian() * 0.04 + (cy - flyer.y) * 0.006;
                 vz[i] += r.nextGaussian() * 0.06 + (cz - flyer.z) * 0.004;
+                // And away from the player, before it gets anywhere near.
+                double bodyY = Mth.clamp(flyer.y, self.getY(), self.getEyeY());
+                double ox = flyer.x - self.getX(), oy = flyer.y - bodyY, oz = flyer.z - self.getZ();
+                double near = Math.sqrt(ox * ox + oy * oy + oz * oz);
+                if (near < VEER && near > 1e-3) {
+                    double push = 0.25 * (1 - near / VEER) / near;
+                    vx[i] += ox * push;
+                    vy[i] += oy * push;
+                    vz[i] += oz * push;
+                }
                 double speed = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i]);
                 if (speed > 0.35) {
                     vx[i] *= 0.35 / speed;
