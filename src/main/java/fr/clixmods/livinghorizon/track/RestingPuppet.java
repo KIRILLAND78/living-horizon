@@ -2,6 +2,7 @@ package fr.clixmods.livinghorizon.track;
 
 import com.mojang.authlib.GameProfile;
 import fr.clixmods.livinghorizon.FarConfig;
+import fr.clixmods.livinghorizon.compat.EpicFight;
 import fr.clixmods.livinghorizon.compat.LodWorld;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -443,6 +444,16 @@ public final class RestingPuppet extends RemotePlayer {
     }
 
     void tick(ClientLevel level, FarConfig config, Around around, int[] work, @Nullable Entity you) {
+        // Never in the level, so never ticked by it: Epic Fight's hooks around its own tick.
+        EpicFight.beforeTick(this);
+        try {
+            tickOwn(level, config, around, work, you);
+        } finally {
+            EpicFight.afterTick(this);
+        }
+    }
+
+    private void tickOwn(ClientLevel level, FarConfig config, Around around, int[] work, @Nullable Entity you) {
         Set<BlockPos> beds = around.beds();
         boolean night = around.night();
         setOldPosAndRot();
