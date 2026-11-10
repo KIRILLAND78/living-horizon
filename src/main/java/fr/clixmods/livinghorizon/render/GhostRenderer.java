@@ -445,9 +445,12 @@ public final class GhostRenderer {
         pose.pushPose();
         pose.translate(x + offset.x, y + offset.y, z + offset.z);
         state.apply();
+        // What the dispatcher would have mounted for this entity: Entity Model Features animates from it.
+        boolean mounted = fr.clixmods.livinghorizon.compat.EntityTextureFeatures.mount(entity);
         try {
             renderer.render(entity, Mth.lerp(tick, entity.yRotO, entity.getYRot()), tick, pose, buffers, light);
         } finally {
+            if (mounted) fr.clixmods.livinghorizon.compat.EntityTextureFeatures.unmount();
             state.restore();
             pose.popPose();
         }

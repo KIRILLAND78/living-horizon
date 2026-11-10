@@ -449,6 +449,9 @@ public final class RestingPuppet extends RemotePlayer {
         try {
             tickOwn(level, config, around, work, you);
         } finally {
+            // It never moves through the game, which says whether it stands; animations ask
+            // (Epic Fight, Entity Model Features packs). On its feet unless thrown or carried.
+            setOnGround(!riding && activity != Activity.FLY);
             EpicFight.afterTick(this);
         }
     }
