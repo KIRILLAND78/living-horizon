@@ -23,9 +23,9 @@ import java.util.List;
 
 /**
  * What changed in each version of the mod, read in the game: the changelog the jar carries
- * ({@code assets/livinghorizon/changelog}), in the game's language when it is one of the two
- * the changelog is written in, English otherwise. Opened from the settings' header and from
- * Sodium's page.
+ * ({@code assets/livinghorizon/changelog}), in the game's language when the changelog is
+ * written in it ({@link ChangelogText#names}), English otherwise. Opened from the settings'
+ * header and from Sodium's page.
  */
 public final class ChangelogScreen extends Screen {
     private static final String KEY = "livinghorizon.changelog.";
@@ -59,10 +59,11 @@ public final class ChangelogScreen extends Screen {
 
     /** The changelog written in the game's language, English when there is none. */
     private String read() {
-        String language = minecraft.getLanguageManager().getSelected();
-        String name = language.startsWith("fr") ? "fr" : "en";
-        String text = resource(name);
-        return text.isEmpty() && !name.equals("en") ? resource("en") : text;
+        for (String name : ChangelogText.names(minecraft.getLanguageManager().getSelected())) {
+            String text = resource(name);
+            if (!text.isEmpty()) return text;
+        }
+        return "";
     }
 
     private static String resource(String name) {

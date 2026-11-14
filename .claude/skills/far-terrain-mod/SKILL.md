@@ -158,7 +158,7 @@ shows the problem (the `game-test` skill; a jar from outside Modrinth goes in
 | Its section in `docs/technical.md` (how it draws, what is read, what is not done) and its row in the *Far terrain depth* table | `docs/technical.md` |
 | A line in CLAUDE.md's debugging checklist for what it does differently | `CLAUDE.md` |
 | Every tooltip and message that names the far-terrain mods, in every language: `grep -n "Distant Horizons" src/main/resources/assets/livinghorizon/lang/en_us.json` finds them | `lang/` |
-| A changelog entry in both languages, with where it works ("Minecraft 26.3, with OpenGL and no shader pack") | `changelog/` |
+| A changelog entry in every language, with where it works ("Minecraft 26.3, with OpenGL and no shader pack") | `changelog/` |
 | Its column in `support.md` | this skill |
 
 ### 8. Telling the players, once it is well supported

@@ -37,14 +37,15 @@ import java.util.UUID;
  * what this one does not know is skipped. Version 2, which numbered the dimensions 0 to 3, is
  * still read, from a server not updated yet and from the file. Version 4 adds a player gliding
  * with an elytra: a flag version 3 leaves unread, and their pitch at the end of the record.
+ * Version 5 adds, after it, how a player who logged off looks with Minecraft Comes Alive.
  */
 public final class PositionsMessage {
     /** The layout written here. */
-    public static final int VERSION = 4;
+    public static final int VERSION = 5;
     /** The oldest version that reads what is written here: a reader of it or newer skips what it does not know. */
     static final int READABLE_FROM = 3;
     /** The layout of the server's own file ({@link #saved}), apart from the messages'. */
-    static final int FILE_VERSION = 3;
+    static final int FILE_VERSION = 4;
     /** The oldest version that reads the file written here. */
     static final int FILE_READABLE_FROM = 3;
     /** The layout before this one: the three dimensions of the game by number, any other as 3. */
@@ -115,9 +116,19 @@ public final class PositionsMessage {
 
     /**
      * How a player looks: their skin, as the {@code textures} property of their profile (value
-     * and signature; null when the server has none), and what they wear and hold ({@link Gear}).
+     * and signature; null when the server has none), what they wear and hold ({@link Gear}), and
+     * for a player who logged off, how Minecraft Comes Alive draws them ({@code compat/McaLook}),
+     * null without it.
      */
-    public record Look(@Nullable String textures, @Nullable String signature, List<String> gear) {
+    public record Look(@Nullable String textures, @Nullable String signature, List<String> gear, @Nullable String mca) {
+        public Look(@Nullable String textures, @Nullable String signature, List<String> gear) {
+            this(textures, signature, gear, null);
+        }
+
+        /** The same look, with this look of MCA. */
+        public Look withMca(@Nullable String mca) {
+            return new Look(textures, signature, gear, mca);
+        }
     }
 
     /**
@@ -582,6 +593,8 @@ public final class PositionsMessage {
         }
         // From version 4, last: version 3 reads the record without it.
         if (player.gliding()) out.writeFloat(player.pitch());
+        // From version 5, with a look: its look with MCA, which version 4 leaves unread.
+        if (look != null) writeText(out, look.mca());
     }
 
     private static void writeMob(DataOutputStream out, Encoder encoder, Mob mob) throws IOException {
@@ -643,6 +656,7 @@ public final class PositionsMessage {
         Mount mount = (flags & 8) != 0 ? readMount(in) : null;
         boolean gliding = (flags & 128) != 0;
         float pitch = gliding ? in.readFloat() : 0f;
+        if (look != null && in.available() > 0) look = look.withMca(readText(in));
         return new Player(name, x, y, z, yaw, dimension, (flags & 1) != 0, (flags & 2) != 0, vehicle, mount, look,
                 lastSeen, (flags & 32) != 0, gliding, pitch);
     }

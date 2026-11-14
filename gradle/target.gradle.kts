@@ -92,40 +92,46 @@ run {
     extra["lhAccessTransformer"] = file
 }
 
-// The changelog the game shows in its own screen: changelog/{en,fr}.md with the entries
-// waiting in changelog/unreleased/ put under "Unreleased", as the release will date them.
+// The changelog the game shows in its own screen: changelog/<lang>.md, one per language of
+// changelog/languages.json, with the entries waiting in changelog/unreleased/ put under
+// "Unreleased", as the release will date them.
 // .github/scripts/changelog-fragments.js does the same for the release: keep the two alike.
 run {
     val parts = listOf("server", "client")
     val kinds = listOf("new", "improved", "fixed")
-    val areas = mapOf("en" to listOf("Server", "Client"), "fr" to listOf("Serveur", "Client"))
-    val headings = mapOf("en" to listOf("New", "Improved", "Fixed"), "fr" to listOf("Nouveautés", "Améliorations", "Corrections"))
+    @Suppress("UNCHECKED_CAST")
+    val languages = groovy.json.JsonSlurper().parseText(rootProject.file("changelog/languages.json").readText()) as Map<String, Map<String, Any>>
     data class Entry(val part: String, val kind: String, val text: String)
 
-    // One file per entry, sorted by name: "part:", "kind:", "en:", "fr:"; a line naming no
-    // field carries the one above on.
+    // One file per entry, sorted by name: "part:", "kind:", then one field per language; a
+    // line naming no field carries the one above on.
+    val fields = setOf("part", "kind") + languages.keys
     val fragments: List<Map<String, String>> = (rootProject.file("changelog/unreleased").listFiles() ?: emptyArray())
         .filter { it.name.endsWith(".md") && it.name != "README.md" }.sortedBy { it.name }
         .map { file ->
-            val fields = linkedMapOf<String, String>()
+            val read = linkedMapOf<String, String>()
             var current: String? = null
             for (line in file.readLines().map { it.trim() }.filter { it.isNotEmpty() }) {
-                val field = Regex("""^(part|kind|en|fr):\s*(.*)$""").find(line)
+                val field = Regex("""^([a-z_]+):\s*(.*)$""").find(line)?.takeIf { it.groupValues[1] in fields }
                 if (field != null) {
                     current = field.groupValues[1]
-                    fields[current] = field.groupValues[2]
-                } else if (current == "en" || current == "fr") {
-                    fields[current] = (fields[current]!! + " " + line).trim()
+                    read[current] = field.groupValues[2]
+                } else if (current != null && current in languages) {
+                    read[current] = (read[current]!! + " " + line).trim()
                 }
             }
-            fields
+            read
         }
 
     val dir: File = layout.buildDirectory.dir("generated/changelog").get().asFile
     dir.mkdirs()
-    for (lang in listOf("en", "fr")) {
-        val text = rootProject.file("changelog/$lang.md").readText().replace("\r\n", "\n")
-        val open = Regex("""^## (Unreleased|Prochaine version)[ \t]*$""", RegexOption.MULTILINE).find(text)
+    for ((lang, words) in languages) {
+        @Suppress("UNCHECKED_CAST") val areas = words.getValue("parts") as List<String>
+        @Suppress("UNCHECKED_CAST") val headings = words.getValue("kinds") as List<String>
+        val source = rootProject.file("changelog/$lang.md")
+        if (!source.exists()) continue
+        val text = source.readText().replace("\r\n", "\n")
+        val open = Regex("^## " + Regex.escape(words.getValue("unreleased") as String) + "[ \t]*$", RegexOption.MULTILINE).find(text)
         if (open == null) {
             dir.resolve("$lang.md").writeText(text)
             continue
@@ -140,8 +146,8 @@ run {
         var kind = "new"
         for (line in text.substring(start, end).lines().map { it.trim() }) {
             when {
-                line.startsWith("### ") -> part = parts.getOrElse(areas.getValue(lang).indexOf(line.substring(4).trim())) { "client" }
-                line.startsWith("#### ") -> kind = kinds.getOrElse(headings.getValue(lang).indexOf(line.substring(5).trim())) { "new" }
+                line.startsWith("### ") -> part = parts.getOrElse(areas.indexOf(line.substring(4).trim())) { "client" }
+                line.startsWith("#### ") -> kind = kinds.getOrElse(headings.indexOf(line.substring(5).trim())) { "new" }
                 line.startsWith("- ") -> entries += Entry(part, kind, line.substring(2).trim())
                 line.isNotEmpty() && entries.isNotEmpty() -> entries[entries.size - 1] = entries.last().let { it.copy(text = it.text + " " + line) }
             }
@@ -152,11 +158,11 @@ run {
             parts.forEachIndexed { p, partName ->
                 val ofPart = entries.filter { it.part == partName }
                 if (ofPart.isEmpty()) return@forEachIndexed
-                add("### " + areas.getValue(lang)[p]); add("")
+                add("### " + areas[p]); add("")
                 kinds.forEachIndexed { k, kindName ->
                     val ofKind = ofPart.filter { it.kind == kindName }
                     if (ofKind.isEmpty()) return@forEachIndexed
-                    add("#### " + headings.getValue(lang)[k]); ofKind.forEach { add("- " + it.text) }; add("")
+                    add("#### " + headings[k]); ofKind.forEach { add("- " + it.text) }; add("")
                 }
             }
         }.joinToString("\n")

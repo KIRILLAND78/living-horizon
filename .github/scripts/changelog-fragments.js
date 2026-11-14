@@ -1,7 +1,7 @@
 /*
  * The changelog entries waiting for the next release: one file per entry in
- * changelog/unreleased/, both languages in it, so that two pull requests never edit the
- * same lines of changelog/{en,fr}.md. The release puts them under the version it dates
+ * changelog/unreleased/, every language in it, so that two pull requests never edit the
+ * same lines of changelog/<lang>.md. The release puts them under the version it dates
  * and deletes them (changelog-release.js); the build puts them under "Unreleased" in the
  * jar's copy (gradle/target.gradle.kts does the same in Kotlin: keep the two alike).
  *
@@ -14,8 +14,13 @@
  *
  *   fr: **Plantage sur Mac corrigé** — Le jeu ne plante plus...
  *
+ *   de: ... and one line for each language of changelog/languages.json
+ *
  * part is server or client, kind new, improved or fixed. A line that names no field
  * carries the one above on. Entries are listed in the order of their file names.
+ *
+ * changelog/languages.json lists the languages, each with its file (changelog/<code>.md)
+ * and the words of its headings; gradle/target.gradle.kts reads it too.
  */
 'use strict';
 
@@ -26,10 +31,18 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const DIR = path.join(ROOT, 'changelog', 'unreleased');
 const PARTS = ['server', 'client'];
 const KINDS = ['new', 'improved', 'fixed'];
-const FIELDS = ['part', 'kind', 'en', 'fr'];
-const AREAS = { en: ['Server', 'Client'], fr: ['Serveur', 'Client'] };
-const HEADINGS = { en: ['New', 'Improved', 'Fixed'], fr: ['Nouveautés', 'Améliorations', 'Corrections'] };
-const UNRELEASED = /^## (Unreleased|Prochaine version)[ \t]*$/m;
+const LANGUAGES = JSON.parse(fs.readFileSync(path.join(ROOT, 'changelog', 'languages.json'), 'utf8'));
+const LANGS = Object.keys(LANGUAGES);
+const FIELDS = ['part', 'kind'].concat(LANGS);
+const AREAS = {}, HEADINGS = {}, UNRELEASED_WORD = {};
+for (const lang of LANGS) {
+  AREAS[lang] = LANGUAGES[lang].parts;
+  HEADINGS[lang] = LANGUAGES[lang].kinds;
+  UNRELEASED_WORD[lang] = LANGUAGES[lang].unreleased;
+}
+const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** "## Unreleased" in a language's file, in its own word. */
+const unreleasedHeading = lang => new RegExp('^## ' + escape(UNRELEASED_WORD[lang]) + '[ \\t]*$', 'm');
 
 /** The fragment files, sorted by name: README.md explains the format and is none. */
 function files() {
@@ -37,7 +50,7 @@ function files() {
   return fs.readdirSync(DIR).filter(f => f.endsWith('.md') && f !== 'README.md').sort();
 }
 
-/** { fragments: [{ file, part, kind, en, fr }], errors: [string] } */
+/** { fragments: [{ file, part, kind, en, fr, de, ... }], errors: [string] } */
 function read() {
   const fragments = [];
   const errors = [];
@@ -48,12 +61,12 @@ function read() {
     for (const raw of fs.readFileSync(path.join(DIR, file), 'utf8').split(/\r?\n/)) {
       const line = raw.trim();
       if (!line) continue;
-      const field = /^([a-z]+):\s*(.*)$/.exec(line);
+      const field = /^([a-z_]+):\s*(.*)$/.exec(line);
       if (field && FIELDS.includes(field[1])) {
         current = field[1];
         if (current in fields) errors.push(name + ': "' + current + ':" is given twice. One file holds one entry.');
         fields[current] = field[2];
-      } else if (current === 'en' || current === 'fr') {
+      } else if (LANGS.includes(current)) {
         fields[current] += (fields[current] ? ' ' : '') + line;
       } else {
         errors.push(name + ': "' + line + '" is not one of ' + FIELDS.map(f => f + ':').join(', ') + '.');
@@ -61,19 +74,21 @@ function read() {
     }
     if (!PARTS.includes(fields.part)) errors.push(name + ': "part:" must be ' + PARTS.join(' or ') + '.');
     if (!KINDS.includes(fields.kind)) errors.push(name + ': "kind:" must be ' + KINDS.join(', ') + '.');
-    for (const lang of ['en', 'fr']) {
+    for (const lang of LANGS) {
       const text = fields[lang] || '';
-      if (!text) errors.push(name + ': "' + lang + ':" is missing: every entry is written in English and in French.');
+      if (!text) errors.push(name + ': "' + lang + ':" is missing: every entry is written in every language of changelog/languages.json.');
       else if (!/^\*\*[^*]+\*\* — \S/.test(text)) errors.push(name + ': "' + lang + ':" must read "**Title** — What the player now sees.", without a leading "- ".');
     }
-    fragments.push({ file, part: fields.part, kind: fields.kind, en: fields.en || '', fr: fields.fr || '' });
+    const fragment = { file, part: fields.part, kind: fields.kind };
+    for (const lang of LANGS) fragment[lang] = fields[lang] || '';
+    fragments.push(fragment);
   }
   return { fragments, errors };
 }
 
-/** Where the body of the Unreleased section is: { start, end } offsets, or null. */
-function unreleased(text) {
-  const open = UNRELEASED.exec(text);
+/** Where the body of a language's Unreleased section is: { start, end } offsets, or null. */
+function unreleased(text, lang) {
+  const open = unreleasedHeading(lang).exec(text);
   if (!open) return null;
   const start = open.index + open[0].length;
   const next = text.slice(start).search(/^## /m);
@@ -113,9 +128,9 @@ function render(entries, lang) {
 
 /** What goes under Unreleased of a language: what is written there, then the fragments. */
 function entries(text, lang, fragments) {
-  const at = unreleased(text);
+  const at = unreleased(text, lang);
   const before = at ? written(text.slice(at.start, at.end), lang) : [];
   return before.concat(fragments.map(f => ({ part: f.part, kind: f.kind, text: f[lang] })));
 }
 
-module.exports = { DIR, ROOT, AREAS, HEADINGS, files, read, unreleased, written, render, entries };
+module.exports = { DIR, ROOT, LANGUAGES, LANGS, AREAS, HEADINGS, UNRELEASED_WORD, files, read, unreleased, written, render, entries };

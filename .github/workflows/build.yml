@@ -37,7 +37,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Each new entry is a file of its own in changelog/unreleased/, in English and French,
+  # Each new entry is a file of its own in changelog/unreleased/, in every language,
   # so that pull requests never conflict over the changelog; released versions gain
   # nothing. The release turns the files into the version's section and posts it on
   # Modrinth, CurseForge and Discord.

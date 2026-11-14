@@ -19,6 +19,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.HandoverScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.DragonScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.FlyersScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.GaitsScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.McaScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.MobFileScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.StillMobsScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.GlidersScenario;
@@ -39,6 +40,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.LightingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.PhotonVoxyScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.ImpostorShadingScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.OcclusionScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.OtherDimensionScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LinksScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.LodistanceScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.OptionsScreenScenario;
@@ -69,6 +71,7 @@ import fr.clixmods.livinghorizon.gametest.scenario.TypedValuesScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.GuessedGroundScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.SodiumPagesScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.StrandedScenario;
+import fr.clixmods.livinghorizon.gametest.scenario.UndergroundScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.UnloadScenario;
 import fr.clixmods.livinghorizon.gametest.scenario.VehiclesScenario;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -116,6 +119,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new RestingScenario(),
             new RestingMountScenario(),
             new RestingImpostorsScenario(),
+            new McaScenario(),
             new RestingLoopScenario(),
             new RestingCrowdScenario(),
             new RestingTouchScenario(),
@@ -137,6 +141,7 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new OcclusionScenario(),
             new LodistanceScenario(),
             new UnloadScenario(),
+            new UndergroundScenario(),
             new MobFileScenario(),
             new FollowedMobsScenario(),
             new BobbyScenario(),
@@ -160,7 +165,8 @@ public final class LivingHorizonGameTests implements FabricClientGameTest {
             new PerfScenario(),
             new BenchmarkScenario(),
             new BenchmarkWorldScenario(),
-            new MinecartsScenario());
+            new MinecartsScenario(),
+            new OtherDimensionScenario());
 
     @Override
     public void runTest(ClientGameTestContext context) {

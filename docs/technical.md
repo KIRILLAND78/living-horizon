@@ -48,7 +48,7 @@ never added to a level (`track/Puppets`).
 | root | `LivingHorizonCommon` (entry point on both sides, opens the network channel), `LivingHorizonClient` (client entry point), `FarConfig` (the settings file), `QualityPreset`, `Stats` |
 | `track/` | What is followed and remembered: online players (`FarPlayer`, `FarPlayerTracker`), players who logged off (`RestingPlayers`, `RestingPuppet`, `RestingLoop`, `RestingMount`, `Walkway`, `Footing`), mobs (`MobMemory`, `MobPaths`, `MobAnimations`, `MobMotion`, `MobGait`, `MobScan`, `ServerMobs`, `SeedDraws`, `SeedMobs`, `Foresight`), what the server shares (`PositionPublisher`, `PositionsMessage`, `SharedPositions`, `WorldPlayers`) |
 | `render/` | Adding the puppets to the frame (`GhostRenderer`, `Sink`), the far plane (`DepthFar`) and the depth arithmetic (`DepthMath`), `Occlusion`, the distance settings drawn in the world (`DistancePreview`); `impostor/` for the impostors; `state/` for the render state stand-ins used before 1.21.2 |
-| `compat/` | Voxy, Distant Horizons, Lodistance and Far View: reading their world (`LodWorld`, `VoxySource`, `DhSource`, `LodistanceSource`, `FarViewSource`, `DrawnGround`) and their depth (`FarDepth`, `FarDepthGpu`, `DhDepth`, `OcclusionQueries`), through one link per mod (`VoxyLink`, `DhLink`, `LodistanceLink`, `FarViewLink`, `IrisLink`); Entity Culling, told which entities the mod draws (`EntityCulling`); Lycanites Mobs, whose queued models are drawn in time (`LycaniteMobs`); Valkyrien Skies, whose ships' entities are left to it (`ValkyrienSkies`) |
+| `compat/` | Voxy, Distant Horizons, Lodistance and Far View: reading their world (`LodWorld`, `VoxySource`, `DhSource`, `LodistanceSource`, `FarViewSource`, `DrawnGround`) and their depth (`FarDepth`, `FarDepthGpu`, `DhDepth`, `OcclusionQueries`), through one link per mod (`VoxyLink`, `DhLink`, `LodistanceLink`, `FarViewLink`, `IrisLink`); Entity Culling, told which entities the mod draws (`EntityCulling`); Lycanites Mobs, whose queued models are drawn in time (`LycaniteMobs`); Valkyrien Skies, whose ships' entities are left to it (`ValkyrienSkies`); Minecraft Comes Alive, handed the look of the players who logged off (`McaLook`, `Mca`) |
 | `ambient/` | The birds (`Ambience`, `BirdModels`, `BirdFigure`, `AmbientRenderer`) and the easter eggs |
 | `platform/` | What differs between loaders: events, network, config folder |
 | `ui/` | The settings screens (`FarConfigScreen` and its sub-screens, `SodiumOptions`), the impostor screen, the text under the crosshair (`OfflineHud`) |
@@ -254,6 +254,17 @@ on this client: nothing is sent to the server, they block nobody, and nothing ca
 - When the world or the server closes, or you leave it, everyone you saw stays where they
   were last, as they looked, on what they rode: as far as this client knows, they logged off
   then.
+- With Minecraft Comes Alive (MCA), a player can look like a villager, or a player dressed and
+  shaped as one. MCA hands that look to a client only while the player is online, by their id
+  (`MCAClient.playerData`), so the puppet of one who logged off wore their plain skin. The
+  look, MCA's saved villager without what is long (an inventory, memories, the chat prompt;
+  `compat/McaLook.trim`), now goes with the spot: the server reads it from MCA's player data as
+  they log off and shares it with their look (message version 5, last in the record; read once
+  for those offline when the server starts), and a client without the server's word keeps
+  what MCA showed it as they left (`Mca.seen`). As a puppet is made, `Mca.dress` puts a villager
+  of that look into MCA's map under the puppet's id, unless MCA has one of its own; the
+  impostor key counts it (`Mca.lookHash`). All by reflection, `net.mca` on 1.20.1 and
+  `net.conczin.mca` after.
 - `offlinePlayers` off turns all of it off: nobody is shown or remembered.
 - `maxOfflinePlayers` of them are drawn at once (256; up to 1000 on the slider, then no limit): the nearest the
   camera in its dimension, chosen again every tick (`RestingPlayers.shown`). The others stay
@@ -752,6 +763,20 @@ below), and other flyers and swimmers get a flat disc at their own height.
   (`DrawnGround.Decisions`, by the mob's id, shared by the real mob and its copy). The game's
   chunks within three of the edge of its render distance are asked ahead, so the answer is there
   before a mob or the edge crosses them. The debug marks call a hidden one *over the void*.
+- With `hideUndergroundMobs` (*Hide Underground Mobs*, off by default; its key flips it), mobs
+  and entities underground are left out before the nearest are picked, so their places go to
+  those on the surface (`track/Underground`). Underground is no sky light where it stands and a
+  block above it that blocks the view (`canOcclude`): sky light also fades to nothing deep under
+  water, and the roof keeps a fish deep in the sea drawn, and a mob at the bottom of a ravine.
+  It is read as the mob unloads, from the chunks this client holds (asked of the chunk source,
+  never `ClientLevel.hasChunk`), and saved with it (`Remembered.underground`). One never met
+  (the server's word, a scan) is read once a second, 512 at most, once its chunk is held, or
+  from the far world: its top block 6 or more blocks above the mob, neither leaves nor water;
+  with no answer it is drawn, and the far world is asked again a minute later. A mob the server
+  moves is read again where it is now. The real mobs the mod draws are read again whenever they
+  move to another block. Only in a dimension with sky light and no ceiling
+  (`Underground.applies`): in the Nether everything is under the bedrock roof, and the End has
+  no sky light to read. The guessed mobs are never read: the world puts them on the surface.
 - A mob smaller on screen than `animationMinPixels` (10 pixels; 0 always animates; its height
   or width, whichever is larger, and never under `minApparentPixels`) stops walking about
   (`optStillTiny`): its animation's clock stops (`MobMotion.held`), so it stands where the
@@ -1502,6 +1527,7 @@ debug options. `/livinghorizon debug` turns the panel and the boxes on or off to
 | Red | Outside the view |
 | Purple | Being built |
 | Grey | Past `maxDistantMobs` |
+| Dark teal | Underground (with `hideUndergroundMobs`) |
 
 ### Outlines
 
@@ -1612,8 +1638,8 @@ update, measure the same scene. Birds still choose where they fly by chance.
 | `/livinghorizon benchmark [seconds]` | Measures what the mod costs, part by part, and writes a report (see [Benchmark](#benchmark)); only with `-Dlh.benchmark=true` |
 | `/livinghorizon benchmark world` | Makes the benchmark's world, the same every time, after saying so; `... confirm` goes ahead |
 
-Two key bindings, unbound by default: *Toggle Distant Players* (flips `enabled`) and *Open
-Living Horizon Settings*.
+Three key bindings, unbound by default: *Toggle Distant Players* (flips `enabled`), *Toggle
+Underground Mobs* (flips `hideUndergroundMobs`) and *Open Living Horizon Settings*.
 
 ## Settings reference
 
@@ -1752,6 +1778,7 @@ In three parts, on both screens: *General*, *Mobs* (the living kinds, mannequins
 | `maxDistantMobs` | Mobs: Max Mobs | `512` | 0 to 4000, more when typed, or no limit | How many are drawn at once, nearest first, the animals foreseen from the seed included (`0`: none; no limit is the slider's right end, which 1000 in an older settings file becomes). No limit here and in `mobMaxDistance` together can crash the game |
 | `mobMaxDistance` | Mobs: Mob Render Distance | `512` blocks | 1 to 4000, or no limit | Past this, distant mobs are not drawn (`0`: no limit, the right end of the slider) |
 | `rememberNamedMobs` | Mobs: Name-Tagged Mobs | `true` | | A mob with a name tag is shown whatever its type |
+| `hideUndergroundMobs` | Mobs: Hide Underground Mobs | `false` | | Distant mobs and entities underground are not drawn, never in the Nether or the End. The *Toggle Underground Mobs* key flips it |
 | `seedMobs` | Mobs: Show Guessed Mobs | `true` | | The animals a server with the mod foresees in land nobody has explored, from the seed, are shown |
 | `animationMinPixels` | Mobs: Min. Animated Size | `10` pixels | 0 to 40 | A distant mob shorter than this on screen stops walking about and stands (`0`: always walks) |
 | `animationMaxDistance` | Mobs: Animation Distance | `4000` blocks | 1 to 4000, or no limit | Past this, every distant mob stops walking about and stands (`0`: no limit, the right end of the slider) |

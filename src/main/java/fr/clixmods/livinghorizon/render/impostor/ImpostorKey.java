@@ -1,5 +1,6 @@
 package fr.clixmods.livinghorizon.render.impostor;
 
+import fr.clixmods.livinghorizon.compat.Mca;
 import fr.clixmods.livinghorizon.track.Puppets;
 import fr.clixmods.livinghorizon.track.RestingPuppet;
 import net.minecraft.ChatFormatting;
@@ -339,6 +340,9 @@ public record ImpostorKey(String type, long appearance, int posture) {
         /*if (entity instanceof AbstractClientPlayer player) hash = hash * 31 + player.getSkin().hashCode();
         *///?} else
         /*if (entity instanceof AbstractClientPlayer player) hash = hash * 31 + player.getSkinTextureLocation().hashCode();*/
+        // A player Minecraft Comes Alive draws as a villager: its look, which MCA keeps apart.
+        int mca = Mca.lookHash(entity);
+        if (mca != 0) hash = hash * 31 + mca;
         hash = hash(hash, values, restless);
         // Its size, to about 6%: some mods' mobs take it from a value that keeps changing and
         // is left out (Ice and Fire's dragons grow with their age, which ticks up). Two of one

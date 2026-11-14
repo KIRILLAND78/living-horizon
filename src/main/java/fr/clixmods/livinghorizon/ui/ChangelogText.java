@@ -18,6 +18,22 @@ public final class ChangelogText {
 
     private ChangelogText() {}
 
+    /**
+     * The changelog files to try for a game language, in order: the language itself
+     * ({@code pt_br}, {@code zh_tw}), then its first part ({@code de} for {@code de_de},
+     * {@code fr} for {@code fr_ca}), then English. The files are named in
+     * {@code changelog/languages.json}.
+     */
+    public static List<String> names(String language) {
+        List<String> names = new ArrayList<>();
+        String code = language.toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+        if (!code.isEmpty()) names.add(code);
+        int cut = code.indexOf('_');
+        if (cut > 0) names.add(code.substring(0, cut));
+        if (!names.contains("en")) names.add("en");
+        return names;
+    }
+
     /** The lines of a changelog file, its own title and blank lines left out. */
     public static List<Line> parse(String markdown) {
         List<Line> lines = new ArrayList<>();

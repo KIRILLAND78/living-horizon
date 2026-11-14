@@ -2,8 +2,9 @@
 /*
  * Dates the changelog for a release: the entries waiting in changelog/unreleased/ (and
  * any bullet written straight under "Unreleased") become the section
- * "## <version> — <date>" of changelog/{en,fr}.md, under an "Unreleased" section left
- * empty, and the entry files are deleted.
+ * "## <version> — <date>" of changelog/<lang>.md, in every language of
+ * changelog/languages.json, under an "Unreleased" section left empty, and the entry files
+ * are deleted.
  *
  *   node .github/scripts/changelog-release.js <version> [YYYY-MM-DD]
  *
@@ -32,11 +33,11 @@ if (errors.length) {
 }
 
 let dated = false;
-for (const lang of ['en', 'fr']) {
+for (const lang of fragments.LANGS) {
   const file = path.join(fragments.ROOT, 'changelog', lang + '.md');
   if (!fs.existsSync(file)) continue;
   const text = fs.readFileSync(file, 'utf8');
-  const at = fragments.unreleased(text);
+  const at = fragments.unreleased(text, lang);
   if (new RegExp('^## ' + version.replace(/\./g, '\\.') + ' ', 'm').test(text)) {
     console.log(lang + ': ' + version + ' is already there.');
     continue;

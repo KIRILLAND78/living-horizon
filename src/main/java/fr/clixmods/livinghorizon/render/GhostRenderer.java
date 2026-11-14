@@ -32,6 +32,7 @@ import fr.clixmods.livinghorizon.track.RestingPlayers;
 import fr.clixmods.livinghorizon.track.RestingPuppet;
 import fr.clixmods.livinghorizon.track.SeedDraws;
 import fr.clixmods.livinghorizon.track.SharedPositions;
+import fr.clixmods.livinghorizon.track.Underground;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -623,7 +624,7 @@ public final class GhostRenderer {
                              Vec3 eye, float partialTick, FarConfig config) {
         if (!config.distantMobs && !config.distantEntities) return;
         MobMemory memory = FarPlayerTracker.get().mobs();
-        List<MobMemory.Remembered> shown = memory.shown();
+        List<MobMemory.Remembered> shown = memory.shown(minecraft.level);
         for (MobMemory.Remembered mob : shown) {
             Entity puppet = mob.puppet();
             if (puppet == null) {
@@ -657,11 +658,12 @@ public final class GhostRenderer {
         }
         DrawnGround.ask();
         if (debug && DebugMarks.drawing() && minecraft.level != null) {
-            // The ones remembered but past the most shown at once.
+            // The ones remembered but past the most shown at once, or underground.
             Set<MobMemory.Remembered> listed = Collections.newSetFromMap(new IdentityHashMap<>());
             listed.addAll(shown);
+            boolean underground = Underground.hiding(minecraft.level, config);
             for (MobMemory.Remembered mob : memory.remembered(minecraft.level.dimension().identifier().toString())) {
-                if (!listed.contains(mob)) markRemembered(mob, Mark.SPARE);
+                if (!listed.contains(mob)) markRemembered(mob, underground && mob.underground() ? Mark.UNDERGROUND : Mark.SPARE);
             }
         }
     }
@@ -727,6 +729,8 @@ public final class GhostRenderer {
         if (!config.distantMobs && !config.distantEntities) return;
         // Counted for the panel always; boxed and labelled only when the game's mobs are asked for.
         boolean game = debug && DebugMarks.gameMobs();
+        ClientLevel level = minecraft.level;
+        boolean underground = level != null && Underground.hiding(level, config);
         Map<EntityType<?>, Boolean> wanted = WANTED;
         wanted.clear();
         MobMemory memory = FarPlayerTracker.get().mobs();
@@ -736,7 +740,8 @@ public final class GhostRenderer {
                 else if (debug) DebugMarks.tally(Mark.GAME);
                 continue;
             }
-            if (entity.isRemoved() || entity.isInvisible()) continue;
+            // Of a level left, until the next tick lets it go: never drawn at its old place in this one.
+            if (entity.isRemoved() || entity.isInvisible() || entity.level() != level) continue;
             // A mount with a player on it is drawn with that player; a villager in a minecart,
             // a cow in a boat, each on its own.
             if ((entity.isPassenger() || entity.isVehicle()) && carriesPlayer(entity.getRootVehicle())) continue;
@@ -757,6 +762,10 @@ public final class GhostRenderer {
             if (tooFar(entity, eye, maxDistance(entity, config))) continue;
             // Far View draws it as a box of its own in place of the game's model: once is enough.
             if (FarViewLink.drawsMob(entity, eye)) continue;
+            if (underground && Underground.live(level, entity)) {
+                if (debug) DebugMarks.mark(entity, Mark.UNDERGROUND);
+                continue;
+            }
             if (overVoid(minecraft, eye, entity.getUUID(), entity, config)) continue;
             if (skipped(entity, true)) continue;
             if (occluded(entity.getUUID(), entity, config)) continue;
@@ -1024,7 +1033,7 @@ public final class GhostRenderer {
             if (puppet != null && !puppet.isFallFlying()) ImpostorAtlas.request(ImpostorKey.of(puppet), puppet);
         }
         if (!config.distantMobs && !config.distantEntities) return;
-        List<MobMemory.Remembered> shown = FarPlayerTracker.get().mobs().shown();
+        List<MobMemory.Remembered> shown = FarPlayerTracker.get().mobs().shown(Minecraft.getInstance().level);
         int count = Math.min(shown.size(), PREWARM_MOST);
         if (prewarmFrom >= shown.size()) prewarmFrom = 0;
         int from = prewarmFrom;

@@ -26,7 +26,7 @@ class PositionsMessageTest {
     private static final String NETHER = "minecraft:the_nether";
 
     /** Steve, online in the nether, at (1.5, 64, -2), facing 90 degrees. */
-    private static final String STEVE = "00000004" + "00000003" + "00"
+    private static final String STEVE = "00000005" + "00000003" + "00"
             // The dimensions: one, by its id.
             + "01" + "0014" + hex(NETHER)
             // One player, 37 bytes: name, x, y, z, yaw, dimension 0, online.
@@ -34,7 +34,7 @@ class PositionsMessageTest {
             + "42b40000" + "00" + "01";
 
     /** A baby horse (kind 1, variant 513) in the overworld, sent around (0, 0), 2048 blocks. */
-    private static final String HORSE_AROUND = "00000004" + "00000003" + "01"
+    private static final String HORSE_AROUND = "00000005" + "00000003" + "01"
             + "01" + "0013" + hex(OVERWORLD)
             // The circle, 25 bytes: dimension 0, x, z, radius.
             + "19" + "00" + "0000000000000000" + "0000000000000000" + "40a0000000000000"
@@ -46,7 +46,7 @@ class PositionsMessageTest {
      * Alex gliding with an elytra in the overworld, at (0, 120, 0), facing 0 and looking 15 degrees
      * down: the flag version 3 leaves unread, and the pitch at the end of the record, which it skips.
      */
-    private static final String ALEX_GLIDING = "00000004" + "00000003" + "00"
+    private static final String ALEX_GLIDING = "00000005" + "00000003" + "00"
             + "01" + "0013" + hex(OVERWORLD)
             // One player, 40 bytes: name, x, y, z, yaw, dimension 0, online and gliding, pitch.
             + "01" + "28" + "0004" + hex("Alex") + "0000000000000000" + "405e000000000000" + "0000000000000000"
@@ -117,21 +117,48 @@ class PositionsMessageTest {
     @Test
     void readsALaterVersionThatOnlyAddsFields() {
         String record = STEVE.substring(STEVE.indexOf("0005" + hex("Steve")));
-        String later = "00000005" + "00000003" + "00" + "01" + "0014" + hex(NETHER)
+        String later = "00000006" + "00000003" + "00" + "01" + "0014" + hex(NETHER)
                 + "01" + "28" + record + "abcdef" + "0102030405";
         PositionsMessage.Decoded read = PositionsMessage.read(bytes(later));
         assertNotNull(read);
         assertEquals(List.of(STEVE_PLAYER), read.players());
-        assertTrue(new PositionsMessage.Format(5, 3).readableBy(PositionsMessage.VERSION));
+        assertTrue(new PositionsMessage.Format(6, 3).readableBy(PositionsMessage.VERSION));
+    }
+
+    /**
+     * A player who logged off, with their look and their look with Minecraft Comes Alive, which
+     * comes last: read back whole, and by a version 4 reader without it.
+     */
+    @Test
+    void sharesTheLookOfMcaLast() {
+        PositionsMessage.Look look = new PositionsMessage.Look("dGV4dHVyZXM=", null, List.of("", "minecraft:iron_helmet"),
+                "{Clothes:\"mca:skins/clothing/normal/male/farmer/0.png\",PlayerModel:0}");
+        PositionsMessage.Player sam = new PositionsMessage.Player("Sam", 1, 64, 2, 0f, OVERWORLD, false, false, null,
+                null, look, 1_700_000_000_000L, false);
+        byte[] message = PositionsMessage.players(List.of(sam));
+        PositionsMessage.Decoded read = PositionsMessage.read(message);
+        assertNotNull(read);
+        assertEquals(List.of(sam), read.players());
+
+        // The same record without what version 5 added after it, as version 4 wrote it.
+        PositionsMessage.Player plain = sam.full(null, new PositionsMessage.Look(look.textures(), null, look.gear()));
+        String hex = HexFormat.of().formatHex(PositionsMessage.players(List.of(plain)));
+        int length = hex.indexOf("0003" + hex("Sam")) - 2;
+        int bytes = Integer.parseInt(hex.substring(length, length + 2), 16);
+        String older = "00000004" + hex.substring(8, length) + String.format("%02x", bytes - 1)
+                + hex.substring(length + 2, hex.length() - 2);
+        PositionsMessage.Decoded old = PositionsMessage.read(bytes(older));
+        assertNotNull(old);
+        assertEquals(List.of(plain), old.players());
     }
 
     @Test
     void refusesAVersionItCannotRead() {
         byte[] message = bytes(STEVE);
-        message[7] = 5;
+        message[7] = 6;
         assertNull(PositionsMessage.read(message));
         PositionsMessage.Format format = PositionsMessage.format(message);
-        assertEquals(new PositionsMessage.Format(4, 5), format);
+        assertEquals(new PositionsMessage.Format(5, 6), format);
         assertFalse(format.readableBy(PositionsMessage.VERSION));
         assertFalse(new PositionsMessage.Format(1, 1).readableBy(PositionsMessage.VERSION));
     }

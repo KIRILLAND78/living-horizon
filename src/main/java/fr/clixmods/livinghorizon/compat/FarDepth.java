@@ -316,10 +316,11 @@ public final class FarDepth {
             boolean merging = wanted && config.anyDistant() && config.depthOcclusion;
             boolean queries = wanted && config.anyDistant() && config.hideOccludedMobs && config.optOcclusionQueries;
             // The merge and the test both draw: the GL state is saved once around the two.
-            // What the merge touches: Voxy's blit everything, Distant Horizons' one texture unit.
+            // What the merge touches: Voxy's blit everything, Distant Horizons' and Lodistance's one
+            // texture unit and the scissor box. Less than a step asks for throws, and turns the merge off.
             GlState gl = !merging || !queries ? null
                     : available() ? GlState.save(3, GlState.COLOUR | GlState.SCISSOR_BOX | GlState.READ_FRAMEBUFFER)
-                    : GlState.save(1, 0);
+                    : GlState.save(1, GlState.SCISSOR_BOX);
             try {
                 if (!wanted) {
                     reason = "nothing far to hide this frame";

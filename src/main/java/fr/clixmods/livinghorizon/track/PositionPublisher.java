@@ -3,6 +3,7 @@ package fr.clixmods.livinghorizon.track;
 import com.mojang.authlib.properties.Property;
 import fr.clixmods.livinghorizon.Profile;
 import fr.clixmods.livinghorizon.ServerConfig;
+import fr.clixmods.livinghorizon.compat.McaLook;
 import fr.clixmods.livinghorizon.platform.Network;
 import fr.clixmods.livinghorizon.platform.Platform;
 import net.minecraft.nbt.CompoundTag;
@@ -104,6 +105,8 @@ public final class PositionPublisher {
     private final Map<String, PositionsMessage.Player> players = new LinkedHashMap<>();
     /** How each player online looks, by name, read every second. */
     private final Map<String, PositionsMessage.Look> looks = new HashMap<>();
+    /** The id of each player seen online, by name: their look with MCA is read by it as they log off. */
+    private final Map<String, UUID> ids = new HashMap<>();
     /** What each player online rides alone, by name: the server takes it away with them when they log off. */
     private final Map<String, PositionsMessage.Mount> riding = new HashMap<>();
     /** Which mount {@link #riding} saved, by name: it is saved again when it changes, and every few seconds. */
@@ -245,6 +248,7 @@ public final class PositionPublisher {
         for (ServerPlayer player : online) {
             String name = player.getScoreboardName();
             names.add(name);
+            ids.put(name, player.getUUID());
             // Left as they were last seen, online or not: they log off from there.
             if (config.hideSpectators && player.isSpectator() || config.hideInvisible && player.isInvisible()) {
                 hidden.add(name);
@@ -284,6 +288,9 @@ public final class PositionPublisher {
         // The server took the mount away with them: it rests under them now, no longer a mob of its own.
         if (mount != null && taken != null && mobs.remove(taken) != null) reads.remove(taken);
         PositionsMessage.Look look = looks.remove(player.name());
+        // How MCA draws them, which it tells the clients while they are online only.
+        UUID id = ids.get(player.name());
+        if (look != null && id != null && McaLook.present()) look = look.withMca(McaLook.of(server, id));
         return new PositionsMessage.Player(player.name(), player.x(), player.y(), player.z(), player.yaw(),
                 player.dimension(), false, mount != null, null, mount, look, System.currentTimeMillis(), false);
     }
@@ -505,6 +512,28 @@ public final class PositionPublisher {
         if (found > 0) {
             dirty = true;
             LOGGER.info("Living Horizon: {} players of this world shown where they logged off", found);
+        }
+        if (McaLook.present()) dressWithMca();
+    }
+
+    /**
+     * Gives the players who logged off before this version, or before MCA was installed, their
+     * look with MCA, found by the ids the server keeps beside the world.
+     */
+    private void dressWithMca() {
+        Map<String, UUID> byName = new HashMap<>();
+        for (Map.Entry<UUID, String> known : WorldPlayers.names(server.getWorldPath(LevelResource.ROOT)).entrySet()) {
+            byName.put(known.getValue(), known.getKey());
+        }
+        for (Map.Entry<String, PositionsMessage.Player> entry : players.entrySet()) {
+            PositionsMessage.Player player = entry.getValue();
+            UUID id = byName.get(player.name());
+            if (player.online() || id == null || player.look() != null && player.look().mca() != null) continue;
+            String mca = McaLook.of(server, id);
+            if (mca == null) continue;
+            PositionsMessage.Look look = player.look() != null ? player.look() : new PositionsMessage.Look(null, null, List.of());
+            entry.setValue(player.full(player.mount(), look.withMca(mca)));
+            dirty = true;
         }
     }
 

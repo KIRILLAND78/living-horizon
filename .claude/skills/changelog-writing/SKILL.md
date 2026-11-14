@@ -1,12 +1,14 @@
 ---
 name: changelog-writing
-description: Write, edit or rewrite the changelog of Living Horizon (the entry files of changelog/unreleased/, and changelog/en.md and changelog/fr.md) as professional release notes for Minecraft players - a benefit-first title, then what the player now sees or can do, why it matters and any condition, with no implementation details and no over-promising. Use for every changelog entry added in a pull request, for any rewording of existing entries, and when the user asks to clean up, rewrite or proofread the changelog.
+description: Write, edit or rewrite the changelog of Living Horizon (the entry files of changelog/unreleased/, and changelog/<code>.md in each of its 14 languages) as professional release notes for Minecraft players - a benefit-first title, then what the player now sees or can do, why it matters and any condition, with no implementation details and no over-promising. Use for every changelog entry added in a pull request, for any rewording of existing entries, and when the user asks to clean up, rewrite or proofread the changelog.
 ---
 
 # Writing the changelog
 
 The changelog is read by players: in the game (the changelog button reads the files the jar
-carries), on Modrinth, CurseForge and Discord. It must read like the release notes of a
+carries, in the game's language), on Modrinth, CurseForge and Nexus Mods (English) and
+Discord (English and French). It is written in the 14 languages the mod ships, listed in
+`changelog/languages.json` with the file of each and the words of its headings. It must read like the release notes of a
 polished, professional mod or game: confident, natural, concise, and understandable at
 once by someone who has never seen the code. It presents what the update brings, not what
 the code does.
@@ -18,14 +20,15 @@ the code does.
 2. Check every fact against the code or the diff: what the change does, where it applies
    (Minecraft version, loader, shaders, Voxy or Distant Horizons), any default value, and
    whether it needs the mod on the server. Setting and screen names come from
-   `src/main/resources/assets/livinghorizon/lang/en_us.json` and `fr_fr.json`, exactly as
-   the game shows them.
+   `src/main/resources/assets/livinghorizon/lang/<locale>.json` (`en_us.json`, `fr_fr.json`,
+   `de_de.json`...), exactly as the game shows them in that language.
 3. Write the English and the French entry together (*Voice*, *Entry pattern*, *Rules*), in a
    new file of `changelog/unreleased/` named after the change, one file per bullet (*Structure*).
-   Never write a new bullet into `changelog/en.md` or `changelog/fr.md`: the release does.
+   Then the other languages (*Other languages*). Never write a new bullet into
+   `changelog/<code>.md`: the release does.
 4. Read each entry back as a player would and check it against *Before you finish*.
 5. Run `node .github/scripts/changelog-check.js origin/develop` (the entry files, a released
-   version gains no entry, both languages match).
+   version gains no entry, every language present and matching).
 
 ## Structure
 
@@ -39,10 +42,15 @@ kind: fixed
 en: **Crash on Mac fixed** — The game no longer crashes about a second after you join a world on a Mac.
 
 fr: **Plantage sur Mac corrigé** — Le jeu ne plante plus environ une seconde après que vous avez rejoint un monde sur Mac.
+
+de: **Absturz auf dem Mac behoben** — Das Spiel stürzt nicht mehr etwa eine Sekunde nach dem Betreten einer Welt auf einem Mac ab.
+
+es: ... (one line for each of es, it, pt_br, pl, tr, ru, uk, zh_cn, zh_tw, ja, ko)
 ```
 
-The release puts it under the version it dates, in both files, with the headings below
-(the order of the file names inside each kind). A dated section that is reworded keeps them.
+The release puts it under the version it dates, in every language's file, with the headings
+below (each language's words are in `changelog/languages.json`; the order of the file names
+inside each kind). A dated section that is reworded keeps them.
 
 ```
 ## 0.17.0 — 2026-11-20                ## 0.17.0 — 2026-11-20
@@ -61,6 +69,24 @@ Versions released before the Server/Client split keep their flat `### New` headi
 entries only go into `changelog/unreleased/`; a dated section is only reworded when the user asks for
 a rewrite of released versions, and then never gains a bullet, never changes order and
 keeps every real feature.
+
+## Other languages
+
+English and French are written first, as above; every other language translates them, with
+the same facts, the same number of sentences and nothing added.
+
+- **The game's own words.** Minecraft's terms (mob, entity, render distance, spyglass,
+  single player, video settings) are vanilla Minecraft's in that language: download its
+  `assets/minecraft/lang/<locale>.json` (the client jar has `en_us.json`; the asset index of
+  the version has the others), find the English text in `en_us.json` and take the same key.
+- **The mod's own words.** Setting and screen names come from the mod's `lang/<locale>.json`,
+  exactly; the mod's terms (offline players, simplified images, guessed mobs) take the word
+  that file already uses, and the word the language's `changelog/<code>.md` uses elsewhere.
+- Read the latest version of that language's `changelog/<code>.md` for its register and its
+  vocabulary, and keep them.
+- Mod names, version numbers, `code` spans and the `**Title** — ` shape stay as they are,
+  the em dash included, in Chinese, Japanese and Korean too.
+- The player is addressed as vanilla Minecraft addresses them in that language.
 
 ## Voice
 
@@ -242,8 +268,8 @@ The French register, for the same kind of entries:
 - Is every estimate called an estimate, and every sensitive server option said to be on
   or off by default?
 - Same terms as the table, *vous* in French, compatibility last?
-- One file per bullet in `changelog/unreleased/`, with its `en:` and `fr:`, and nothing
-  written into `changelog/en.md` or `changelog/fr.md`?
+- One file per bullet in `changelog/unreleased/`, with a line for every language of
+  `changelog/languages.json`, and nothing written into `changelog/<code>.md`?
 
 Give the user the result, not a commentary on each change: the entry files are the deliverable.
 Say if an entry was ambiguous and how it was read.

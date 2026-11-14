@@ -163,6 +163,8 @@ public final class SodiumOptions implements ConfigEntryPoint {
                                 v -> FarConfig.get().maxDistantMobs = v, () -> FarConfig.get().maxDistantMobs))
                         .addOption(bool(b, "rememberNamedMobs", d.rememberNamedMobs,
                                 v -> FarConfig.get().rememberNamedMobs = v, () -> FarConfig.get().rememberNamedMobs))
+                        .addOption(bool(b, "hideUndergroundMobs", d.hideUndergroundMobs,
+                                v -> FarConfig.get().hideUndergroundMobs = v, () -> FarConfig.get().hideUndergroundMobs))
                         .addOption(reach(b, "mobMaxDistance", d.mobMaxDistance,
                                 v -> FarConfig.get().mobMaxDistance = v, () -> FarConfig.get().mobMaxDistance))
                         .addOption(integer(b, "animationMinPixels", 0, 40, d.animationMinPixels,

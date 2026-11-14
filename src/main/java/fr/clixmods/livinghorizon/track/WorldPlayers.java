@@ -144,7 +144,7 @@ final class WorldPlayers {
     }
 
     /** Names by id, from the server's cache of the profiles it has seen. */
-    private static Map<UUID, String> names(Path world) {
+    static Map<UUID, String> names(Path world) {
         Map<UUID, String> names = new HashMap<>();
         // Beside a dedicated server's world, or in the game's folder above the saves.
         Path parent = world.toAbsolutePath().normalize().getParent();

@@ -22,7 +22,8 @@ class PositionsFileTest {
         List<PositionsMessage.Player> players = List.of(
                 new PositionsMessage.Player("Alex", 10, 70, -20, 90f, "minecraft:the_end", false, true, null,
                         new PositionsMessage.Mount("minecraft:horse", "{Tame:1b}", 0, 0.85, -0.1, 90f, -15f),
-                        new PositionsMessage.Look("dGV4dHVyZXM=", null, List.of("", "minecraft:iron_helmet")),
+                        new PositionsMessage.Look("dGV4dHVyZXM=", null, List.of("", "minecraft:iron_helmet"),
+                                "{Clothes:\"mca:skins/clothing/normal/female/guard/0.png\"}"),
                         1760100000000L, false),
                 new PositionsMessage.Player("Steve", 1, 2, 3, 0f, "aether:the_aether", false, false, null));
         List<PositionsMessage.Mob> mobs = List.of(

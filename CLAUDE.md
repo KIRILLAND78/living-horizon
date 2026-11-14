@@ -279,6 +279,9 @@ come back, add it here in the same pull request: this file is what the next sess
 - **Far terrain depth missing** (depth view without Voxy's or Distant Horizons' terrain,
   mobs not hidden behind its hills): read the *Far terrain depth* line of the debug panel or
   `/livinghorizon lod`, with *Lazy far depth* off, since lazy depth hides the real reason.
+  "off" there means a step threw and the depth stays off until a restart: the log says why
+  ("Using the far terrain's depth failed"). "a step changes GL state its bracket did not
+  save": a step's `GlState.save` asks for more than `beforeEntities`' bracket around it.
 - **Part of the far terrain's depth missing, cut along a straight line** (a far mob showing
   through Voxy's or Distant Horizons' terrain on one side of an edge, the depth view fine):
   the merge is held to a rectangle round the figures (`FarDepth.region`, *Local Far Depth*).
@@ -694,6 +697,15 @@ come back, add it here in the same pull request: this file is what the next sess
   spot in the air, the shore, the boat) is kept with the spot and saved, and a new puppet starts
   there; before the blocks are ever loaded, the far world is asked (`guess`). The `restkept`
   scenario checks it.
+- **Players who logged off in their plain skin with Minecraft Comes Alive** (a villager model up
+  close while they played, Steve or their skin once they left): MCA gives a client a player's look
+  only while that player is online, and draws a player by their id from `MCAClient.playerData`.
+  The look goes with the spot (`PositionsMessage.Look.mca`, `RestingPlayers.Spot.mca`) and
+  `Mca.dress` hands it to MCA as the puppet is made. Nothing happens: the log says "Minecraft
+  Comes Alive found, but not the version this mod knows" (a class or method of MCA renamed:
+  `McaLook.find`, `Mca.find`), or the server has no Living Horizon and this client never saw them.
+  Drawn as two eyes alone, no body: MCA had a look with no gender, clothes or hair (an MCA
+  villager summoned with data skips its set-up; the `mca` scenario summons one without).
 - **Players who logged off jumping back a few blocks, near the camera** (as their skin arrives,
   or every few seconds in single player): a new `Spot` for the same place made a new
   `RestingPuppet`, which starts on the spot. A skin fetched from Mojang, the server's word on
@@ -738,6 +750,12 @@ come back, add it here in the same pull request: this file is what the next sess
   the messages' table of dimensions, `RestingPlayers.Spot`), never by a number, which cannot
   tell two mods' dimensions apart: message format 2 and the resting file's layout 1 gave them
   all 3, and their readers leave those out.
+- **Mobs of the Overworld drawn in the Nether** (issue #343: squids in the Nether's air, at their
+  Overworld coordinates): Forge and NeoForge never unload the old level's entities as the dimension
+  changes, so they stayed among the live mobs `GhostRenderer` draws past the entity distance; and
+  until the next tick the copies chosen in the old level were still drawn. `MobMemory.forgetPuppets`
+  remembers the old level's live mobs, its tick drops any of another level, and the renderer takes
+  `shown(level)`, empty for a level the copies were not chosen in. The `otherdimension` scenario checks it.
 - **Distant players gone after an update, the log saying "the server shares format vN"**: the
   server and the client run mods whose `PositionsMessage` layouts are too far apart. A field
   added at the end of a record, or after the records, raises `VERSION` only; anything else
@@ -875,31 +893,35 @@ come back, add it here in the same pull request: this file is what the next sess
 
 **Every change, every push.** Whenever you work on something, write its changelog entry
 in the same pull request, and before every push re-read its entry files against what
-you are about to push: each player-visible change has its bullet, in both languages, and
+you are about to push: each player-visible change has its bullet, in every language, and
 no bullet describes something that is not in the diff. Never push first and fix the
 changelog in a later commit or pull request.
 
 A pull request that changes what a player sees or feels adds each of its entries as a file
 of its own in `changelog/unreleased/` (named after the change; its `README.md` has the
 format): `part: server` or `client`, `kind: new`, `improved` or `fixed`, then the bullet in
-English (`en:`) and in French (`fr:`). **Never write a bullet into `changelog/en.md` or
-`changelog/fr.md`**: two pull requests editing the same lines there conflicted on every
-rebase, while two files never do. A dated section there is a version already released, never
+each of the 14 languages the mod ships, one line per language (`en:`, `fr:`, `de:`, `es:`,
+`it:`, `pt_br:`, `pl:`, `tr:`, `ru:`, `uk:`, `zh_cn:`, `zh_tw:`, `ja:`, `ko:`), in the words
+vanilla Minecraft and the mod's own `lang/` file use in that language (setting names exactly
+as the game shows them). `changelog/languages.json` lists the languages, the file of each
+(`changelog/<code>.md`) and its headings; a language added to `lang/` is added there too,
+its whole changelog translated. **Never write a bullet into `changelog/<code>.md`**: two pull
+requests editing the same lines there conflicted on every rebase, while two files never do. A dated section there is a version already released, never
 given an entry, and reworded only when the user asks for it. A version is split in two parts,
 **Server** first (what a server owner installs, sets up or gets, and what the mod does on a
 server, a LAN host included), then **Client** (what a player sees and feels in game, single
 player included), each with the kinds it needs, New, Improved, Fixed. Versions released
 before the split keep their flat `### New` headings. The `changelog` CI job checks all of
-this; `node .github/scripts/changelog-notes.js unreleased en` prints the next version's
-section as it will read. A branch started before the entry files moves its bullets into them
-with `node .github/scripts/changelog-split.js`, then keeps `develop`'s `en.md` and `fr.md`
-where they conflict.
+this, every language's file against `en.md`; `node .github/scripts/changelog-notes.js
+unreleased <code>` prints the next version's section as it will read. A branch started before
+the entry files moves its bullets into them with `node .github/scripts/changelog-split.js`,
+then keeps `develop`'s `changelog/<code>.md` where they conflict.
 
-The release turns the files into the version's section of `changelog/en.md` and
-`changelog/fr.md` (`### Server` / `#### New` and so on, in the order of the file names),
-deletes them, and posts the entries on Modrinth
-(Changelog tab), CurseForge (file page) and Discord. The game shows them in its changelog
-screen, under *Unreleased* until then: the build merges the files into the jar's copy
+The release turns the files into the version's section of every `changelog/<code>.md`
+(`### Server` / `#### New` and so on, in the order of the file names), deletes them, and
+posts the entries on Modrinth (Changelog tab), CurseForge (file page) and Nexus Mods in
+English, and on Discord in English and French. The game shows them in its changelog screen,
+in the game's language (English where it has none), under *Unreleased* until then: the build merges the files into the jar's copy
 (`gradle/target.gradle.kts`, the same layout as `.github/scripts/changelog-fragments.js`). Players read them, so **every entry is written with the
 `changelog-writing` skill** (`.claude/skills/changelog-writing/`), which holds the style,
 the vocabulary and examples. In short:

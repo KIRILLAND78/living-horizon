@@ -262,6 +262,13 @@ public final class FarConfig {
     public boolean rememberNamedMobs = true;
 
     /**
+     * Distant mobs and entities underground - in caves, mines, cellars - are not drawn: nobody far
+     * away could see them, and their places in {@link #maxDistantMobs} go to those on the surface.
+     * Never in the Nether or the End ({@code track/Underground}). Its key flips it in game.
+     */
+    public boolean hideUndergroundMobs = false;
+
+    /**
      * The animals a server with the mod foresees in the land nobody has explored yet, from the
      * world's seed ({@code track/SeedMobs}), are shown with the remembered mobs.
      */

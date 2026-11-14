@@ -65,6 +65,7 @@ public final class LivingHorizonClient {
     public static final Logger LOGGER = LoggerFactory.getLogger("Living Horizon");
 
     private static KeyMapping toggle;
+    private static KeyMapping underground;
     private static KeyMapping settings;
 
     //? if fabric || quilt {
@@ -120,6 +121,8 @@ public final class LivingHorizonClient {
         *///?}
         toggle = Events.register(new KeyMapping(
                 "key.livinghorizon.toggle", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), category));
+        underground = Events.register(new KeyMapping(
+                "key.livinghorizon.underground", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), category));
         settings = Events.register(new KeyMapping(
                 "key.livinghorizon.settings", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), category));
 
@@ -171,20 +174,29 @@ public final class LivingHorizonClient {
         DebugHud.draw(graphics);
     }
 
+    /** A line above the hotbar, as the game shows the state of a key it flips. */
+    private static void overlay(Minecraft minecraft, String key) {
+        if (minecraft.player == null) return;
+        Component message = Component.translatable(key);
+        //? if >=26.1 {
+        /*minecraft.player.sendOverlayMessage(message);
+        *///?} else {
+        minecraft.player.displayClientMessage(message, true);
+        //?}
+    }
+
     private static void tick(Minecraft minecraft) {
         while (toggle.consumeClick()) {
             FarConfig config = FarConfig.get();
             config.enabled = !config.enabled;
             FarConfig.save();
-            if (minecraft.player != null) {
-                Component message = Component.translatable(
-                        config.enabled ? "livinghorizon.toggle.on" : "livinghorizon.toggle.off");
-                //? if >=26.1 {
-                /*minecraft.player.sendOverlayMessage(message);
-                *///?} else {
-                minecraft.player.displayClientMessage(message, true);
-                //?}
-            }
+            overlay(minecraft, config.enabled ? "livinghorizon.toggle.on" : "livinghorizon.toggle.off");
+        }
+        while (underground.consumeClick()) {
+            FarConfig config = FarConfig.get();
+            config.hideUndergroundMobs = !config.hideUndergroundMobs;
+            FarConfig.save();
+            overlay(minecraft, config.hideUndergroundMobs ? "livinghorizon.underground.hidden" : "livinghorizon.underground.shown");
         }
         while (settings.consumeClick()) {
             minecraft.setScreen(new FarConfigScreen(minecraft.screen));

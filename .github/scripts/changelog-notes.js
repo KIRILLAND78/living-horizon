@@ -7,7 +7,9 @@
  * "unreleased" prints what the next release will hold instead: the entries waiting in
  * changelog/unreleased/, laid out as the release will write them.
  *
- *   node .github/scripts/changelog-notes.js <version>|unreleased [en|fr]
+ *   node .github/scripts/changelog-notes.js <version>|unreleased [language]
+ *
+ * The language is a code of changelog/languages.json (en by default).
  */
 'use strict';
 
@@ -17,8 +19,8 @@ const fragments = require('./changelog-fragments');
 
 const version = process.argv[2];
 const lang = process.argv[3] || 'en';
-if (!version) {
-  console.error('usage: changelog-notes.js <version>|unreleased [en|fr]');
+if (!version || !fragments.LANGS.includes(lang)) {
+  console.error('usage: changelog-notes.js <version>|unreleased [' + fragments.LANGS.join('|') + ']');
   process.exit(2);
 }
 
